@@ -1,0 +1,14 @@
+{
+  "name": "3DBLOCK",
+  "short_name": "3DBLOCK",
+  "description": "Diseños en bloques, listos para armar por capas.",
+  "start_url": "catalogo.html",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#080b13",
+  "theme_color": "#080b13",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

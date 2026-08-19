@@ -4,6 +4,10 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>3DBlock · Guía de armado por capas</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icon-192.png" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<meta name="theme-color" content="#080b13" />
 <style>
   :root{
     --bg: #080b13;
@@ -47,6 +51,7 @@
   #modelNameText{ font-size:11.5px; color:var(--text-dim); font-family:var(--mono); }
 
   button{ font-family:var(--sans); cursor:pointer; }
+  a.btn{ text-decoration:none; }
   .btn{
     background:var(--panel-2); border:1px solid var(--border); color:var(--text);
     padding:7px 11px; border-radius:7px; font-size:12px; font-weight:600; letter-spacing:.01em;
@@ -313,6 +318,7 @@
       <div class="brand-title">3DBLOCK<small>Guía de armado por capas</small></div>
     </div>
     <div id="modelNameText">Árbol de ejemplo</div>
+    <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
     <button class="btn icon" id="logoutBtn" title="Cerrar sesión" style="display:none;">⎋</button>
     <button class="btn icon" id="openSidebarBtn" title="Importar y ajustes">⚙︎ <span style="display:inline-block">Importar</span></button>
   </div>
