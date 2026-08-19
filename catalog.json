@@ -26,6 +26,15 @@
       "price": 4,
       "thumb": "thumbs/kuma-pequeno.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/kuma-pequeno.json"
+    },
+    {
+      "slug": "kuna-pequeno",
+      "name": "kuna pequeño",
+      "description": "one peace",
+      "category": "one peace",
+      "price": 3,
+      "thumb": "thumbs/kuna-pequeno.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/kuna-pequeno.json"
     }
   ]
 }
