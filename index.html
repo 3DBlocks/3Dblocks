@@ -1,0 +1,1695 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>3DBlock · Guía de armado por capas</title>
+<style>
+  :root{
+    --bg: #080b13;
+    --bg-2: #0d1220;
+    --panel: #0f1524;
+    --panel-2: #131b2e;
+    --panel-3: #0c1120;
+    --border: #1d2740;
+    --border-soft: #161f34;
+    --text: #e8ecf6;
+    --text-dim: #8a93ac;
+    --text-faint: #545e78;
+    --accent: #f2b134;
+    --accent-dim: #6b5423;
+    --accent-2: #2dd4bf;
+    --accent-2-dim: #1c5049;
+    --danger: #f2665c;
+    --mono: 'SFMono-Regular', 'JetBrains Mono', Consolas, 'Liberation Mono', Menlo, monospace;
+    --sans: 'Inter', ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  *{ box-sizing: border-box; }
+  html,body{
+    margin:0; padding:0; height:100%; background:var(--bg); color:var(--text);
+    font-family: var(--sans); overflow:hidden; -webkit-font-smoothing:antialiased;
+  }
+  #app{ position:relative; height:100vh; width:100vw; display:flex; flex-direction:column; }
+
+  /* ---------- Top identity bar (slim) ---------- */
+  #idBar{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:10px 14px; border-bottom:1px solid var(--border-soft); background:var(--panel-3); flex-shrink:0; z-index:20;
+  }
+  .brand-mark{ display:flex; align-items:center; gap:9px; }
+  .brand-blocks{ display:grid; grid-template-columns:repeat(3,6px); grid-template-rows:repeat(3,6px); gap:2px; }
+  .brand-blocks span{ background:var(--accent); display:block; }
+  .brand-blocks span:nth-child(2){ background:var(--accent-2); }
+  .brand-blocks span:nth-child(5){ background:var(--text-dim); }
+  .brand-blocks span:nth-child(8){ background:var(--accent-2-dim); }
+  .brand-title{ font-size:13.5px; font-weight:800; letter-spacing:0.13em; }
+  .brand-title small{ display:block; font-size:9px; font-weight:500; letter-spacing:.06em; color:var(--text-faint); text-transform:none; margin-top:1px; }
+  #modelNameText{ font-size:11.5px; color:var(--text-dim); font-family:var(--mono); }
+
+  button{ font-family:var(--sans); cursor:pointer; }
+  .btn{
+    background:var(--panel-2); border:1px solid var(--border); color:var(--text);
+    padding:7px 11px; border-radius:7px; font-size:12px; font-weight:600; letter-spacing:.01em;
+    transition: all .12s ease; display:flex; align-items:center; justify-content:center; gap:6px;
+  }
+  .btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .btn.active{ background:var(--accent); color:#1a1305; border-color:var(--accent); }
+  .btn.primary{ background:var(--accent); color:#1a1305; border-color:var(--accent); font-weight:700; }
+  .btn.primary:hover{ filter:brightness(1.08); color:#1a1305; }
+  .btn.ghost{ background:transparent; }
+  .btn.sm{ padding:5px 9px; font-size:11px; }
+  .btn:disabled{ opacity:.3; cursor:not-allowed; pointer-events:none; }
+  .btn.icon{ padding:7px 9px; }
+
+  /* ---------- Layer command strip (the focus of the whole app) ---------- */
+  #layerStrip{
+    flex-shrink:0; padding:14px 18px 12px; border-bottom:1px solid var(--border-soft);
+    background: linear-gradient(180deg, var(--panel), var(--bg-2)); z-index:15;
+  }
+  #stepperRow{ display:flex; align-items:center; justify-content:center; gap:14px; }
+  .stepBtn{
+    min-width:96px; height:48px; padding:0 18px; border-radius:10px; background:var(--panel-2); border:1px solid var(--border);
+    color:var(--text); font-size:15px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:6px; flex-shrink:0;
+  }
+  .stepBtn:hover{ border-color:var(--accent); color:var(--accent); }
+  .stepBtn:disabled{ opacity:.25; pointer-events:none; }
+  #layerCenter{ text-align:center; min-width:180px; }
+  #layerBigNum{ font-size:34px; font-weight:800; line-height:1; font-family:var(--mono); color:var(--accent); }
+  #layerOfTxt{ font-size:12px; color:var(--text-faint); letter-spacing:.04em; margin-top:2px; }
+  #playBtn{ width:48px; height:48px; border-radius:10px; flex-shrink:0; font-size:16px; }
+
+  /* ---------- view switch (2D / 3D) ---------- */
+  #viewSwitch{ display:flex; gap:0; border:1px solid var(--border); border-radius:9px; overflow:hidden; flex-shrink:0; }
+  #viewSwitch button{
+    background:var(--panel-2); border:none; color:var(--text-dim); padding:8px 16px; font-size:13px; font-weight:700;
+    letter-spacing:.03em; display:flex; align-items:center; gap:6px;
+  }
+  #viewSwitch button + button{ border-left:1px solid var(--border); }
+  #viewSwitch button.active{ background:var(--accent); color:#1a1305; }
+  #orientRow{ display:flex; gap:6px; flex-wrap:wrap; justify-content:center; }
+  #orientRow .btn{ padding:8px 10px; font-size:12px; }
+
+  #strataTrack{ display:flex; gap:2px; margin-top:12px; max-width:640px; margin-left:auto; margin-right:auto; }
+  .strataSeg{ flex:1; height:7px; border-radius:2px; cursor:pointer; transition:transform .1s ease; }
+  .strataSeg:hover{ transform:scaleY(1.4); }
+
+  #layerMeta{ display:flex; justify-content:center; gap:18px; margin-top:10px; font-size:11.5px; color:var(--text-dim); font-family:var(--mono); flex-wrap:wrap; }
+  #layerMeta b{ color:var(--text); }
+
+  /* ---------- Main split: 2D build plan (dominant) + 3D context ---------- */
+  #mainSplit{ flex:1; display:flex; min-height:0; }
+  #mainSplit.show-2d #contextPane{ display:none; }
+  #mainSplit.show-2d #diagramPane{ flex:1; border-right:none; }
+  #mainSplit.show-3d #diagramPane{ display:none; }
+  #mainSplit.show-3d #contextPane{ flex:1; }
+  #diagramPane{
+    flex: 1.35; min-width:0; display:flex; flex-direction:column; border-right:1px solid var(--border-soft);
+    background: var(--panel-3);
+  }
+  #diagramHead{ padding:12px 18px 0; flex-shrink:0; }
+  #diagramTitle{ font-size:11px; text-transform:uppercase; letter-spacing:.14em; color:var(--text-faint); font-weight:700; }
+  #diagramSub{ font-size:12.5px; color:var(--text-dim); margin-top:3px; }
+  #diagramSub b{ color:var(--accent); }
+  #diagramCanvasWrap{ flex:1; position:relative; min-height:0; }
+  #diagramCanvas{ position:absolute; inset:0; width:100%; height:100%; }
+  #legendRow{
+    display:flex; gap:8px; flex-wrap:wrap; padding:10px 18px 14px; border-top:1px solid var(--border-soft); flex-shrink:0;
+    max-height:88px; overflow-y:auto;
+  }
+  .legendChip{
+    display:flex; align-items:center; gap:6px; background:var(--panel-2); border:1px solid var(--border-soft);
+    padding:4px 9px 4px 5px; border-radius:20px; font-size:11px; font-family:var(--mono); color:var(--text-dim);
+  }
+  .legendChip .sw{ width:13px; height:13px; border-radius:3px; flex-shrink:0; }
+  .legendChip .ct{ color:var(--text); font-weight:600; }
+
+  #contextPane{ flex:1; min-width:0; position:relative; display:flex; flex-direction:column; }
+  #contextLabel{
+    position:absolute; top:12px; left:14px; font-size:10px; text-transform:uppercase; letter-spacing:.14em;
+    color:var(--text-faint); font-weight:700; z-index:2; pointer-events:none;
+    background:rgba(8,11,19,.55); padding:3px 8px; border-radius:5px; backdrop-filter:blur(4px);
+  }
+  #axesLegend{
+    position:absolute; top:12px; right:14px; z-index:2; display:flex; gap:10px;
+    background:rgba(8,11,19,.55); padding:5px 10px; border-radius:6px; backdrop-filter:blur(4px);
+    font-size:11px; font-family:var(--mono); color:var(--text-dim); pointer-events:none;
+  }
+  #axesLegend span{ display:flex; align-items:center; gap:4px; }
+  #axesLegend i{ width:9px; height:9px; border-radius:2px; display:inline-block; }
+  #canvasHost{ position:absolute; inset:0; }
+  canvas{ display:block; }
+  #contextCanvas3d{ width:100%; height:100%; touch-action:none; }
+
+  #ctxToolbar{
+    position:absolute; bottom:12px; left:50%; transform:translateX(-50%); display:flex; gap:5px;
+    background:rgba(15,21,36,.85); backdrop-filter:blur(10px); border:1px solid var(--border); border-radius:9px; padding:5px; z-index:2;
+  }
+  #ctxToolbar .btn{ background:transparent; border:none; padding:6px 9px; }
+  #ctxToolbar .btn:hover{ background:var(--panel-2); }
+
+  #ctxHint{
+    position:absolute; bottom:12px; right:12px; font-size:9.5px; color:var(--text-faint); font-family:var(--mono);
+    text-align:right; line-height:1.5; pointer-events:none; z-index:2;
+  }
+
+  /* ---------- Sidebar drawer (secondary: import & settings) ---------- */
+  #sidebarOverlay{
+    position:fixed; inset:0; background:rgba(5,7,13,.55); backdrop-filter:blur(2px); z-index:29;
+    opacity:0; pointer-events:none; transition:opacity .18s ease;
+  }
+  #sidebarOverlay.show{ opacity:1; pointer-events:auto; }
+  #sidebar{
+    position:fixed; top:0; right:0; bottom:0; width:340px; max-width:88vw;
+    background: linear-gradient(180deg, var(--panel), var(--bg-2)); border-left:1px solid var(--border);
+    transform:translateX(100%); transition:transform .2s ease; z-index:30; display:flex; flex-direction:column;
+    overflow-y:auto; box-shadow:-20px 0 50px rgba(0,0,0,.4);
+  }
+  #sidebar.open{ transform:translateX(0); }
+  #sidebar::-webkit-scrollbar{ width:8px; }
+  #sidebar::-webkit-scrollbar-thumb{ background:var(--border); border-radius:4px; }
+  .sb-head{ display:flex; justify-content:space-between; align-items:center; padding:16px 18px; border-bottom:1px solid var(--border-soft); }
+  .sb-head h2{ margin:0; font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:var(--text-dim); }
+  .section{ padding:16px 18px; border-bottom:1px solid var(--border-soft); }
+  .section-title{ font-size:10.5px; text-transform:uppercase; letter-spacing:.16em; color:var(--text-faint); font-weight:700; margin:0 0 12px; }
+
+  #dropzone{ border:1.5px dashed var(--border); border-radius:10px; padding:16px 12px; text-align:center; cursor:pointer; transition:all .15s ease; }
+  #dropzone:hover, #dropzone.drag{ border-color:var(--accent); background:rgba(242,177,52,.05); }
+  #dropzone .dz-icon{ font-size:19px; margin-bottom:5px; opacity:.8; }
+  #dropzone .dz-text{ font-size:12px; color:var(--text-dim); line-height:1.5; }
+  #dropzone .dz-text b{ color:var(--text); font-weight:600; }
+  .fmt-row{ display:flex; gap:6px; justify-content:center; margin-top:9px; flex-wrap:wrap; }
+  .fmt-badge{ font-family:var(--mono); font-size:9.5px; letter-spacing:.04em; color:var(--text-dim); border:1px solid var(--border); padding:2px 6px; border-radius:4px; background:var(--panel-2); }
+  #fileInput{ display:none; }
+
+  .row{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:9px; }
+  .label-sm{ font-size:12px; color:var(--text-dim); }
+  .value-mono{ font-family:var(--mono); font-size:11.5px; color:var(--accent); }
+  input[type=range]{ -webkit-appearance:none; width:100%; height:4px; border-radius:2px; background:var(--border); outline:none; margin:7px 0 3px; }
+  input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; width:14px; height:14px; border-radius:3px; background:var(--accent); cursor:pointer; border:2px solid #0a0e1a; }
+  input[type=range]::-moz-range-thumb{ width:12px; height:12px; border-radius:3px; background:var(--accent); border:2px solid #0a0e1a; cursor:pointer; }
+
+  .stat-grid{ display:grid; grid-template-columns:1fr 1fr; gap:9px; }
+  .stat-box{ background:var(--panel-2); border:1px solid var(--border-soft); border-radius:8px; padding:9px 11px; }
+  .stat-box .k{ font-size:9px; text-transform:uppercase; letter-spacing:.1em; color:var(--text-faint); margin-bottom:4px; }
+  .stat-box .v{ font-family:var(--mono); font-size:14px; color:var(--text); font-weight:600; }
+
+  .toggle-row{ display:flex; align-items:center; justify-content:space-between; padding:6px 0; }
+  .switch{ width:32px; height:18px; border-radius:10px; background:var(--border); position:relative; cursor:pointer; transition:background .15s ease; flex-shrink:0; }
+  .switch::after{ content:''; position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%; background:var(--text-dim); transition:all .15s ease; }
+  .switch.on{ background:var(--accent-dim); }
+  .switch.on::after{ left:16px; background:var(--accent); }
+
+  #statusMsg{ font-size:11px; padding:8px 10px; border-radius:6px; margin-top:9px; display:none; line-height:1.5; }
+  #statusMsg.err{ display:block; background:rgba(242,102,92,.1); border:1px solid rgba(242,102,92,.3); color:#f2a49f; }
+  #statusMsg.ok{ display:block; background:rgba(45,212,191,.08); border:1px solid rgba(45,212,191,.25); color:#8be0d4; }
+  .footer-note{ padding:14px 18px 20px; font-size:10px; color:var(--text-faint); line-height:1.6; }
+
+  #loadingOverlay{ position:fixed; inset:0; background:rgba(8,11,19,.7); display:none; align-items:center; justify-content:center; flex-direction:column; gap:10px; z-index:40; backdrop-filter:blur(2px); }
+  #qrOverlay{ position:fixed; inset:0; background:rgba(5,7,13,.65); backdrop-filter:blur(2px); z-index:45; display:none; align-items:center; justify-content:center; padding:20px; }
+  #qrOverlay.show{ display:flex; }
+  #qrModal{ width:340px; max-width:100%; max-height:86vh; overflow-y:auto; background:linear-gradient(180deg, var(--panel), var(--bg-2)); border:1px solid var(--border); border-radius:12px; box-shadow:0 20px 50px rgba(0,0,0,.5); }
+  #qrBody{ padding:16px 18px 20px; text-align:center; }
+  #qrBody img, #qrBody svg{ background:#fff; padding:10px; border-radius:8px; width:220px; height:220px; margin:0 auto 12px; display:block; }
+  #qrBody .qr-note{ font-size:11.5px; color:var(--text-dim); line-height:1.6; text-align:left; }
+  #qrBody .qr-link{ font-family:var(--mono); font-size:10.5px; color:var(--accent); word-break:break-all; background:var(--panel-2); border:1px solid var(--border-soft); border-radius:6px; padding:8px; margin:10px 0; text-align:left; }
+  #qrBody .qr-warn{ font-size:12px; color:#f2a49f; background:rgba(242,102,92,.1); border:1px solid rgba(242,102,92,.3); border-radius:6px; padding:9px 10px; text-align:left; line-height:1.5; }
+  #loadingOverlay.show{ display:flex; }
+  #loadingOverlay .lt{ font-size:13px; color:var(--accent); font-family:var(--mono); letter-spacing:.04em; }
+
+  @media (max-width: 640px){
+    #legendRow{ max-height:60px; }
+    #layerBigNum{ font-size:28px; }
+    .stepBtn{ min-width:0; padding:0 12px; font-size:13px; }
+    #idBar .brand-title small{ display:none; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="idBar">
+    <div class="brand-mark">
+      <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado por capas</small></div>
+    </div>
+    <div id="modelNameText">Árbol de ejemplo</div>
+    <button class="btn icon" id="openSidebarBtn" title="Importar y ajustes">⚙︎ <span style="display:inline-block">Importar</span></button>
+  </div>
+
+  <div id="layerStrip">
+    <div id="stepperRow">
+      <button class="stepBtn" id="prevBtn" title="Capa anterior (←)">‹ Atrás</button>
+      <div id="layerCenter">
+        <div id="layerBigNum">0</div>
+        <div id="layerOfTxt">CAPA <span id="layerNowTxt">0</span> DE <span id="layerMaxTxt">0</span></div>
+      </div>
+      <button class="stepBtn" id="nextBtn" title="Capa siguiente (→)">Siguiente ›</button>
+      <button class="btn primary" id="playBtn" title="Reproducir armado completo">▶</button>
+    </div>
+    <div id="viewSwitchRow" style="display:flex; justify-content:center; align-items:center; gap:12px; margin-top:12px; flex-wrap:wrap;">
+      <div id="viewSwitch">
+        <button id="view2dBtn" class="active">▦ 2D</button>
+        <button id="view3dBtn">◈ 3D</button>
+      </div>
+      <div id="orientRow" title="Si el modelo se ve de lado o al revés, corrígelo aquí">
+        <button class="btn sm" id="rotateXBtn" title="Rotar 90° sobre el eje X">↻ X</button>
+        <button class="btn sm" id="rotateYBtn" title="Rotar 90° sobre el eje Y">↻ Y</button>
+        <button class="btn sm" id="rotateZBtn" title="Rotar 90° sobre el eje Z">↻ Z</button>
+        <button class="btn sm" id="flipYBtn" title="Invertir vertical">↕ Invertir</button>
+      </div>
+    </div>
+    <div id="strataTrack"></div>
+    <div id="layerMeta">
+      <span>Bloques en esta capa: <b id="metaLayerCount">0</b></span>
+      <span>Acumulado: <b id="metaAccum">0</b> / <span id="metaTotal">0</span></span>
+      <span>Restantes: <b id="metaRemaining">0</b></span>
+    </div>
+  </div>
+
+  <div id="mainSplit" class="show-2d">
+    <section id="diagramPane">
+      <div id="diagramHead">
+        <div id="diagramTitle">Plano de la capa — vista superior</div>
+        <div id="diagramSub">Coloca <b id="diagramCount">0</b> bloques nuevos en esta capa. Los bloques atenuados ya están colocados debajo.</div>
+      </div>
+      <div id="diagramCanvasWrap"><canvas id="diagramCanvas"></canvas></div>
+      <div id="legendRow"></div>
+    </section>
+
+    <section id="contextPane">
+      <div id="contextLabel">Contexto 3D</div>
+      <div id="axesLegend">
+        <span><i style="background:#ff4d4d"></i>X</span>
+        <span><i style="background:#4dff88"></i>Y (arriba)</span>
+        <span><i style="background:#4d88ff"></i>Z</span>
+      </div>
+      <div id="canvasHost"></div>
+      <div id="ctxToolbar">
+        <button class="btn icon" id="resetViewBtn" title="Centrar vista">⤢</button>
+        <button class="btn icon" id="rotateBtn" title="Rotación automática">↻</button>
+        <button class="btn icon active" id="belowLayersBtn" title="Mostrar/ocultar capas ya construidas (en gris)">▤ Gris</button>
+        <button class="btn icon" id="fullViewBtn" title="Ver el diseño completo, con todos los colores">👁 Completo</button>
+        <button class="btn icon" id="bgToggleBtn" title="Cambiar fondo del visor">◐ Fondo</button>
+        <button class="btn icon active" id="meshTexBtn" title="Textura de malla sobre cada bloque">▦ Malla</button>
+      </div>
+      <div id="ctxHint">arrastrar: orbitar<br/>rueda: zoom</div>
+    </section>
+  </div>
+
+  <div id="loadingOverlay"><div class="lt" id="loadingText">Procesando…</div></div>
+  <div id="sidebarOverlay"></div>
+
+  <aside id="sidebar">
+    <div class="sb-head"><h2>Importar y ajustes</h2><button class="btn icon ghost" id="closeSidebarBtn">✕</button></div>
+
+    <div class="section">
+      <p class="section-title">Importar modelo</p>
+      <div id="dropzone">
+        <div class="dz-icon">▦</div>
+        <div class="dz-text"><b>Arrastra un archivo</b> o haz clic para elegir</div>
+        <div class="fmt-row"><span class="fmt-badge">.VOX</span><span class="fmt-badge">.DAE</span><span class="fmt-badge">.JSON</span></div>
+      </div>
+      <input id="fileInput" type="file" accept=".vox,.dae,.json" />
+      <div id="statusMsg"></div>
+    </div>
+
+    <div class="section" id="voxelizeSection" style="display:none;">
+      <p class="section-title">Voxelizado por resolución</p>
+      <p style="font-size:10.5px; color:var(--text-faint); margin:0 0 9px; line-height:1.5;">Este .dae no tiene piezas discretas repetidas, así que se genera un bloque por resolución de rejilla en vez de uno por pieza.</p>
+      <div class="row"><span class="label-sm">Resolución de bloques</span><span class="value-mono" id="resVal">32</span></div>
+      <input type="range" id="resSlider" min="6" max="130" step="1" value="32" />
+      <button class="btn wide" id="revoxelizeBtn" style="width:100%; margin-top:8px;">Volver a voxelizar</button>
+    </div>
+
+    <div class="section">
+      <p class="section-title">Modelo actual</p>
+      <div class="stat-grid">
+        <div class="stat-box"><div class="k">Dimensiones</div><div class="v" id="statDims">—</div></div>
+        <div class="stat-box"><div class="k">Bloques totales</div><div class="v" id="statCount">—</div></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <p class="section-title">Ritmo de reproducción</p>
+      <div class="row"><span class="label-sm">Segundos por capa</span><span class="value-mono" id="speedVal">0.9s</span></div>
+      <input type="range" id="speedSlider" min="0.3" max="2.5" step="0.1" value="0.9" />
+    </div>
+
+    <div class="section">
+      <p class="section-title">Visualización 3D</p>
+      <div class="toggle-row"><span class="label-sm">Cuadrícula base</span><div class="switch on" id="tgGrid"></div></div>
+      <div class="toggle-row"><span class="label-sm">Contornos de bloque</span><div class="switch on" id="tgEdges"></div></div>
+    </div>
+
+    <div class="section">
+      <p class="section-title">Compartir</p>
+      <p style="font-size:10.5px; color:var(--text-faint); margin:0 0 9px; line-height:1.5;">Descarga tu diseño ya procesado como .json — mucho más liviano que el .dae original. Quien lo reciba solo necesita este visor (3DBlock) y tu .json, sin Studio 2.0 ni el archivo original.</p>
+      <button class="btn wide" id="exportBtn" style="width:100%; margin-bottom:8px;">⇩ Descargar diseño (.json)</button>
+      <p style="font-size:10.5px; color:var(--text-faint); margin:2px 0 9px; line-height:1.5;">O genera un código QR que abre este visor con el diseño ya cargado, listo para armar — sin botón de importar. Los diseños chicos van comprimidos directo en el código; los grandes necesitan que subas tu .json a algún sitio y pegues ese link (te lo pide automáticamente si hace falta).</p>
+      <button class="btn wide" id="qrBtn" style="width:100%;">▦ Generar código QR</button>
+    </div>
+
+    <div class="section" style="border-bottom:none;">
+      <button class="btn" id="demoBtn" style="width:100%;">↺ Cargar modelo de ejemplo</button>
+    </div>
+
+    <p class="footer-note">3DBlock renderiza todo con cubos — no usa esferas ni "beads". Los archivos se procesan en tu navegador; nada se sube a un servidor.</p>
+  </aside>
+
+  <div id="qrOverlay">
+    <div id="qrModal">
+      <div class="sb-head"><h2>Código QR para compartir</h2><button class="btn icon ghost" id="closeQrBtn">✕</button></div>
+      <div id="qrBody"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.0.3/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+<script type="module">
+import * as THREE from "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.js";
+
+/* =========================================================================
+   STRATA — guía de armado de bloques capa a capa
+   El foco del programa es el plano de capa (2D) sincronizado con un
+   contexto 3D. Incluye parser propio de .vox (MagicaVoxel), parser básico
+   de .dae (COLLADA) + voxelizador de malla, y formato .json propio.
+   ========================================================================= */
+
+/* ---------------------------- Estado del modelo ---------------------------- */
+let voxels = [];        // {x,y,z,color:'#rrggbb'} — y = altura (capa)
+let dims = {x:0,y:0,z:0};
+let maxLayer = 0;
+let currentLayer = 0;
+let voxelSize = 1;
+let footprint = {}; // key "x,z" -> min bound helpers not needed; computed on demand
+
+function boundsOf(vlist){
+  const box = new THREE.Box3();
+  vlist.forEach(v => box.expandByPoint(new THREE.Vector3(v.x, v.y, v.z)));
+  return box;
+}
+function normalize(list){
+  const box = boundsOf(list);
+  return list.map(v => ({
+    x: Math.round(v.x - box.min.x),
+    y: Math.round(v.y - box.min.y),
+    z: Math.round(v.z - box.min.z),
+    color: v.color
+  }));
+}
+
+/* ---------------------------- Escena 3D (contexto) ---------------------------- */
+const host = document.getElementById('canvasHost');
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x080b13, 0.006);
+
+const camera = new THREE.PerspectiveCamera(42, Math.max(1,host.clientWidth) / Math.max(1,host.clientHeight), 0.1, 2000);
+const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(host.clientWidth, host.clientHeight);
+renderer.shadowMap.enabled = false;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+if ('outputColorSpace' in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.domElement.id = 'contextCanvas3d';
+host.appendChild(renderer.domElement);
+
+const hemi = new THREE.HemisphereLight(0xbfd6ff, 0x3a4258, 1.05);
+scene.add(hemi);
+const ambient = new THREE.AmbientLight(0xffffff, 0.55);
+scene.add(ambient);
+const key = new THREE.DirectionalLight(0xfff8e8, 1.35);
+key.position.set(6, 10, 5);
+key.castShadow = false;
+scene.add(key);
+const rim = new THREE.DirectionalLight(0x2dd4bf, 0.16);
+rim.position.set(-8, 4, -6);
+scene.add(rim);
+const fillPt = new THREE.PointLight(0xf2b134, 0.10, 30);
+fillPt.position.set(-4, 3, 4);
+scene.add(fillPt);
+
+const groundGeo = new THREE.CircleGeometry(40, 48);
+const groundMat = new THREE.MeshStandardMaterial({ color:0x141b2e, roughness:1, metalness:0 });
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI/2;
+ground.position.y = -0.001;
+ground.receiveShadow = false;
+scene.add(ground);
+
+let grid = null;
+function rebuildGrid(colorMain, colorSec){
+  if (grid){ scene.remove(grid); grid.geometry.dispose(); grid.material.dispose(); }
+  grid = new THREE.GridHelper(40, 40, colorMain, colorSec);
+  grid.material.transparent = true;
+  grid.material.opacity = 0.55;
+  grid.visible = document.getElementById('tgGrid')?.classList.contains('on') ?? true;
+  scene.add(grid);
+}
+rebuildGrid(0x24314f, 0x141c30);
+
+/* Fondo del visor: oscuro (por defecto), blanco o negro — con un botón para alternar */
+const bgPresets = [
+  { name:'Oscuro', bg:0x080b13, gridMain:0x24314f, gridSec:0x141c30, ground:0x141b2e },
+  { name:'Blanco', bg:0xf4f5f8, gridMain:0xc7cbd6, gridSec:0xdfe2e9, ground:0xe6e9ef },
+  { name:'Negro',  bg:0x000000, gridMain:0x2b2b2b, gridSec:0x161616, ground:0x0b0b0b },
+];
+let bgIndex = 0;
+function applyBackground(idx){
+  const p = bgPresets[idx];
+  scene.background = new THREE.Color(p.bg);
+  scene.fog.color.set(p.bg);
+  ground.material.color.set(p.ground);
+  rebuildGrid(p.gridMain, p.gridSec);
+  document.getElementById('bgToggleBtn').textContent = '◐ ' + p.name;
+}
+applyBackground(0);
+
+/* Ejes de referencia X (rojo) · Y arriba (verde) · Z (azul), anclados en el origen del modelo */
+const axesHelper = new THREE.AxesHelper(1);
+axesHelper.material.linewidth = 2;
+scene.add(axesHelper);
+function fitAxesToModel(){
+  const len = Math.max(dims.x, dims.y, dims.z, 1) * voxelSize * 0.85;
+  axesHelper.scale.setScalar(len);
+}
+
+/* highlight plane marking the current layer height, for spatial context */
+const layerPlaneGeo = new THREE.PlaneGeometry(30, 30);
+const layerPlaneMat = new THREE.MeshBasicMaterial({ color:0xf2b134, transparent:true, opacity:0.05, side:THREE.DoubleSide });
+const layerPlane = new THREE.Mesh(layerPlaneGeo, layerPlaneMat);
+layerPlane.rotation.x = -Math.PI/2;
+scene.add(layerPlane);
+
+class SimpleOrbitControls {
+  constructor(camera, dom){
+    this.camera = camera; this.dom = dom;
+    this.target = new THREE.Vector3(0, 1.2, 0);
+    this.radius = 12; this.azimuth = Math.PI*0.28; this.polar = Math.PI*0.36;
+    this.minPolar = 0.15; this.maxPolar = Math.PI*0.49;
+    this.minRadius = 2.5; this.maxRadius = 60;
+    this.autoRotate = false; this.autoRotateSpeed = 0.35;
+    this.damping = 0.14;
+    this._az = this.azimuth; this._po = this.polar; this._ra = this.radius; this._ta = this.target.clone();
+    this._dragging = false; this._panning = false; this._lastX = 0; this._lastY = 0;
+    this._bind();
+    this._update();
+  }
+  _bind(){
+    const dom = this.dom;
+    dom.addEventListener('pointerdown', e=>{
+      dom.setPointerCapture(e.pointerId);
+      this._lastX = e.clientX; this._lastY = e.clientY;
+      if (e.button === 2 || e.shiftKey) this._panning = true; else this._dragging = true;
+    });
+    window.addEventListener('pointerup', ()=>{ this._dragging=false; this._panning=false; });
+    window.addEventListener('pointermove', e=>{
+      if (!this._dragging && !this._panning) return;
+      const dx = e.clientX - this._lastX, dy = e.clientY - this._lastY;
+      this._lastX = e.clientX; this._lastY = e.clientY;
+      if (this._dragging){
+        this.azimuth -= dx * 0.0062;
+        this.polar = Math.min(this.maxPolar, Math.max(this.minPolar, this.polar - dy * 0.0062));
+      } else if (this._panning){
+        const panSpeed = this.radius * 0.0016;
+        const offset = new THREE.Vector3().subVectors(this.camera.position, this.target);
+        const forward = offset.clone().normalize();
+        const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0,1,0)).normalize();
+        const up = new THREE.Vector3().crossVectors(right, forward).normalize();
+        this.target.addScaledVector(right, -dx*panSpeed);
+        this.target.addScaledVector(up, dy*panSpeed);
+      }
+    });
+    dom.addEventListener('wheel', e=>{
+      e.preventDefault();
+      this.radius = Math.min(this.maxRadius, Math.max(this.minRadius, this.radius * (1 + e.deltaY*0.0011)));
+    }, { passive:false });
+    dom.addEventListener('contextmenu', e=> e.preventDefault());
+    let touchDist = null;
+    dom.addEventListener('touchstart', e=>{ if (e.touches.length===2) touchDist = dist(e.touches[0], e.touches[1]); }, {passive:true});
+    dom.addEventListener('touchmove', e=>{
+      if (e.touches.length===2){
+        const d = dist(e.touches[0], e.touches[1]);
+        if (touchDist) this.radius = Math.min(this.maxRadius, Math.max(this.minRadius, this.radius*(touchDist/d)));
+        touchDist = d;
+      }
+    }, {passive:true});
+    function dist(a,b){ return Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY); }
+  }
+  focus(box){
+    const size = new THREE.Vector3(); box.getSize(size);
+    const center = new THREE.Vector3(); box.getCenter(center);
+    this.target.copy(center);
+    const maxDim = Math.max(size.x, size.y, size.z, 1);
+    this.radius = maxDim * 1.9 + 1.5;
+  }
+  update(dt){
+    if (this.autoRotate && !this._dragging) this.azimuth += this.autoRotateSpeed*dt;
+    this._az += (this.azimuth - this._az)*this.damping;
+    this._po += (this.polar - this._po)*this.damping;
+    this._ra += (this.radius - this._ra)*this.damping;
+    this._ta.lerp(this.target, this.damping);
+    this._update();
+  }
+  _update(){
+    const x = this._ta.x + this._ra*Math.sin(this._po)*Math.sin(this._az);
+    const y = this._ta.y + this._ra*Math.cos(this._po);
+    const z = this._ta.z + this._ra*Math.sin(this._po)*Math.cos(this._az);
+    this.camera.position.set(x,y,z);
+    this.camera.lookAt(this._ta);
+  }
+}
+const controls = new SimpleOrbitControls(camera, renderer.domElement);
+
+/* ---------------------------- Malla instanciada (3D) ---------------------------- */
+let instMesh = null, edgeMesh = null;
+const dummy = new THREE.Object3D();
+const tmpColor = new THREE.Color();
+const wireOn = { v:true };
+
+function clearModelMeshes(){
+  if (instMesh){ scene.remove(instMesh); instMesh.geometry.dispose(); instMesh.material.dispose(); instMesh = null; }
+  if (edgeMesh){ scene.remove(edgeMesh); edgeMesh.geometry.dispose(); edgeMesh.material.dispose(); edgeMesh = null; }
+}
+
+/* Combina varias BufferGeometry en una sola (sin depender del addon BufferGeometryUtils) */
+function mergeGeometries(geoms){
+  const posArr = [], normArr = [], idxArr = [];
+  let vOffset = 0;
+  geoms.forEach(g=>{
+    const pos = g.attributes.position, norm = g.attributes.normal;
+    for (let i=0;i<pos.count;i++){
+      posArr.push(pos.getX(i), pos.getY(i), pos.getZ(i));
+      normArr.push(norm.getX(i), norm.getY(i), norm.getZ(i));
+    }
+    if (g.index){ for (let i=0;i<g.index.count;i++) idxArr.push(g.index.getX(i)+vOffset); }
+    else { for (let i=0;i<pos.count;i++) idxArr.push(i+vOffset); }
+    vOffset += pos.count;
+  });
+  const merged = new THREE.BufferGeometry();
+  merged.setAttribute('position', new THREE.Float32BufferAttribute(posArr,3));
+  merged.setAttribute('normal', new THREE.Float32BufferAttribute(normArr,3));
+  merged.setIndex(idxArr);
+  return merged;
+}
+
+/* Geometría de "bloque tipo pieza": cuerpo + stud redondo arriba + tubo de encaje abajo,
+   como en la referencia de Studio 2.0 — un solo dibujo, reutilizado por todas las instancias. */
+function buildBrickGeometry(size){
+  // Bloque simple y plano, como el visor de Securpat/Studio2.0: un cubo que llena
+  // toda la celda por completo, sin stud ni tubo — así no puede haber ningún tipo
+  // de separación o desalineación entre bloques apilados o contiguos.
+  return new THREE.BoxGeometry(size, size, size);
+}
+
+/* Textura simple: solo el contorno de cada cara del bloque, en negro — sin
+   subdivisiones internas, para que no se vea "sucio" ni recargado. */
+let meshTexture = null;
+function getMeshTexture(){
+  if (meshTexture) return meshTexture;
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0,0,size,size);
+  ctx.strokeStyle = '#000000';
+  ctx.lineWidth = 6;
+  ctx.strokeRect(3,3,size-6,size-6);
+  meshTexture = new THREE.CanvasTexture(canvas);
+  meshTexture.wrapS = THREE.RepeatWrapping;
+  meshTexture.wrapT = THREE.RepeatWrapping;
+  return meshTexture;
+}
+
+let showBelowLayers = true; // capas ya construidas: mostrarlas en gris, u ocultarlas del todo
+let showFullDesign = false; // vista previa: todo el modelo con sus colores reales, sin importar la capa actual
+let showMeshTexture = true; // textura de rejilla sobre cada cara del bloque
+const belowLayerColor = new THREE.Color('#9aa4bd');
+
+function rebuildMesh3D(){
+  clearModelMeshes();
+  const visible = showFullDesign
+    ? voxels
+    : (showBelowLayers
+        ? voxels.filter(v => Math.round(v.y) <= currentLayer)
+        : voxels.filter(v => Math.round(v.y) === currentLayer));
+  if (!visible.length) return;
+  const geo = buildBrickGeometry(voxelSize);
+  // MeshBasicMaterial ignora por completo la luz de la escena: color plano y parejo
+  // en toda la cara, sin gradientes ni sombreado direccional — así no puede aparecer
+  // ningún tipo de "sombra triangular" en los bloques.
+  const mat = new THREE.MeshBasicMaterial({ toneMapped:false });
+  if (showMeshTexture) mat.map = getMeshTexture();
+  instMesh = new THREE.InstancedMesh(geo, mat, visible.length);
+  instMesh.castShadow = false; instMesh.receiveShadow = false;
+
+  const edgeGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(voxelSize, voxelSize, voxelSize));
+  const edgeMat = new THREE.LineBasicMaterial({ color:0x000000, transparent:true, opacity:0.3 });
+  edgeMesh = new THREE.InstancedMesh(edgeGeo, edgeMat, visible.length);
+  edgeMesh.visible = wireOn.v;
+
+  // Centra el diseño horizontalmente en la intersección de los ejes (X y Z);
+  // la base se mantiene apoyada en el piso (Y=0) para que tenga sentido con la cuadrícula.
+  const offsetX = (dims.x*voxelSize)/2;
+  const offsetZ = (dims.z*voxelSize)/2;
+
+  visible.forEach((v,i)=>{
+    dummy.position.set(v.x*voxelSize - offsetX, v.y*voxelSize + voxelSize/2, v.z*voxelSize - offsetZ);
+    dummy.updateMatrix();
+    instMesh.setMatrixAt(i, dummy.matrix);
+    edgeMesh.setMatrixAt(i, dummy.matrix);
+    const isCurrentLayer = showFullDesign || Math.round(v.y) === currentLayer;
+    if (isCurrentLayer){ tmpColor.set(v.color); } else { tmpColor.copy(belowLayerColor); }
+    instMesh.setColorAt(i, tmpColor);
+  });
+  instMesh.instanceMatrix.needsUpdate = true;
+  edgeMesh.instanceMatrix.needsUpdate = true;
+  if (instMesh.instanceColor) instMesh.instanceColor.needsUpdate = true;
+  scene.add(instMesh); scene.add(edgeMesh);
+
+  layerPlane.position.y = currentLayer*voxelSize + voxelSize*1.001;
+}
+
+/* ---------------------------- Plano 2D de la capa (foco principal) ---------------------------- */
+const diagCanvas = document.getElementById('diagramCanvas');
+const diagCtx = diagCanvas.getContext('2d');
+
+function resizeDiagCanvas(){
+  const wrap = document.getElementById('diagramCanvasWrap');
+  const dpr = Math.min(devicePixelRatio, 2);
+  diagCanvas.width = wrap.clientWidth * dpr;
+  diagCanvas.height = wrap.clientHeight * dpr;
+  diagCanvas.style.width = wrap.clientWidth + 'px';
+  diagCanvas.style.height = wrap.clientHeight + 'px';
+  diagCtx.setTransform(dpr,0,0,dpr,0,0);
+}
+
+function drawLayerDiagram(){
+  const wrap = document.getElementById('diagramCanvasWrap');
+  const W = wrap.clientWidth, H = wrap.clientHeight;
+  diagCtx.clearRect(0,0,W,H);
+  if (!voxels.length || dims.x===0 || dims.z===0) return;
+
+  const pad = 28;
+  const cell = Math.max(4, Math.min((W-pad*2)/dims.x, (H-pad*2)/dims.z));
+  const gridW = cell*dims.x, gridH = cell*dims.z;
+  const ox = (W-gridW)/2, oy = (H-gridH)/2;
+
+  // base grid
+  diagCtx.strokeStyle = '#1a2338';
+  diagCtx.lineWidth = 1;
+  for (let x=0; x<=dims.x; x++){
+    diagCtx.beginPath(); diagCtx.moveTo(ox+x*cell, oy); diagCtx.lineTo(ox+x*cell, oy+gridH); diagCtx.stroke();
+  }
+  for (let z=0; z<=dims.z; z++){
+    diagCtx.beginPath(); diagCtx.moveTo(ox, oy+z*cell); diagCtx.lineTo(ox+gridW, oy+z*cell); diagCtx.stroke();
+  }
+
+  // footprint already built (any layer below current)
+  const below = new Map();
+  const here = new Map();
+  for (const v of voxels){
+    const yy = Math.round(v.y);
+    const k = v.x+','+v.z;
+    if (yy < currentLayer) below.set(k, v.color);
+    if (yy === currentLayer) here.set(k, v.color);
+  }
+  below.forEach((color, k)=>{
+    if (here.has(k)) return;
+    const [x,z] = k.split(',').map(Number);
+    diagCtx.fillStyle = 'rgba(130,141,163,0.4)';
+    roundRect(diagCtx, ox+x*cell+1.5, oy+z*cell+1.5, cell-3, cell-3, Math.min(4,cell*0.18));
+    diagCtx.fill();
+  });
+
+  // current layer blocks
+  const inset = Math.max(1, cell*0.07);
+  here.forEach((color, k)=>{
+    const [x,z] = k.split(',').map(Number);
+    const px = ox+x*cell+inset, py = oy+z*cell+inset, s = cell-inset*2;
+    const grad = diagCtx.createLinearGradient(px,py,px+s,py+s);
+    const c1 = shadeColor(color, 18), c2 = shadeColor(color, -14);
+    grad.addColorStop(0, c1); grad.addColorStop(1, c2);
+    diagCtx.fillStyle = grad;
+    roundRect(diagCtx, px, py, s, s, Math.min(5, s*0.22));
+    diagCtx.fill();
+    diagCtx.strokeStyle = 'rgba(0,0,0,0.35)';
+    diagCtx.lineWidth = 1;
+    diagCtx.stroke();
+    // stud — el puntito redondo, como en la pieza real
+    if (s > 10){
+      diagCtx.beginPath();
+      diagCtx.arc(px+s/2, py+s/2, s*0.22, 0, Math.PI*2);
+      diagCtx.fillStyle = shadeColor(color, -22);
+      diagCtx.fill();
+    }
+  });
+
+  // axis labels
+  diagCtx.fillStyle = '#545e78';
+  diagCtx.font = '10px ' + getComputedStyle(document.body).fontFamily;
+  diagCtx.fillText('X →', ox+gridW+6, oy+10);
+  diagCtx.save();
+  diagCtx.translate(ox-16, oy+gridH+2);
+  diagCtx.rotate(-Math.PI/2);
+  diagCtx.fillText('Z →', 0, 0);
+  diagCtx.restore();
+}
+function roundRect(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+function shadeColor(hex, percent){
+  const c = new THREE.Color(hex);
+  const f = percent/100;
+  if (f >= 0){ c.lerp(new THREE.Color('#ffffff'), f); } else { c.lerp(new THREE.Color('#000000'), -f); }
+  return '#'+c.getHexString();
+}
+
+function updateLegend(){
+  const here = voxels.filter(v => Math.round(v.y) === currentLayer);
+  const counts = new Map();
+  here.forEach(v => counts.set(v.color, (counts.get(v.color)||0)+1));
+  const el = document.getElementById('legendRow');
+  el.innerHTML = '';
+  if (!counts.size){
+    el.innerHTML = '<span style="font-size:11.5px;color:var(--text-faint);">Sin bloques nuevos en esta capa.</span>';
+    return;
+  }
+  Array.from(counts.entries()).sort((a,b)=>b[1]-a[1]).forEach(([color,count])=>{
+    const chip = document.createElement('div');
+    chip.className = 'legendChip';
+    chip.innerHTML = `<span class="sw" style="background:${color}"></span><span class="ct">×${count}</span>`;
+    el.appendChild(chip);
+  });
+}
+
+/* ---------------------------- Strata track (mini progreso) ---------------------------- */
+function buildStrataTrack(){
+  const track = document.getElementById('strataTrack');
+  track.innerHTML = '';
+  for (let l=0; l<=maxLayer; l++){
+    const inLayer = voxels.filter(v => Math.round(v.y)===l);
+    const color = inLayer.length ? inLayer[Math.floor(inLayer.length/2)].color : '#1b2338';
+    const seg = document.createElement('div');
+    seg.className = 'strataSeg';
+    seg.style.background = color;
+    seg.dataset.layer = l;
+    seg.title = 'Capa ' + l;
+    seg.addEventListener('click', ()=> goToLayer(l));
+    track.appendChild(seg);
+  }
+  highlightTrack();
+}
+function highlightTrack(){
+  document.querySelectorAll('.strataSeg').forEach(s=>{
+    const l = +s.dataset.layer;
+    s.style.opacity = l <= currentLayer ? '1' : '0.25';
+    s.style.boxShadow = l === currentLayer ? '0 0 0 2px #fff inset' : 'none';
+  });
+}
+
+/* ---------------------------- UI de capa ---------------------------- */
+function refreshLayerUI(){
+  document.getElementById('layerBigNum').textContent = currentLayer;
+  document.getElementById('layerNowTxt').textContent = currentLayer;
+  document.getElementById('layerMaxTxt').textContent = maxLayer;
+  document.getElementById('prevBtn').disabled = currentLayer <= 0;
+  document.getElementById('nextBtn').disabled = currentLayer >= maxLayer;
+
+  const here = voxels.filter(v => Math.round(v.y) === currentLayer).length;
+  const accum = voxels.filter(v => Math.round(v.y) <= currentLayer).length;
+  document.getElementById('metaLayerCount').textContent = here;
+  document.getElementById('metaAccum').textContent = accum;
+  document.getElementById('metaTotal').textContent = voxels.length;
+  document.getElementById('metaRemaining').textContent = voxels.length - accum;
+  document.getElementById('diagramCount').textContent = here;
+
+  highlightTrack();
+  resizeDiagCanvas();
+  drawLayerDiagram();
+  updateLegend();
+  rebuildMesh3D();
+}
+
+function goToLayer(l){
+  currentLayer = Math.max(0, Math.min(maxLayer, l));
+  stopPlay();
+  if (showFullDesign){ showFullDesign = false; const b=document.getElementById('fullViewBtn'); if (b) b.classList.remove('active'); }
+  refreshLayerUI();
+}
+
+/* Caja delimitadora tal como se ve realmente en pantalla (centrada en X/Z, base en Y=0) */
+function centeredBounds(){
+  const halfX = (dims.x*voxelSize)/2, halfZ = (dims.z*voxelSize)/2;
+  return new THREE.Box3(
+    new THREE.Vector3(-halfX, 0, -halfZ),
+    new THREE.Vector3(halfX, dims.y*voxelSize, halfZ)
+  );
+}
+
+function setVoxels(list, opts){
+  opts = opts || {};
+  voxels = list;
+  const box = boundsOf(voxels);
+  dims = {
+    x: Math.round(box.max.x-box.min.x)+1,
+    y: Math.round(box.max.y-box.min.y)+1,
+    z: Math.round(box.max.z-box.min.z)+1,
+  };
+  maxLayer = Math.max(0, dims.y-1);
+  currentLayer = opts.startAtTop === false ? 0 : 0; // start at layer 0 so users can walk the build from the base
+  buildStrataTrack();
+  refreshLayerUI();
+  document.getElementById('statDims').textContent = `${dims.x}×${dims.y}×${dims.z}`;
+  document.getElementById('statCount').textContent = `${voxels.length}`;
+  controls.focus(centeredBounds());
+  fitAxesToModel();
+}
+
+/* ---------------------------- Modelo de ejemplo: árbol de bloques ---------------------------- */
+function buildDemoTree(){
+  const list = [];
+  const trunkColors = ['#8a5a34','#7c4f2c','#93613a'];
+  for (let y=0; y<4; y++) for (let x=-1; x<=0; x++) for (let z=-1; z<=0; z++)
+    list.push({x,y,z,color:trunkColors[(x+z+y+4)%3]});
+  const leafPalette = ['#3fae5c','#4bc26c','#2f8f49','#5fce7f','#357f43'];
+  let ci = 0;
+  const layers = [{y:3,r:3},{y:4,r:3.3},{y:5,r:2.6},{y:6,r:1.9},{y:7,r:1.1}];
+  layers.forEach(L=>{
+    for (let x=-4;x<=4;x++) for (let z=-4;z<=4;z++){
+      const d = Math.sqrt(x*x+z*z);
+      if (d <= L.r + Math.sin(x*1.7+z*2.3+L.y)*0.35 && Math.random()<0.94){
+        list.push({x,y:L.y,z,color:leafPalette[ci++%leafPalette.length]});
+      }
+    }
+  });
+  const potColor = '#c96a3d';
+  for (let x=-2;x<=1;x++) for (let z=-2;z<=1;z++) list.push({x,y:-1,z,color:potColor});
+  return normalize(list);
+}
+
+/* ---------------------------- Parser .vox (MagicaVoxel) ---------------------------- */
+function parseVox(buffer){
+  const dv = new DataView(buffer);
+  const magic = String.fromCharCode(dv.getUint8(0),dv.getUint8(1),dv.getUint8(2),dv.getUint8(3));
+  if (magic !== 'VOX ') throw new Error('No es un archivo .vox válido');
+  function readChunk(off){
+    const id = String.fromCharCode(dv.getUint8(off),dv.getUint8(off+1),dv.getUint8(off+2),dv.getUint8(off+3));
+    const contentSize = dv.getInt32(off+4,true);
+    const childrenSize = dv.getInt32(off+8,true);
+    const contentStart = off+12;
+    const childrenStart = contentStart+contentSize;
+    const nextOffset = childrenStart+childrenSize;
+    return {id,contentStart,contentSize,childrenStart,childrenSize,nextOffset};
+  }
+  const sizes=[], xyzis=[]; let palette=null;
+  (function walk(p,end){
+    while(p<end){
+      const c = readChunk(p);
+      if (c.id==='SIZE'){ sizes.push({x:dv.getInt32(c.contentStart,true),y:dv.getInt32(c.contentStart+4,true),z:dv.getInt32(c.contentStart+8,true)}); }
+      else if (c.id==='XYZI'){
+        const n = dv.getInt32(c.contentStart,true);
+        const arr = new Array(n);
+        for (let i=0;i<n;i++){
+          const base = c.contentStart+4+i*4;
+          arr[i] = {x:dv.getUint8(base),y:dv.getUint8(base+1),z:dv.getUint8(base+2),c:dv.getUint8(base+3)};
+        }
+        xyzis.push(arr);
+      } else if (c.id==='RGBA'){
+        const pal = new Array(256);
+        for (let i=0;i<256;i++){
+          const base = c.contentStart+i*4;
+          const r=dv.getUint8(base), g=dv.getUint8(base+1), b=dv.getUint8(base+2);
+          pal[i] = '#'+[r,g,b].map(x=>x.toString(16).padStart(2,'0')).join('');
+        }
+        palette = pal;
+      }
+      if (c.childrenSize>0) walk(c.childrenStart, c.childrenStart+c.childrenSize);
+      p = c.nextOffset;
+    }
+  })(8, buffer.byteLength);
+  if (!sizes.length || !xyzis.length) throw new Error('El .vox no contiene un modelo de voxeles reconocible');
+  const fallbackHue = i => `hsl(${(i*37)%360} 62% 58%)`;
+  const list = xyzis[0].map((v,i)=>({ x:v.x, y:v.z, z:v.y, color: palette ? (palette[v.c-1]||palette[0]) : fallbackHue(v.c) }));
+  return normalize(list);
+}
+
+/* ---------------------------- Parser .dae (COLLADA) + voxelizador ---------------------------- */
+function decodeDaeBuffer(buffer){
+  // Studio 2.0 y otros exportadores a veces guardan el .dae con BOM o en
+  // una codificación distinta a UTF-8; probamos varias antes de rendirnos.
+  const tryDecode = (enc) => {
+    try {
+      let t = new TextDecoder(enc).decode(buffer);
+      t = t.replace(/^\uFEFF/, '').trim();
+      return t;
+    } catch(e){ return null; }
+  };
+  const looksLikeXml = t => t && (/^<\?xml/i.test(t) || /<COLLADA/i.test(t));
+  let t = tryDecode('utf-8');
+  if (looksLikeXml(t)) return t;
+  const t16le = tryDecode('utf-16le');
+  if (looksLikeXml(t16le)) return t16le;
+  const t16be = tryDecode('utf-16be');
+  if (looksLikeXml(t16be)) return t16be;
+  const tLatin = tryDecode('windows-1252');
+  if (looksLikeXml(tLatin)) return tLatin;
+  // ninguna codificación produjo XML reconocible: devolvemos la lectura utf-8
+  // para que el mensaje de error pueda mostrar lo que realmente hay en el archivo
+  return t || '';
+}
+
+function autoDeclareNamespaces(text){
+  // Studio 2.0 suele escribir etiquetas/atributos con prefijos propios dentro
+  // de bloques <extra> (p.ej. "RoundingEdgeNormal:enable") sin declarar el
+  // namespace correspondiente, lo que rompe cualquier parser XML estricto.
+  // Detectamos esos prefijos "huérfanos" y los declaramos en la raíz <COLLADA>
+  // apuntando a un namespace ficticio; no afecta a la geometría que leemos.
+  const used = new Set();
+  const usageRe = /[<\s]([A-Za-z_][\w.-]*):[A-Za-z_]/g;
+  let m;
+  while ((m = usageRe.exec(text))){
+    if (m[1] !== 'xml' && m[1] !== 'xmlns') used.add(m[1]);
+  }
+  if (!used.size) return text;
+  const declared = new Set();
+  const declRe = /xmlns:([A-Za-z_][\w.-]*)\s*=/g;
+  while ((m = declRe.exec(text))) declared.add(m[1]);
+  const missing = [...used].filter(p => !declared.has(p));
+  if (!missing.length) return text;
+  const nsAttrs = missing.map(p => ` xmlns:${p}="urn:strata:ignored-ns:${p}"`).join('');
+  return text.replace(/<COLLADA(\s[^>]*)?>/, (full, attrs) => `<COLLADA${attrs||''}${nsAttrs}>`);
+}
+
+function sanitizeXmlText(text){
+  // Studio 2.0 y otros exportadores a veces dejan '&' sueltos (p.ej. en nombres
+  // de piezas como "Black & White") sin escapar como &amp;, o incluyen
+  // caracteres de control no válidos en XML 1.0. Los corregimos antes de parsear.
+  let t = text
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
+    .replace(/&(?!amp;|lt;|gt;|apos;|quot;|#\d+;|#x[0-9a-fA-F]+;)/g, '&amp;');
+  t = autoDeclareNamespaces(t);
+  return t;
+}
+
+function parseDaeTriangles(xmlTextRaw){
+  const xmlText = sanitizeXmlText(xmlTextRaw);
+  const xml = new DOMParser().parseFromString(xmlText,'application/xml');
+  const errNode = xml.querySelector('parsererror');
+  if (errNode){
+    const diag = (errNode.textContent || '').trim().replace(/\s+/g,' ').slice(0, 300);
+    const looksZip = xmlTextRaw.slice(0,2) === 'PK';
+    const looksHtml = /^<!doctype html/i.test(xmlTextRaw) || /^<html/i.test(xmlTextRaw);
+    let hint = 'Abre el archivo con un editor de texto y revisa el punto exacto que indica el error de arriba (línea/columna); suele ser una etiqueta sin cerrar o un carácter especial sin escapar. También puedes volver a exportarlo desde Studio 2.0.';
+    if (looksZip) hint = 'Este archivo parece un .zip (empieza con "PK"), no un .dae de texto. Si Studio 2.0 exportó un paquete comprimido, ábrelo y busca el .dae real adentro.';
+    if (looksHtml) hint = 'El contenido parece HTML, no COLLADA. Puede que el archivo se haya descargado mal.';
+    throw new Error('El .dae no es XML válido: ' + (diag || '(el navegador no dio más detalle)') + '. ' + hint);
+  }
+  if (!xml.getElementsByTagName('COLLADA').length && !xml.getElementsByTagNameNS('*','COLLADA').length){
+    throw new Error('El XML es válido pero no parece un documento COLLADA (falta la etiqueta <COLLADA>). ¿Es este el archivo correcto exportado por Studio 2.0?');
+  }
+  const geometries = Array.from(xml.getElementsByTagName('geometry'));
+  if (!geometries.length) throw new Error('No se encontró geometría en el .dae');
+
+  /* --- 1) Geometría local por id (sin transformar todavía) --- */
+  const geomTris = {}; // id (sin '#') -> [{a,b,c}, ...] en espacio local de la pieza
+  for (const geom of geometries){
+    const gid = geom.getAttribute('id');
+    const mesh = geom.getElementsByTagName('mesh')[0];
+    if (!mesh || !gid) continue;
+    const localTris = [];
+    const sources = {};
+    for (const src of Array.from(mesh.getElementsByTagName('source'))){
+      const id = src.getAttribute('id');
+      const floatArr = src.getElementsByTagName('float_array')[0];
+      if (!floatArr) continue;
+      const data = floatArr.textContent.trim().split(/\s+/).map(Number);
+      const accessor = src.getElementsByTagName('accessor')[0];
+      const stride = accessor ? parseInt(accessor.getAttribute('stride')||'3',10) : 3;
+      sources['#'+id] = {data,stride};
+    }
+    const verticesEl = mesh.getElementsByTagName('vertices')[0];
+    const vertexIdToSource = {};
+    if (verticesEl){
+      const input = Array.from(verticesEl.getElementsByTagName('input')).find(i=>i.getAttribute('semantic')==='POSITION');
+      if (input) vertexIdToSource['#'+verticesEl.getAttribute('id')] = input.getAttribute('source');
+    }
+    const polyLists = [
+      ...Array.from(mesh.getElementsByTagName('triangles')),
+      ...Array.from(mesh.getElementsByTagName('polylist')),
+      ...Array.from(mesh.getElementsByTagName('polygons')),
+    ];
+    for (const pl of polyLists){
+      const inputs = Array.from(pl.getElementsByTagName('input'));
+      let maxOffset=0, vertexSourceRef=null, vertexOffset=0;
+      inputs.forEach(inp=>{
+        const off = parseInt(inp.getAttribute('offset')||'0',10);
+        maxOffset = Math.max(maxOffset, off);
+        if (inp.getAttribute('semantic')==='VERTEX'){
+          vertexOffset = off;
+          const sref = inp.getAttribute('source');
+          vertexSourceRef = vertexIdToSource[sref] || sref;
+        }
+      });
+      const stride = maxOffset+1;
+      if (!vertexSourceRef || !sources[vertexSourceRef]) continue;
+      const posSrc = sources[vertexSourceRef];
+      const pEls = Array.from(pl.getElementsByTagName('p'));
+      let vcounts = null;
+      const vcountEl = pl.getElementsByTagName('vcount')[0];
+      if (vcountEl) vcounts = vcountEl.textContent.trim().split(/\s+/).map(Number);
+      const getVec = idx => {
+        const base = idx*posSrc.stride;
+        return new THREE.Vector3(posSrc.data[base]||0, posSrc.data[base+1]||0, posSrc.data[base+2]||0);
+      };
+      if (pl.tagName==='triangles'){
+        const p = pEls[0] ? pEls[0].textContent.trim().split(/\s+/).map(Number) : [];
+        for (let i=0;i+stride*3<=p.length;i+=stride*3){
+          const a=getVec(p[i+vertexOffset]), b=getVec(p[i+stride+vertexOffset]), c=getVec(p[i+stride*2+vertexOffset]);
+          localTris.push({a,b,c});
+        }
+      } else {
+        let pAll = []; pEls.forEach(pe=>pAll.push(pe.textContent.trim().split(/\s+/).map(Number)));
+        let flat = pAll.length===1 ? pAll[0] : [].concat(...pAll);
+        let cursor=0;
+        const counts = vcounts || new Array(Math.floor(flat.length/(stride*3))).fill(3);
+        counts.forEach(vc=>{
+          const faceIdx=[];
+          for (let k=0;k<vc;k++) faceIdx.push(flat[cursor+k*stride+vertexOffset]);
+          cursor += vc*stride;
+          for (let k=1;k<vc-1;k++) localTris.push({a:getVec(faceIdx[0]), b:getVec(faceIdx[k]), c:getVec(faceIdx[k+1])});
+        });
+      }
+    }
+    geomTris[gid] = localTris;
+  }
+
+  /* --- 2) Colores: <library_effects> -> <library_materials> -> bind_material --- */
+  const effectColor = {}; // effectId -> '#hex'
+  Array.from(xml.getElementsByTagName('effect')).forEach(eff=>{
+    const id = eff.getAttribute('id');
+    if (!id) return;
+    const colorEl = Array.from(eff.getElementsByTagName('diffuse'))[0]?.getElementsByTagName('color')[0]
+      || Array.from(eff.getElementsByTagName('ambient'))[0]?.getElementsByTagName('color')[0];
+    if (!colorEl) return;
+    const nums = colorEl.textContent.trim().split(/\s+/).map(Number);
+    const toByte = v => Math.max(0, Math.min(255, Math.round((v||0)*255)));
+    effectColor[id] = '#'+[toByte(nums[0]),toByte(nums[1]),toByte(nums[2])].map(x=>x.toString(16).padStart(2,'0')).join('');
+  });
+  const materialColor = {}; // materialId -> '#hex'
+  Array.from(xml.getElementsByTagName('material')).forEach(mat=>{
+    const id = mat.getAttribute('id');
+    const instEff = mat.getElementsByTagName('instance_effect')[0];
+    if (!id || !instEff) return;
+    const effId = (instEff.getAttribute('url')||'').replace(/^#/,'');
+    if (effectColor[effId]) materialColor[id] = effectColor[effId];
+  });
+  function colorForInstanceGeometry(igEl){
+    const instMat = igEl.getElementsByTagName('instance_material')[0];
+    if (!instMat) return null;
+    const target = (instMat.getAttribute('target')||'').replace(/^#/,'');
+    return materialColor[target] || null;
+  }
+
+  /* --- 3) Grafo de escena: aplicar transformaciones de <node> a cada instancia --- */
+  const nodeById = {};
+  Array.from(xml.getElementsByTagName('node')).forEach(n=>{
+    const id = n.getAttribute('id');
+    if (id) nodeById[id] = n;
+  });
+  function localMatrixOf(nodeEl){
+    const m = new THREE.Matrix4();
+    Array.from(nodeEl.children).forEach(child=>{
+      const tag = child.tagName.toLowerCase();
+      if (tag==='matrix'){
+        const n = child.textContent.trim().split(/\s+/).map(Number);
+        if (n.length===16){ const mm = new THREE.Matrix4(); mm.set(n[0],n[1],n[2],n[3],n[4],n[5],n[6],n[7],n[8],n[9],n[10],n[11],n[12],n[13],n[14],n[15]); m.multiply(mm); }
+      } else if (tag==='translate'){
+        const [x,y,z] = child.textContent.trim().split(/\s+/).map(Number);
+        m.multiply(new THREE.Matrix4().makeTranslation(x||0,y||0,z||0));
+      } else if (tag==='rotate'){
+        const n = child.textContent.trim().split(/\s+/).map(Number);
+        const axis = new THREE.Vector3(n[0]||0,n[1]||0,n[2]||0);
+        if (axis.lengthSq()>0){ axis.normalize(); m.multiply(new THREE.Matrix4().makeRotationAxis(axis, (n[3]||0)*Math.PI/180)); }
+      } else if (tag==='scale'){
+        const [x,y,z] = child.textContent.trim().split(/\s+/).map(Number);
+        m.multiply(new THREE.Matrix4().makeScale(x||1,y||1,z||1));
+      }
+    });
+    return m;
+  }
+
+  const worldTris = [];
+  const instances = []; // un elemento por cada <instance_geometry> — permite 1 pieza = N bloques (según su tamaño real), sin voxelizar
+  const seenNodeStack = new Set();
+  function walk(nodeEl, parentMatrix){
+    const world = parentMatrix.clone().multiply(localMatrixOf(nodeEl));
+    Array.from(nodeEl.children).forEach(child=>{
+      const tag = child.tagName.toLowerCase();
+      if (tag==='instance_geometry'){
+        const gid = (child.getAttribute('url')||'').replace(/^#/,'');
+        const tris = geomTris[gid];
+        if (tris){
+          const color = colorForInstanceGeometry(child);
+          let minX=Infinity,minY=Infinity,minZ=Infinity,maxX=-Infinity,maxY=-Infinity,maxZ=-Infinity;
+          tris.forEach(t=>{
+            const wa=t.a.clone().applyMatrix4(world), wb=t.b.clone().applyMatrix4(world), wc=t.c.clone().applyMatrix4(world);
+            worldTris.push({ a:wa, b:wb, c:wc, color });
+            [wa,wb,wc].forEach(p=>{
+              minX=Math.min(minX,p.x); maxX=Math.max(maxX,p.x);
+              minY=Math.min(minY,p.y); maxY=Math.max(maxY,p.y);
+              minZ=Math.min(minZ,p.z); maxZ=Math.max(maxZ,p.z);
+            });
+          });
+          if (isFinite(minX)) instances.push({ minX,maxX,minY,maxY,minZ,maxZ, color });
+        }
+      } else if (tag==='instance_node'){
+        const nid = (child.getAttribute('url')||'').replace(/^#/,'');
+        const ref = nodeById[nid];
+        if (ref && !seenNodeStack.has(nid)){
+          seenNodeStack.add(nid); walk(ref, world); seenNodeStack.delete(nid);
+        }
+      } else if (tag==='node'){
+        walk(child, world);
+      }
+    });
+  }
+  const visualScenes = Array.from(xml.getElementsByTagName('visual_scene'));
+  visualScenes.forEach(vs=>{
+    Array.from(vs.children).filter(c=>c.tagName.toLowerCase()==='node').forEach(rootNode=>{
+      walk(rootNode, new THREE.Matrix4());
+    });
+  });
+
+  let allTris = worldTris;
+  let allInstances = instances;
+  if (!allTris.length){
+    // sin escena/instancias (dae simple de una sola malla): usar la geometría tal cual
+    Object.values(geomTris).forEach(tris => tris.forEach(t => allTris.push({a:t.a,b:t.b,c:t.c,color:null})));
+  }
+
+  // Corrige el eje "arriba" si el archivo declara Z_UP en vez de Y_UP
+  const upAxisEl = xml.getElementsByTagName('up_axis')[0];
+  if (upAxisEl && /Z_UP/i.test(upAxisEl.textContent)){
+    const swap = v => new THREE.Vector3(v.x, v.z, -v.y);
+    allTris = allTris.map(t => ({ a:swap(t.a), b:swap(t.b), c:swap(t.c), color:t.color }));
+    allInstances = allInstances.map(p => {
+      const c1 = swap(new THREE.Vector3(p.minX,p.minY,p.minZ));
+      const c2 = swap(new THREE.Vector3(p.maxX,p.maxY,p.maxZ));
+      return {
+        minX: Math.min(c1.x,c2.x), maxX: Math.max(c1.x,c2.x),
+        minY: Math.min(c1.y,c2.y), maxY: Math.max(c1.y,c2.y),
+        minZ: Math.min(c1.z,c2.z), maxZ: Math.max(c1.z,c2.z),
+        color: p.color
+      };
+    });
+  }
+
+  if (!allTris.length) throw new Error('No se pudieron extraer triángulos del .dae');
+  return { tris: allTris, instances: allInstances };
+}
+
+/* A partir de la caja delimitadora real de cada pieza (<instance_geometry>) rellena
+   TODAS las celdas de rejilla que esa pieza realmente ocupa (una placa de 1 celda de
+   alto ocupa 1, un ladrillo de 3 celdas de alto ocupa 3, una placa 2x4 ocupa 8...).
+   Antes solo se usaba el centro de cada pieza, lo que dejaba capas vacías (huecos)
+   donde en realidad había piezas más grandes. Solo funciona si el .dae tiene piezas
+   repetidas discretas (como un set de Studio 2.0); si no, se usa voxelizeTriangles. */
+function buildVoxelsFromInstances(instances){
+  if (!instances || instances.length < 2) return null;
+  function axisUnit(axisMin, axisMax){
+    const vals = Array.from(new Set(instances.map(p => Math.round(((p[axisMin]+p[axisMax])/2)*20)/20))).sort((a,b)=>a-b);
+    let minGap = Infinity;
+    for (let i=1;i<vals.length;i++){
+      const gap = vals[i]-vals[i-1];
+      if (gap > 0.05 && gap < minGap) minGap = gap;
+    }
+    return (minGap===Infinity || minGap<=0) ? 1 : minGap;
+  }
+  const ux = axisUnit('minX','maxX'), uy = axisUnit('minY','maxY'), uz = axisUnit('minZ','maxZ');
+  function span(minV, maxV, unit){
+    const start = Math.round(minV/unit);
+    const count = Math.max(1, Math.round((maxV-minV)/unit));
+    return { start, end: start+count-1 };
+  }
+  const occ = new Map();
+  instances.forEach(p=>{
+    const rx = span(p.minX, p.maxX, ux), ry = span(p.minY, p.maxY, uy), rz = span(p.minZ, p.maxZ, uz);
+    for (let gx=rx.start; gx<=rx.end; gx++)
+      for (let gy=ry.start; gy<=ry.end; gy++)
+        for (let gz=rz.start; gz<=rz.end; gz++){
+          const key = gx+','+gy+','+gz;
+          if (!occ.has(key)) occ.set(key, { x:gx, y:gy, z:gz, color: p.color || '#f2b134' });
+        }
+  });
+  const list = Array.from(occ.values());
+  return list.length ? normalize(list) : null;
+}
+
+function voxelizeTriangles(tris, resolution){
+  const box = new THREE.Box3();
+  tris.forEach(({a,b,c})=>{ box.expandByPoint(a); box.expandByPoint(b); box.expandByPoint(c); });
+  const size = new THREE.Vector3(); box.getSize(size);
+  const maxExtent = Math.max(size.x,size.y,size.z,1e-6);
+  const cell = maxExtent/resolution;
+  const occ = new Map();
+  const gradA = new THREE.Color('#f2b134'), gradB = new THREE.Color('#2dd4bf');
+
+  // Cobertura determinista: para cada triángulo, marcamos TODAS las celdas de la
+  // rejilla que toca su caja delimitadora. A esta resolución cada pieza suele caber
+  // en un puñado de celdas, así que es rápido y — a diferencia del muestreo aleatorio
+  // con cupo fijo — nunca deja partes del modelo sin procesar por agotar un límite.
+  tris.forEach(tri=>{
+    const {a,b,c,color} = tri;
+    const minX=Math.min(a.x,b.x,c.x), maxX=Math.max(a.x,b.x,c.x);
+    const minY=Math.min(a.y,b.y,c.y), maxY=Math.max(a.y,b.y,c.y);
+    const minZ=Math.min(a.z,b.z,c.z), maxZ=Math.max(a.z,b.z,c.z);
+    const gx0=Math.floor((minX-box.min.x)/cell), gx1=Math.floor((maxX-box.min.x)/cell);
+    const gy0=Math.floor((minY-box.min.y)/cell), gy1=Math.floor((maxY-box.min.y)/cell);
+    const gz0=Math.floor((minZ-box.min.z)/cell), gz1=Math.floor((maxZ-box.min.z)/cell);
+    const colorFor = (gy) => {
+      if (color) return color;
+      const t = ((gy+0.5)*cell)/(size.y||1);
+      return '#'+gradA.clone().lerp(gradB, Math.max(0,Math.min(1,t))).getHexString();
+    };
+    const spanCells = (gx1-gx0+1)*(gy1-gy0+1)*(gz1-gz0+1);
+    if (spanCells > 3375){ // 15^3 — triángulo enorme/degenerado: solo marcamos su centro
+      const cx=(a.x+b.x+c.x)/3, cy=(a.y+b.y+c.y)/3, cz=(a.z+b.z+c.z)/3;
+      const gx=Math.floor((cx-box.min.x)/cell), gy=Math.floor((cy-box.min.y)/cell), gz=Math.floor((cz-box.min.z)/cell);
+      const key = gx+','+gy+','+gz;
+      if (!occ.has(key)) occ.set(key,{x:gx,y:gy,z:gz,color:colorFor(gy)});
+      return;
+    }
+    for (let gx=gx0; gx<=gx1; gx++) for (let gy=gy0; gy<=gy1; gy++) for (let gz=gz0; gz<=gz1; gz++){
+      const key = gx+','+gy+','+gz;
+      if (!occ.has(key)) occ.set(key,{x:gx,y:gy,z:gz,color:colorFor(gy)});
+    }
+  });
+  const list = Array.from(occ.values());
+  if (!list.length) throw new Error('La voxelización no produjo bloques; prueba con más resolución');
+  return {list: normalize(list), cell};
+}
+let lastDaeParsed = null;
+
+/* ---------------------------- Formato .json propio ---------------------------- */
+function parseJsonModel(obj){
+  if (!obj || !Array.isArray(obj.voxels)) throw new Error('El .json debe tener la forma { voxels: [[x,y,z,"#hex"], ...] }');
+  return normalize(obj.voxels.map(v=>({x:v[0],y:v[1],z:v[2],color:v[3]||'#f2b134'})));
+}
+
+/* ---------------------------- Carga de archivos ---------------------------- */
+const statusEl = document.getElementById('statusMsg');
+function setStatus(msg,kind){ statusEl.className = kind||''; statusEl.textContent = msg; }
+function setLoading(on,text){ document.getElementById('loadingOverlay').classList.toggle('show',on); if (text) document.getElementById('loadingText').textContent = text; }
+
+async function handleFile(file){
+  const ext = file.name.split('.').pop().toLowerCase();
+  setLoading(true, 'Procesando ' + file.name + '…');
+  document.getElementById('voxelizeSection').style.display = 'none';
+  try{
+    if (ext==='vox'){
+      const buf = await file.arrayBuffer();
+      const list = parseVox(buf);
+      voxelSize = 1; setVoxels(list);
+      document.getElementById('modelNameText').textContent = file.name;
+      setStatus('Modelo .vox cargado: '+list.length+' bloques.', 'ok');
+    } else if (ext==='dae'){
+      const buf = await file.arrayBuffer();
+      const text = decodeDaeBuffer(buf);
+      const parsed = parseDaeTriangles(text);
+      lastDaeParsed = parsed;
+      const exactList = buildVoxelsFromInstances(parsed.instances);
+      voxelSize = 1;
+      if (exactList){
+        // Una pieza del .dae = un bloque exacto, sin elegir resolución.
+        setVoxels(exactList);
+        document.getElementById('modelNameText').textContent = file.name;
+        document.getElementById('voxelizeSection').style.display = 'none';
+        setStatus('Modelo .dae cargado con sus piezas reales: '+exactList.length+' bloques (uno por pieza).', 'ok');
+      } else {
+        // Malla sin piezas discretas (p. ej. un solo objeto orgánico): voxelizar por resolución.
+        const res = parseInt(document.getElementById('resSlider').value,10);
+        const {list} = voxelizeTriangles(parsed.tris, res);
+        setVoxels(list);
+        document.getElementById('modelNameText').textContent = file.name + ' (voxelizado)';
+        document.getElementById('voxelizeSection').style.display = 'block';
+        setStatus('No se detectaron piezas discretas; se voxelizó la malla: '+list.length+' bloques.', 'ok');
+      }
+    } else if (ext==='json'){
+      const text = await file.text();
+      const list = parseJsonModel(JSON.parse(text));
+      voxelSize = 1; setVoxels(list);
+      document.getElementById('modelNameText').textContent = file.name;
+      setStatus('Modelo .json cargado: '+list.length+' bloques.', 'ok');
+    } else {
+      throw new Error('Formato no soportado. Usa .vox, .dae o .json');
+    }
+    closeSidebar();
+  } catch(err){
+    console.error(err);
+    setStatus(err.message || 'No se pudo procesar el archivo.', 'err');
+  } finally {
+    setLoading(false);
+  }
+}
+
+document.getElementById('revoxelizeBtn').addEventListener('click', async ()=>{
+  if (!lastDaeParsed) return;
+  setLoading(true,'Voxelizando…');
+  await new Promise(r=>setTimeout(r,10));
+  try{
+    const res = parseInt(document.getElementById('resSlider').value,10);
+    const {list} = voxelizeTriangles(lastDaeParsed.tris, res);
+    setVoxels(list);
+    setStatus('Voxelizado actualizado: '+list.length+' bloques.', 'ok');
+  } catch(err){ setStatus(err.message,'err'); } finally { setLoading(false); }
+});
+document.getElementById('resSlider').addEventListener('input', e=>{ document.getElementById('resVal').textContent = e.target.value; });
+
+/* ---------------------------- Orientación (post-transformación de la nube de bloques) ---------------------------- */
+function transformVoxels(fn){
+  const transformed = voxels.map(v => { const p = fn(v); return { x:p.x, y:p.y, z:p.z, color:v.color }; });
+  setVoxels(normalize(transformed));
+}
+document.getElementById('rotateXBtn').addEventListener('click', ()=> transformVoxels(v=>({x:v.x, y:-v.z, z:v.y})));
+document.getElementById('rotateYBtn').addEventListener('click', ()=> transformVoxels(v=>({x:v.z, y:v.y, z:-v.x})));
+document.getElementById('rotateZBtn').addEventListener('click', ()=> transformVoxels(v=>({x:-v.y, y:v.x, z:v.z})));
+document.getElementById('flipYBtn').addEventListener('click', ()=> transformVoxels(v=>({x:v.x, y:-v.y, z:v.z})));
+
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+dropzone.addEventListener('click', ()=> fileInput.click());
+fileInput.addEventListener('change', e=>{ if (e.target.files[0]) handleFile(e.target.files[0]); });
+['dragenter','dragover'].forEach(ev=> dropzone.addEventListener(ev, e=>{ e.preventDefault(); dropzone.classList.add('drag'); }));
+['dragleave','drop'].forEach(ev=> dropzone.addEventListener(ev, e=>{ e.preventDefault(); dropzone.classList.remove('drag'); }));
+dropzone.addEventListener('drop', e=>{ const f=e.dataTransfer.files[0]; if (f) handleFile(f); });
+
+/* ---------------------------- Stepper / reproducción ---------------------------- */
+document.getElementById('prevBtn').addEventListener('click', ()=> goToLayer(currentLayer-1));
+document.getElementById('nextBtn').addEventListener('click', ()=> goToLayer(currentLayer+1));
+window.addEventListener('keydown', e=>{
+  if (e.key==='ArrowRight') goToLayer(currentLayer+1);
+  if (e.key==='ArrowLeft') goToLayer(currentLayer-1);
+});
+
+let playTimer = null;
+function stopPlay(){
+  if (playTimer){ clearInterval(playTimer); playTimer=null; }
+  document.getElementById('playBtn').textContent = '▶';
+  document.getElementById('playBtn').classList.remove('active');
+}
+document.getElementById('playBtn').addEventListener('click', ()=>{
+  if (playTimer){ stopPlay(); return; }
+  currentLayer = 0; refreshLayerUI();
+  document.getElementById('playBtn').textContent = '❚❚';
+  document.getElementById('playBtn').classList.add('active');
+  const speed = parseFloat(document.getElementById('speedSlider').value) * 1000;
+  playTimer = setInterval(()=>{
+    if (currentLayer >= maxLayer){ stopPlay(); return; }
+    currentLayer++;
+    refreshLayerUI();
+  }, speed);
+});
+document.getElementById('speedSlider').addEventListener('input', e=>{
+  document.getElementById('speedVal').textContent = parseFloat(e.target.value).toFixed(1)+'s';
+  if (playTimer){ stopPlay(); document.getElementById('playBtn').click(); }
+});
+
+/* ---------------------------- Toggles 3D ---------------------------- */
+function bindSwitch(id,onChange){
+  const el = document.getElementById(id);
+  el.addEventListener('click', ()=>{ el.classList.toggle('on'); onChange(el.classList.contains('on')); });
+}
+bindSwitch('tgGrid', on=>{ grid.visible=on; ground.visible=on; });
+bindSwitch('tgEdges', on=>{ wireOn.v=on; if (edgeMesh) edgeMesh.visible=on; });
+
+document.getElementById('demoBtn').addEventListener('click', ()=>{
+  voxelSize=1;
+  document.getElementById('voxelizeSection').style.display='none';
+  setVoxels(buildDemoTree());
+  document.getElementById('modelNameText').textContent = 'Árbol de ejemplo';
+  setStatus('Modelo de ejemplo cargado.', 'ok');
+  closeSidebar();
+});
+
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  if (!voxels.length){ setStatus('No hay ningún modelo cargado para exportar.', 'err'); return; }
+  const payload = { voxels: voxels.map(v => [v.x, v.y, v.z, v.color]) };
+  const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const baseName = (document.getElementById('modelNameText').textContent || 'modelo')
+    .replace(/\.(dae|vox|json)\b.*/i, '').trim().replace(/[^\w\-]+/g, '_') || 'modelo';
+  a.href = url; a.download = baseName + '.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  setStatus('Diseño descargado como ' + baseName + '.json — compártelo junto con este visor.', 'ok');
+});
+
+/* ---------------------------- Código QR para compartir el diseño ---------------------------- */
+const QR_SAFE_LIMIT = 1800; // caracteres codificados (ya comprimidos); por arriba de esto el QR queda demasiado denso/no cabe
+
+function bytesToBase64(bytes){
+  let binary = '';
+  for (let i=0;i<bytes.length;i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+function base64ToBytes(b64){
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i=0;i<binary.length;i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+// Comprime el JSON del diseño (deflate) antes de meterlo en la URL — deja entrar
+// diseños varias veces más grandes que sin comprimir, aunque un QR sigue teniendo
+// un límite físico de unos pocos miles de caracteres, así que diseños con miles
+// de piezas nunca van a entrar embebidos directamente en el código.
+function encodeModelForUrl(){
+  const payload = { voxels: voxels.map(v => [v.x, v.y, v.z, v.color]) };
+  const json = JSON.stringify(payload);
+  const compressed = pako.deflate(json);
+  return encodeURIComponent(bytesToBase64(compressed));
+}
+function decodeModelFromEmbedded(m){
+  const bytes = base64ToBytes(decodeURIComponent(m));
+  const json = pako.inflate(bytes, { to: 'string' });
+  return JSON.parse(json);
+}
+
+function pageBaseUrl(){
+  return window.location.href.split('?')[0].split('#')[0];
+}
+
+function openQrModal(){ document.getElementById('qrOverlay').classList.add('show'); }
+function closeQrModal(){ document.getElementById('qrOverlay').classList.remove('show'); }
+
+function renderQr(url, noteHtml){
+  const body = document.getElementById('qrBody');
+  try{
+    const qr = qrcode(0, 'M');
+    qr.addData(url);
+    qr.make();
+    body.innerHTML = '';
+    const imgWrap = document.createElement('div');
+    imgWrap.innerHTML = qr.createSvgTag({ cellSize: 5, margin: 4 });
+    body.appendChild(imgWrap);
+    const linkDiv = document.createElement('div');
+    linkDiv.className = 'qr-link';
+    linkDiv.textContent = url;
+    body.appendChild(linkDiv);
+    const note = document.createElement('div');
+    note.className = 'qr-note';
+    note.innerHTML = noteHtml;
+    body.appendChild(note);
+    openQrModal();
+  } catch(err){
+    body.innerHTML = '<div class="qr-warn">No se pudo generar el código QR: ' + (err.message || 'el enlace es demasiado largo') + '.</div>';
+    openQrModal();
+  }
+}
+
+function showHostedUrlForm(defaultMsg){
+  const body = document.getElementById('qrBody');
+  body.innerHTML =
+    (defaultMsg ? '<div class="qr-warn">' + defaultMsg + '</div>' : '') +
+    '<div class="qr-note" style="margin-top:10px;">Si ya subiste tu archivo <b>.json</b> (el que descargás con el botón de arriba) a algún sitio — Google Drive, GitHub, Dropbox, etc. — pegá acá el link directo al archivo. El QR va a guardar solo ese link corto; el visor descarga el diseño completo al abrirlo, sin límite de tamaño.</div>' +
+    '<input type="text" id="hostedUrlInput" placeholder="https://..." style="width:100%; margin-top:10px; padding:9px 10px; border-radius:7px; border:1px solid var(--border); background:var(--panel-2); color:var(--text); font-family:var(--mono); font-size:11.5px;" />' +
+    '<button class="btn primary" id="hostedUrlGoBtn" style="width:100%; margin-top:10px;">Generar QR con ese enlace</button>';
+  document.getElementById('hostedUrlGoBtn').addEventListener('click', ()=>{
+    const raw = document.getElementById('hostedUrlInput').value.trim();
+    if (!raw){ return; }
+    try{ new URL(raw); } catch(e){ alert('Ese link no parece válido.'); return; }
+    const shareUrl = pageBaseUrl() + '?src=' + encodeURIComponent(raw);
+    renderQr(shareUrl, 'Quien escanee este código va a descargar tu diseño desde ese link y abrirlo, listo para armar — funciona para cualquier tamaño de diseño.');
+  });
+  openQrModal();
+}
+
+document.getElementById('qrBtn').addEventListener('click', ()=>{
+  if (!voxels.length){ setStatus('No hay ningún modelo cargado para compartir.', 'err'); return; }
+  const isLocalFile = window.location.protocol === 'file:';
+  const encoded = encodeModelForUrl();
+
+  if (encoded.length > QR_SAFE_LIMIT){
+    showHostedUrlForm(
+      'Este diseño tiene <b>' + voxels.length + '</b> bloques — demasiada información para meter directo en un QR '
+      + '(~' + encoded.length + ' caracteres comprimidos; el máximo práctico es ' + QR_SAFE_LIMIT + '). Usá la opción de abajo en su lugar.'
+    );
+    return;
+  }
+
+  const url = pageBaseUrl() + '?m=' + encoded;
+  const note = isLocalFile
+    ? '⚠️ Estás abriendo este archivo localmente (file://). Este enlace solo va a funcionar en <b>esta misma computadora</b> — para que otra persona pueda escanearlo, subí este archivo .html a algún lugar accesible por internet (por ejemplo GitHub Pages) y generá el QR desde ahí.'
+    : 'Quien escanee este código abre el visor con tu diseño de ' + voxels.length + ' bloques ya cargado, listo para armar — sin necesitar importar nada.';
+  renderQr(url, note);
+});
+document.getElementById('closeQrBtn').addEventListener('click', closeQrModal);
+document.getElementById('qrOverlay').addEventListener('click', e=>{ if (e.target.id==='qrOverlay') closeQrModal(); });
+
+/* ---------------------------- Modo visor: cargar diseño desde el enlace ---------------------------- */
+async function tryLoadModelFromUrl(){
+  const params = new URLSearchParams(window.location.search);
+  const m = params.get('m');
+  const src = params.get('src');
+
+  if (m){
+    try{
+      const obj = decodeModelFromEmbedded(m);
+      const list = parseJsonModel(obj);
+      voxelSize = 1;
+      setVoxels(list);
+      document.getElementById('modelNameText').textContent = 'Diseño compartido';
+      setStatus('Diseño cargado desde el enlace: ' + list.length + ' bloques.', 'ok');
+      enterViewerOnlyMode();
+      return true;
+    } catch(err){
+      console.error(err);
+      setStatus('El enlace traía un diseño inválido; se cargó el modelo de ejemplo.', 'err');
+      return false;
+    }
+  }
+
+  if (src){
+    setLoading(true, 'Descargando diseño…');
+    try{
+      const res = await fetch(src);
+      if (!res.ok) throw new Error('No se pudo descargar el archivo (' + res.status + ')');
+      const obj = await res.json();
+      const list = parseJsonModel(obj);
+      voxelSize = 1;
+      setVoxels(list);
+      document.getElementById('modelNameText').textContent = 'Diseño compartido';
+      setStatus('Diseño descargado y cargado: ' + list.length + ' bloques.', 'ok');
+      enterViewerOnlyMode();
+      return true;
+    } catch(err){
+      console.error(err);
+      setStatus('No se pudo cargar el diseño desde el enlace (' + (err.message||'error de red') + '); se cargó el modelo de ejemplo.', 'err');
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return false;
+}
+
+function enterViewerOnlyMode(){
+  // Modo "solo ver y armar": sin opción de importar otro archivo, para que quien
+  // recibe el enlace del QR solo pueda seguir el diseño que le compartieron.
+  const ids = ['dropzone', 'fileInput', 'demoBtn'];
+  ids.forEach(id=>{ const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+  const importSection = document.getElementById('dropzone')?.closest('.section');
+  if (importSection) importSection.style.display = 'none';
+  const demoSection = document.getElementById('demoBtn')?.closest('.section');
+  if (demoSection) demoSection.style.display = 'none';
+}
+
+document.getElementById('resetViewBtn').addEventListener('click', ()=> controls.focus(centeredBounds()));
+document.getElementById('rotateBtn').addEventListener('click', e=>{
+  controls.autoRotate = !controls.autoRotate;
+  e.currentTarget.classList.toggle('active', controls.autoRotate);
+});
+document.getElementById('belowLayersBtn').addEventListener('click', e=>{
+  showBelowLayers = !showBelowLayers;
+  e.currentTarget.classList.toggle('active', showBelowLayers);
+  rebuildMesh3D();
+});
+document.getElementById('fullViewBtn').addEventListener('click', e=>{
+  showFullDesign = !showFullDesign;
+  e.currentTarget.classList.toggle('active', showFullDesign);
+  rebuildMesh3D();
+});
+document.getElementById('bgToggleBtn').addEventListener('click', ()=>{
+  bgIndex = (bgIndex+1) % bgPresets.length;
+  applyBackground(bgIndex);
+});
+document.getElementById('meshTexBtn').addEventListener('click', e=>{
+  showMeshTexture = !showMeshTexture;
+  e.currentTarget.classList.toggle('active', showMeshTexture);
+  rebuildMesh3D();
+});
+
+/* ---------------------------- Switch 2D / 3D ---------------------------- */
+const mainSplit = document.getElementById('mainSplit');
+const view2dBtn = document.getElementById('view2dBtn');
+const view3dBtn = document.getElementById('view3dBtn');
+function setView(mode){
+  mainSplit.classList.toggle('show-2d', mode==='2d');
+  mainSplit.classList.toggle('show-3d', mode==='3d');
+  view2dBtn.classList.toggle('active', mode==='2d');
+  view3dBtn.classList.toggle('active', mode==='3d');
+  setTimeout(onResize, 20);
+}
+view2dBtn.addEventListener('click', ()=> setView('2d'));
+view3dBtn.addEventListener('click', ()=> setView('3d'));
+
+/* ---------------------------- Sidebar drawer ---------------------------- */
+const sidebar = document.getElementById('sidebar');
+const sidebarOverlay = document.getElementById('sidebarOverlay');
+function openSidebar(){ sidebar.classList.add('open'); sidebarOverlay.classList.add('show'); }
+function closeSidebar(){ sidebar.classList.remove('open'); sidebarOverlay.classList.remove('show'); }
+document.getElementById('openSidebarBtn').addEventListener('click', openSidebar);
+document.getElementById('closeSidebarBtn').addEventListener('click', closeSidebar);
+sidebarOverlay.addEventListener('click', closeSidebar);
+
+/* ---------------------------- Resize & loop ---------------------------- */
+function onResize(){
+  const w = host.clientWidth, h = host.clientHeight;
+  camera.aspect = w/Math.max(1,h); camera.updateProjectionMatrix();
+  renderer.setSize(w,h);
+  resizeDiagCanvas();
+  drawLayerDiagram();
+}
+window.addEventListener('resize', onResize);
+
+let lastT = performance.now();
+function loop(t){
+  const dt = Math.min(0.05,(t-lastT)/1000); lastT = t;
+  controls.update(dt);
+  renderer.render(scene,camera);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+/* ---------------------------- Inicio ---------------------------- */
+voxelSize = 1;
+(async () => {
+  const loaded = await tryLoadModelFromUrl();
+  if (!loaded) setVoxels(buildDemoTree());
+})();
+setTimeout(onResize, 30);
+</script>
+</body>
+</html>
