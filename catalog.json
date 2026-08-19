@@ -11,12 +11,12 @@
     },
     {
       "slug": "squirtle",
-      "name": "Squirtle",
-      "price": 0,
-      "category": "",
-      "description": "",
-      "thumb": "",
-      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/squirtle%20(2).json"
+      "name": "squirtle",
+      "description": "pokemon",
+      "category": "pokemon",
+      "price": 5,
+      "thumb": "thumbs/squirtle.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/squirtle.json"
     },
     {
       "slug": "kuma-pequeno",
