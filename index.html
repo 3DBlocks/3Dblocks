@@ -372,6 +372,7 @@
         <button class="btn icon" id="fullViewBtn" title="Ver el diseño completo, con todos los colores">👁 Completo</button>
         <button class="btn icon" id="bgToggleBtn" title="Cambiar fondo del visor">◐ Fondo</button>
         <button class="btn icon active" id="meshTexBtn" title="Textura de malla sobre cada bloque">▦ Malla</button>
+        <button class="btn icon" id="screenshotBtn" title="Guardar imagen del diseño (para usar como portada)">📷 Foto</button>
       </div>
       <div id="ctxHint">arrastrar: orbitar<br/>rueda: zoom</div>
     </section>
@@ -525,7 +526,7 @@ const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0x080b13, 0.006);
 
 const camera = new THREE.PerspectiveCamera(42, Math.max(1,host.clientWidth) / Math.max(1,host.clientHeight), 0.1, 2000);
-const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false });
+const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false, preserveDrawingBuffer:true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(host.clientWidth, host.clientHeight);
 renderer.shadowMap.enabled = false;
@@ -1830,6 +1831,18 @@ document.getElementById('meshTexBtn').addEventListener('click', e=>{
   showMeshTexture = !showMeshTexture;
   e.currentTarget.classList.toggle('active', showMeshTexture);
   rebuildMesh3D();
+});
+document.getElementById('screenshotBtn').addEventListener('click', ()=>{
+  // Renderiza un cuadro fresco justo antes de capturar, para asegurarnos de que el
+  // buffer tenga la imagen actual (por si el navegador lo limpió entre cuadros).
+  renderer.render(scene, camera);
+  const url = renderer.domElement.toDataURL('image/png');
+  const a = document.createElement('a');
+  const baseName = (document.getElementById('modelNameText').textContent || 'diseno')
+    .replace(/\.(dae|vox|json)\b.*/i, '').trim().replace(/[^\w\-]+/g, '_') || 'diseno';
+  a.href = url; a.download = baseName + '.png';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setStatus('Imagen guardada — subila junto con tu .json para usarla como portada en el catálogo.', 'ok');
 });
 
 /* ---------------------------- Switch 2D / 3D ---------------------------- */
