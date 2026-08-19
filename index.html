@@ -390,7 +390,7 @@
   <aside id="sidebar">
     <div class="sb-head"><h2>Importar y ajustes</h2><button class="btn icon ghost" id="closeSidebarBtn">✕</button></div>
 
-    <div class="section">
+    <div class="section admin-only">
       <p class="section-title">Importar modelo</p>
       <div id="dropzone">
         <div class="dz-icon">▦</div>
@@ -423,7 +423,7 @@
       <input type="range" id="speedSlider" min="0.3" max="2.5" step="0.1" value="0.9" />
     </div>
 
-    <div class="section">
+    <div class="section admin-only">
       <p class="section-title">Publicar en el catálogo</p>
       <p style="font-size:10.5px; color:var(--text-faint); margin:0 0 9px; line-height:1.5;">Completá esto y tocá "Publicar" — sube el diseño, la foto y lo agrega a tu catálogo automáticamente, sin salir de esta página.</p>
       <p class="label-sm" style="margin-bottom:5px;">Nombre</p>
@@ -439,11 +439,12 @@
         <span class="label-sm">USD</span>
       </div>
       <button class="btn wide primary" id="publishBtn" style="width:100%; margin-top:12px;">🚀 Publicar en el catálogo</button>
+      <button class="btn wide" id="deleteBtn" style="width:100%; margin-top:8px; background:rgba(242,102,92,.12); border-color:rgba(242,102,92,.35); color:#f2a49f;">🗑️ Borrar "Nombre" del catálogo</button>
       <p id="publishStatus" style="font-size:11px; margin:9px 0 0; min-height:14px; line-height:1.5;"></p>
       <p style="font-size:10px; color:var(--text-faint); margin:10px 0 0; line-height:1.5;">La primera vez te va a pedir un token de GitHub — <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" style="color:var(--accent);">crealo acá</a> dándole acceso solo a tu repositorio con permiso "Contents: Read and write". Se guarda solo en tu navegador, nunca se comparte.</p>
     </div>
 
-    <div class="section">
+    <div class="section admin-only">
       <p class="section-title">Compartir manualmente</p>
       <p style="font-size:10.5px; color:var(--text-faint); margin:10px 0 9px; line-height:1.5;">Descarga tu diseño ya procesado como .json — mucho más liviano que el .dae original. Quien lo reciba solo necesita este visor (3DBlock) y tu .json, sin Studio 2.0 ni el archivo original.</p>
       <button class="btn wide" id="exportBtn" style="width:100%; margin-bottom:8px;">⇩ Descargar diseño (.json)</button>
@@ -451,7 +452,7 @@
       <button class="btn wide" id="qrBtn" style="width:100%;">▦ Generar código QR</button>
     </div>
 
-    <div class="section" style="border-bottom:none;">
+    <div class="section admin-only" style="border-bottom:none;">
       <button class="btn" id="demoBtn" style="width:100%;">↺ Cargar modelo de ejemplo</button>
     </div>
 
@@ -503,16 +504,32 @@ document.getElementById('logoutBtn').addEventListener('click', async ()=>{
   window.location.reload();
 });
 
+/* ---------------------------- Modo administrador ---------------------------- */
+const ADMIN_EMAILS = ['rcuyap@gmail.com'];
+let isAdmin = false;
+
+function applyAdminVisibility(){
+  document.querySelectorAll('.admin-only').forEach(el=>{
+    el.style.display = isAdmin ? '' : 'none';
+  });
+}
+
 /* Devuelve una promesa que resuelve true si hay sesión iniciada; si no, muestra
    el login y la promesa nunca resuelve (la página se recarga sola tras iniciar sesión). */
 function waitForAuth(){
   return new Promise((resolve) => {
+    function onSession(session){
+      isAdmin = !!(session && session.user && session.user.email && ADMIN_EMAILS.includes(session.user.email.toLowerCase()));
+      applyAdminVisibility();
+      hideLogin();
+      resolve(true);
+    }
     sb.auth.getSession().then(({ data }) => {
-      if (data.session){ hideLogin(); resolve(true); }
+      if (data.session) onSession(data.session);
       else { showLogin(); }
     });
     sb.auth.onAuthStateChange((event, session) => {
-      if (session){ hideLogin(); resolve(true); }
+      if (session) onSession(session);
     });
   });
 }
@@ -1689,6 +1706,51 @@ document.getElementById('publishBtn').addEventListener('click', async ()=>{
   }
 });
 
+async function githubDeleteFile(path, message){
+  const existing = await githubGetFile(path).catch(()=>null);
+  if (!existing) return; // ya no existe, nada que hacer
+  const token = getGithubToken();
+  const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${path}`;
+  const res = await fetch(url, {
+    method: 'DELETE',
+    headers: { Authorization: 'token '+token, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, sha: existing.sha, branch: GITHUB_BRANCH })
+  });
+  if (!res.ok){
+    const err = await res.json().catch(()=>({}));
+    throw new Error('GitHub (' + res.status + '): ' + (err.message || 'no se pudo borrar ' + path));
+  }
+}
+
+document.getElementById('deleteBtn').addEventListener('click', async ()=>{
+  const statusEl = document.getElementById('publishStatus');
+  const name = document.getElementById('nameInput').value.trim();
+  if (!name){ statusEl.style.color = '#f2a49f'; statusEl.textContent = 'Poné el nombre exacto del diseño que querés borrar.'; return; }
+  if (!confirm('¿Borrar "' + name + '" del catálogo? Esto también borra su archivo y su foto. No se puede deshacer.')) return;
+  if (!getGithubToken()){ statusEl.style.color = '#f2a49f'; statusEl.textContent = 'Hace falta el token de GitHub.'; return; }
+  const slug = slugify(name);
+  try{
+    statusEl.style.color = 'var(--text-faint)';
+    statusEl.textContent = 'Borrando del catálogo…';
+    const file = await githubGetFile('catalog.json');
+    if (file){
+      const data = JSON.parse(base64ToUtf8(file.content));
+      data.designs = (data.designs || []).filter(d => d.slug !== slug);
+      await githubPutFile('catalog.json', utf8ToBase64(JSON.stringify(data, null, 2)), 'Borrar del catálogo: ' + name);
+    }
+    statusEl.textContent = 'Borrando archivos…';
+    await githubDeleteFile('designs/' + slug + '.json', 'Borrar diseño: ' + name);
+    await githubDeleteFile('thumbs/' + slug + '.png', 'Borrar portada: ' + name);
+    statusEl.style.color = '#8be0d4';
+    statusEl.textContent = '"' + name + '" fue borrado del catálogo.';
+  } catch(err){
+    console.error(err);
+    statusEl.style.color = '#f2a49f';
+    statusEl.textContent = 'Error: ' + err.message;
+  }
+});
+
+
 document.getElementById('exportBtn').addEventListener('click', ()=>{
   if (!voxels.length){ setStatus('No hay ningún modelo cargado para exportar.', 'err'); return; }
   const price = Math.max(0, parseFloat(document.getElementById('priceInput').value) || 0);
@@ -1928,6 +1990,8 @@ async function tryLoadModelFromUrl(){
 function enterViewerOnlyMode(){
   // Modo "solo ver y armar": sin opción de importar otro archivo, para que quien
   // recibe el enlace del QR solo pueda seguir el diseño que le compartieron.
+  // A la cuenta administradora (ADMIN_EMAILS) esto nunca se le oculta.
+  if (isAdmin) return;
   const ids = ['dropzone', 'fileInput', 'demoBtn'];
   ids.forEach(id=>{ const el = document.getElementById(id); if (el) el.style.display = 'none'; });
   const importSection = document.getElementById('dropzone')?.closest('.section');
