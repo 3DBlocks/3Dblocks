@@ -35,6 +35,15 @@
       "price": 3,
       "thumb": "thumbs/kuna-pequeno.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/kuna-pequeno.json"
+    },
+    {
+      "slug": "yvisour",
+      "name": "yvisour",
+      "description": "pokemon",
+      "category": "pokemon",
+      "price": 5,
+      "thumb": "thumbs/yvisour.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/yvisour.json"
     }
   ]
 }
