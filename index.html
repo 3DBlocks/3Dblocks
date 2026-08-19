@@ -1591,33 +1591,51 @@ function showPaywall(designId, price){
     const container = document.getElementById('paypal-button-container');
     container.innerHTML = '';
     const statusEl = document.getElementById('payStatus');
-    statusEl.textContent = '';
-    if (!window.paypal){
-      statusEl.textContent = 'No se pudo cargar PayPal. Revisá tu conexión y recargá la página.';
-      return;
-    }
-    paypal.Buttons({
-      createOrder: (data, actions) => actions.order.create({
-        purchase_units: [{ amount: { value: price.toFixed(2) } }]
-      }),
-      onApprove: async (data, actions) => {
-        statusEl.textContent = 'Procesando pago…';
-        try{
-          const details = await actions.order.capture();
-          const { data: userData } = await sb.auth.getUser();
-          await sb.from('purchases').insert({
-            user_id: userData.user.id, design_id: designId, amount: price, paypal_order_id: details.id
-          });
-          document.getElementById('payOverlay').classList.add('hide');
-          resolve();
-        } catch(err){
-          statusEl.textContent = 'Error al guardar la compra: ' + err.message;
+    statusEl.textContent = window.paypal ? '' : 'Cargando PayPal…';
+
+    function renderButtons(){
+      paypal.Buttons({
+        createOrder: (data, actions) => actions.order.create({
+          purchase_units: [{ amount: { value: price.toFixed(2) } }]
+        }),
+        onApprove: async (data, actions) => {
+          statusEl.textContent = 'Procesando pago…';
+          try{
+            const details = await actions.order.capture();
+            const { data: userData } = await sb.auth.getUser();
+            await sb.from('purchases').insert({
+              user_id: userData.user.id, design_id: designId, amount: price, paypal_order_id: details.id
+            });
+            document.getElementById('payOverlay').classList.add('hide');
+            resolve();
+          } catch(err){
+            statusEl.textContent = 'Error al guardar la compra: ' + err.message;
+          }
+        },
+        onError: (err) => {
+          statusEl.textContent = 'Hubo un problema con el pago. Probá de nuevo.';
         }
-      },
-      onError: (err) => {
-        statusEl.textContent = 'Hubo un problema con el pago. Probá de nuevo.';
-      }
-    }).render('#paypal-button-container');
+      }).render('#paypal-button-container');
+    }
+
+    if (window.paypal){
+      renderButtons();
+    } else {
+      // La conexión puede tardar en cargar el SDK de PayPal (común en celulares);
+      // reintenta durante ~10 segundos antes de avisar que falló de verdad.
+      let attempts = 0;
+      const poll = setInterval(()=>{
+        attempts++;
+        if (window.paypal){
+          clearInterval(poll);
+          statusEl.textContent = '';
+          renderButtons();
+        } else if (attempts >= 20){
+          clearInterval(poll);
+          statusEl.textContent = 'No se pudo cargar PayPal. Revisá tu conexión y recargá la página.';
+        }
+      }, 500);
+    }
   });
 }
 
