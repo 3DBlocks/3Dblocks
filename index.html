@@ -424,13 +424,27 @@
     </div>
 
     <div class="section">
-      <p class="section-title">Compartir</p>
-      <p style="font-size:10.5px; color:var(--text-faint); margin:0 0 4px; line-height:1.5;">Ponele un precio si querés cobrar por este diseño (dejalo en 0 para que sea gratis).</p>
+      <p class="section-title">Publicar en el catálogo</p>
+      <p style="font-size:10.5px; color:var(--text-faint); margin:0 0 9px; line-height:1.5;">Completá esto y tocá "Publicar" — sube el diseño, la foto y lo agrega a tu catálogo automáticamente, sin salir de esta página.</p>
+      <p class="label-sm" style="margin-bottom:5px;">Nombre</p>
+      <input type="text" id="nameInput" placeholder="Greninja" style="width:100%; padding:8px 10px; border-radius:7px; border:1px solid var(--border); background:var(--panel-2); color:var(--text); font-size:12.5px; margin-bottom:10px;" />
+      <p class="label-sm" style="margin-bottom:5px;">Descripción (opcional)</p>
+      <textarea id="descInput" rows="2" placeholder="Un ratón ninja de agua..." style="width:100%; padding:8px 10px; border-radius:7px; border:1px solid var(--border); background:var(--panel-2); color:var(--text); font-size:12.5px; font-family:var(--sans); resize:vertical; margin-bottom:10px;"></textarea>
+      <p class="label-sm" style="margin-bottom:5px;">Categoría (ej: pokemon)</p>
+      <input type="text" id="categoryInput" placeholder="pokemon" style="width:100%; padding:8px 10px; border-radius:7px; border:1px solid var(--border); background:var(--panel-2); color:var(--text); font-size:12.5px; margin-bottom:10px;" />
+      <p class="label-sm" style="margin-bottom:5px;">Precio</p>
       <div id="priceRow">
         <span class="label-sm">$</span>
         <input type="number" id="priceInput" value="0" min="0" step="0.5" />
         <span class="label-sm">USD</span>
       </div>
+      <button class="btn wide primary" id="publishBtn" style="width:100%; margin-top:12px;">🚀 Publicar en el catálogo</button>
+      <p id="publishStatus" style="font-size:11px; margin:9px 0 0; min-height:14px; line-height:1.5;"></p>
+      <p style="font-size:10px; color:var(--text-faint); margin:10px 0 0; line-height:1.5;">La primera vez te va a pedir un token de GitHub — <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" style="color:var(--accent);">crealo acá</a> dándole acceso solo a tu repositorio con permiso "Contents: Read and write". Se guarda solo en tu navegador, nunca se comparte.</p>
+    </div>
+
+    <div class="section">
+      <p class="section-title">Compartir manualmente</p>
       <p style="font-size:10.5px; color:var(--text-faint); margin:10px 0 9px; line-height:1.5;">Descarga tu diseño ya procesado como .json — mucho más liviano que el .dae original. Quien lo reciba solo necesita este visor (3DBlock) y tu .json, sin Studio 2.0 ni el archivo original.</p>
       <button class="btn wide" id="exportBtn" style="width:100%; margin-bottom:8px;">⇩ Descargar diseño (.json)</button>
       <p style="font-size:10.5px; color:var(--text-faint); margin:2px 0 9px; line-height:1.5;">O genera un código QR que abre este visor con el diseño ya cargado, listo para armar — sin botón de importar. Los diseños chicos van comprimidos directo en el código; los grandes necesitan que subas tu .json a algún sitio y pegues ese link (te lo pide automáticamente si hace falta).</p>
@@ -1565,6 +1579,114 @@ document.getElementById('demoBtn').addEventListener('click', ()=>{
   document.getElementById('modelNameText').textContent = 'Árbol de ejemplo';
   setStatus('Modelo de ejemplo cargado.', 'ok');
   closeSidebar();
+});
+
+/* ---------------------------- Publicar directo en el catálogo (API de GitHub) ---------------------------- */
+const GITHUB_OWNER = '3DBlocks';
+const GITHUB_REPO = '3Dblocks';
+const GITHUB_BRANCH = 'main';
+
+function getGithubToken(force){
+  let t = sessionStorage.getItem('gh_pat');
+  if (!t || force){
+    t = prompt('Pegá tu token de GitHub (Personal Access Token) con permiso de escritura sobre el repositorio 3Dblocks:');
+    if (t) sessionStorage.setItem('gh_pat', t.trim());
+    else return null;
+  }
+  return sessionStorage.getItem('gh_pat');
+}
+
+function slugify(name){
+  return (name||'').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'') || ('diseno-'+Date.now());
+}
+
+function utf8ToBase64(str){ return btoa(unescape(encodeURIComponent(str))); }
+function base64ToUtf8(b64){ return decodeURIComponent(escape(atob(b64.replace(/\n/g,'')))); }
+
+async function githubGetFile(path){
+  const token = getGithubToken();
+  if (!token) throw new Error('Hace falta el token de GitHub.');
+  const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${path}?ref=${GITHUB_BRANCH}`;
+  const res = await fetch(url, { headers: { Authorization: 'token '+token, Accept: 'application/vnd.github+json' } });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error('GitHub (' + res.status + '): no se pudo leer ' + path);
+  return res.json();
+}
+
+async function githubPutFile(path, base64Content, message){
+  const token = getGithubToken();
+  if (!token) throw new Error('Hace falta el token de GitHub.');
+  const existing = await githubGetFile(path).catch(()=>null);
+  const body = { message, content: base64Content, branch: GITHUB_BRANCH };
+  if (existing && existing.sha) body.sha = existing.sha;
+  const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${path}`;
+  const res = await fetch(url, {
+    method: 'PUT',
+    headers: { Authorization: 'token '+token, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok){
+    const err = await res.json().catch(()=>({}));
+    if (res.status === 401){ sessionStorage.removeItem('gh_pat'); throw new Error('Token inválido o vencido. Probá de nuevo — te va a pedir uno nuevo.'); }
+    throw new Error('GitHub (' + res.status + '): ' + (err.message || 'no se pudo guardar ' + path));
+  }
+  return res.json();
+}
+
+async function updateCatalogEntry(entry){
+  let data = { designs: [] };
+  const file = await githubGetFile('catalog.json').catch(()=>null);
+  if (file && file.content){
+    try{ data = JSON.parse(base64ToUtf8(file.content)); } catch(e){ data = { designs: [] }; }
+  }
+  if (!Array.isArray(data.designs)) data.designs = [];
+  const idx = data.designs.findIndex(d => d.slug === entry.slug);
+  if (idx >= 0) data.designs[idx] = entry; else data.designs.push(entry);
+  await githubPutFile('catalog.json', utf8ToBase64(JSON.stringify(data, null, 2)), 'Actualizar catálogo: ' + entry.name);
+}
+
+document.getElementById('publishBtn').addEventListener('click', async ()=>{
+  const statusEl = document.getElementById('publishStatus');
+  statusEl.style.color = 'var(--text-faint)';
+  if (!voxels.length){ statusEl.style.color = '#f2a49f'; statusEl.textContent = 'No hay ningún diseño cargado.'; return; }
+  const name = document.getElementById('nameInput').value.trim();
+  if (!name){ statusEl.style.color = '#f2a49f'; statusEl.textContent = 'Ponele un nombre al diseño primero.'; return; }
+  const description = document.getElementById('descInput').value.trim();
+  const category = document.getElementById('categoryInput').value.trim().toLowerCase();
+  const price = Math.max(0, parseFloat(document.getElementById('priceInput').value) || 0);
+  const slug = slugify(name);
+
+  if (!getGithubToken()){ statusEl.style.color = '#f2a49f'; statusEl.textContent = 'Hace falta el token de GitHub para publicar.'; return; }
+
+  try{
+    statusEl.textContent = 'Subiendo diseño…';
+    const payload = { voxels: voxels.map(v => [v.x, v.y, v.z, v.color]) };
+    if (price > 0) payload.price_usd = price;
+    await githubPutFile('designs/' + slug + '.json', utf8ToBase64(JSON.stringify(payload)), 'Agregar diseño: ' + name);
+
+    statusEl.textContent = 'Subiendo foto de portada…';
+    renderer.render(scene, camera);
+    const dataUrl = renderer.domElement.toDataURL('image/png');
+    const pngBase64 = dataUrl.split(',')[1];
+    await githubPutFile('thumbs/' + slug + '.png', pngBase64, 'Agregar portada: ' + name);
+
+    statusEl.textContent = 'Actualizando el catálogo…';
+    const rawBase = `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/refs/heads/${GITHUB_BRANCH}/`;
+    await updateCatalogEntry({
+      slug, name, description, category, price,
+      thumb: 'thumbs/' + slug + '.png',
+      src: rawBase + 'designs/' + slug + '.json'
+    });
+
+    statusEl.style.color = '#8be0d4';
+    statusEl.textContent = '¡Listo! Ya está en tu catálogo' + (category ? ' bajo "' + category + '"' : '') + '.';
+  } catch(err){
+    console.error(err);
+    statusEl.style.color = '#f2a49f';
+    statusEl.textContent = 'Error: ' + err.message;
+  }
 });
 
 document.getElementById('exportBtn').addEventListener('click', ()=>{

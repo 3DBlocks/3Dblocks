@@ -37,14 +37,23 @@
   .brand-blocks span{ background:var(--accent); display:block; }
   .brand-blocks span:nth-child(2){ background:var(--accent-2); }
   .brand-blocks span:nth-child(5){ background:var(--text-dim); }
-  .brand-blocks span:nth-child(8){ background:var(--accent-2-dim, #1c5049); }
+  .brand-blocks span:nth-child(8){ background:#1c5049; }
   .brand-title{ font-size:16px; font-weight:800; letter-spacing:.1em; margin:0; }
   #topBar p{ margin:0; font-size:11px; color:var(--text-faint); }
 
-  main{ max-width:1180px; margin:0 auto; padding:36px 22px 60px; }
-  #hero{ text-align:center; margin-bottom:34px; }
+  main{ max-width:1180px; margin:0 auto; padding:28px 22px 60px; }
+  #hero{ text-align:center; margin-bottom:22px; }
   #hero h1{ font-size:clamp(22px,4vw,32px); font-weight:800; margin:0 0 8px; letter-spacing:-.01em; }
   #hero p{ font-size:13.5px; color:var(--text-dim); max-width:480px; margin:0 auto; line-height:1.6; }
+
+  #catNav{ display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin-bottom:28px; }
+  #catNav a{
+    text-decoration:none; font-size:12.5px; font-weight:600; color:var(--text-dim);
+    background:var(--panel-2); border:1px solid var(--border-soft); border-radius:20px; padding:7px 15px;
+    transition:all .12s ease;
+  }
+  #catNav a:hover{ border-color:var(--accent); color:var(--accent); }
+  #catNav a.active{ background:var(--accent); color:#1a1305; border-color:var(--accent); }
 
   #grid{
     display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:18px;
@@ -65,10 +74,11 @@
   .card .price-tag.free{ color:var(--accent-2); }
   .card .info{ padding:12px 14px 14px; }
   .card .name{ font-size:13.5px; font-weight:700; margin:0 0 4px; }
+  .card .desc{ font-size:11px; color:var(--text-dim); line-height:1.4; margin:0 0 6px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .card .cta{ font-size:10.5px; color:var(--text-faint); letter-spacing:.02em; }
 
-  #emptyState{ text-align:center; padding:60px 20px; color:var(--text-faint); font-size:13px; display:none; }
-  #emptyState.show{ display:block; }
+  #emptyState, #loadingState{ text-align:center; padding:60px 20px; color:var(--text-faint); font-size:13px; display:none; }
+  #emptyState.show, #loadingState.show{ display:block; }
 
   footer{ text-align:center; padding:24px; font-size:10.5px; color:var(--text-faint); border-top:1px solid var(--border-soft); }
 </style>
@@ -85,50 +95,60 @@
 
 <main>
   <div id="hero">
-    <h1>Elegí un diseño</h1>
+    <h1 id="heroTitle">Elegí un diseño</h1>
     <p>Tocá una imagen para verlo. Los diseños con precio piden pago único antes de mostrar el visor 3D completo.</p>
   </div>
 
+  <div id="catNav"></div>
+  <div id="loadingState">Cargando catálogo…</div>
   <div id="grid"></div>
-  <div id="emptyState">Todavía no hay diseños cargados en el catálogo.</div>
+  <div id="emptyState">Todavía no hay diseños en esta categoría.</div>
 </main>
 
 <footer>3DBLOCK — hecho con bloques, sin esferas ni "beads".</footer>
 
 <script>
-/* =========================================================================
-   CATÁLOGO — agregá acá un elemento por cada diseño que quieras mostrar.
-   - name: el título que se ve en la tarjeta.
-   - price: en USD. Poné 0 (o quitá la línea) para que sea gratis.
-   - thumb: la imagen de portada (subila al repositorio, ej. carpeta "thumbs/").
-             Dejá "" si todavía no tenés una imagen — se muestra un cartel gris.
-   - src: el link "raw" al .json de ese diseño (el mismo que usás para compartir).
-   ========================================================================= */
-const CATALOG = [
-  {
-    name: 'Greninja',
-    price: 4,
-    thumb: '',
-    src: 'https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/greeninja.json'
-  },
-  {
-    name: 'Squirtle',
-    price: 0,
-    thumb: '',
-    src: 'https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/squirtle%20(2).json'
-  },
-];
-
 const VIEWER_PAGE = 'index.html';
+const CATALOG_URL = 'catalog.json';
 
-function render(){
+// Diseños de respaldo, por si "catalog.json" todavía no existe en el repositorio
+// (el botón "Publicar" del visor lo crea solo la primera vez que se usa).
+const FALLBACK = { designs: [
+  { slug:'greeninja', name:'Greninja', price:4, category:'', description:'', thumb:'', src:'https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/greeninja.json' },
+  { slug:'squirtle', name:'Squirtle', price:0, category:'', description:'', thumb:'', src:'https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/squirtle%20(2).json' },
+] };
+
+function currentCategory(){
+  return new URLSearchParams(window.location.search).get('cat') || '';
+}
+
+function renderCatNav(designs, active){
+  const nav = document.getElementById('catNav');
+  const cats = Array.from(new Set(designs.map(d => (d.category||'').trim()).filter(Boolean))).sort();
+  if (!cats.length){ nav.innerHTML=''; return; }
+  nav.innerHTML = '';
+  const allLink = document.createElement('a');
+  allLink.href = 'catalogo.html';
+  allLink.textContent = 'Todos';
+  if (!active) allLink.className = 'active';
+  nav.appendChild(allLink);
+  cats.forEach(cat=>{
+    const a = document.createElement('a');
+    a.href = 'catalogo.html?cat=' + encodeURIComponent(cat);
+    a.textContent = cat;
+    if (active === cat) a.className = 'active';
+    nav.appendChild(a);
+  });
+}
+
+function renderGrid(designs){
   const grid = document.getElementById('grid');
   const empty = document.getElementById('emptyState');
   grid.innerHTML = '';
-  if (!CATALOG.length){ empty.classList.add('show'); return; }
+  if (!designs.length){ empty.classList.add('show'); return; }
   empty.classList.remove('show');
 
-  CATALOG.forEach(item=>{
+  designs.forEach(item=>{
     const card = document.createElement('div');
     card.className = 'card';
     const price = Number(item.price) || 0;
@@ -154,10 +174,16 @@ function render(){
     const name = document.createElement('div');
     name.className = 'name';
     name.textContent = item.name;
+    info.appendChild(name);
+    if (item.description){
+      const desc = document.createElement('div');
+      desc.className = 'desc';
+      desc.textContent = item.description;
+      info.appendChild(desc);
+    }
     const cta = document.createElement('div');
     cta.className = 'cta';
     cta.textContent = price>0 ? 'Tocá para comprar y ver →' : 'Tocá para ver →';
-    info.appendChild(name);
     info.appendChild(cta);
 
     card.appendChild(thumbWrap);
@@ -168,7 +194,28 @@ function render(){
     grid.appendChild(card);
   });
 }
-render();
+
+async function init(){
+  document.getElementById('loadingState').classList.add('show');
+  let data = FALLBACK;
+  try{
+    const res = await fetch(CATALOG_URL, { cache:'no-store' });
+    if (res.ok){
+      const j = await res.json();
+      if (j && Array.isArray(j.designs) && j.designs.length) data = j;
+    }
+  } catch(e){ /* usa el respaldo */ }
+  document.getElementById('loadingState').classList.remove('show');
+
+  const active = currentCategory();
+  const all = data.designs;
+  const filtered = active ? all.filter(d => (d.category||'').trim() === active) : all;
+
+  document.getElementById('heroTitle').textContent = active ? ('Categoría: ' + active) : 'Elegí un diseño';
+  renderCatNav(all, active);
+  renderGrid(filtered);
+}
+init();
 </script>
 </body>
 </html>
