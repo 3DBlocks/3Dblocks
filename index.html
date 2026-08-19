@@ -1625,8 +1625,10 @@ function base64ToUtf8(b64){ return decodeURIComponent(escape(atob(b64.replace(/\
 async function githubGetFile(path){
   const token = getGithubToken();
   if (!token) throw new Error('Hace falta el token de GitHub.');
-  const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${path}?ref=${GITHUB_BRANCH}`;
-  const res = await fetch(url, { headers: { Authorization: 'token '+token, Accept: 'application/vnd.github+json' } });
+  // cache:'no-store' + un parámetro único evita que el navegador devuelva una copia
+  // vieja del archivo (lo que causaba el error "does not match" al actualizar el catálogo).
+  const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${path}?ref=${GITHUB_BRANCH}&_=${Date.now()}`;
+  const res = await fetch(url, { cache: 'no-store', headers: { Authorization: 'token '+token, Accept: 'application/vnd.github+json' } });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error('GitHub (' + res.status + '): no se pudo leer ' + path);
   return res.json();
