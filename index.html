@@ -29,7 +29,7 @@
     margin:0; padding:0; height:100%; background:var(--bg); color:var(--text);
     font-family: var(--sans); overflow:hidden; -webkit-font-smoothing:antialiased;
   }
-  #app{ position:relative; height:100vh; width:100vw; display:flex; flex-direction:column; }
+  #app{ position:relative; height:100vh; height:100dvh; width:100vw; display:flex; flex-direction:column; overflow:hidden; }
 
   /* ---------- Top identity bar (slim) ---------- */
   #idBar{
@@ -217,10 +217,36 @@
   #loadingOverlay .lt{ font-size:13px; color:var(--accent); font-family:var(--mono); letter-spacing:.04em; }
 
   @media (max-width: 640px){
-    #legendRow{ max-height:60px; }
-    #layerBigNum{ font-size:28px; }
-    .stepBtn{ min-width:0; padding:0 12px; font-size:13px; }
+    #idBar{ padding:7px 10px; }
     #idBar .brand-title small{ display:none; }
+    #idBar .brand-title{ font-size:11.5px; }
+    #modelNameText{ display:none; }
+
+    #layerStrip{ padding:8px 10px 8px; }
+    #stepperRow{ gap:8px; }
+    .stepBtn{ min-width:0; height:36px; padding:0 10px; font-size:12px; }
+    #layerBigNum{ font-size:22px; }
+    #layerOfTxt{ font-size:9.5px; margin-top:0; }
+    #layerCenter{ min-width:0; }
+    #playBtn{ width:36px; height:36px; font-size:13px; }
+
+    #viewSwitchRow{ margin-top:7px !important; gap:7px !important; }
+    #viewSwitch button{ padding:5px 11px; font-size:11px; }
+    #orientRow .btn{ padding:5px 8px; font-size:10.5px; }
+
+    #strataTrack{ margin-top:7px; }
+    .strataSeg{ height:5px; }
+    #legendRow{ max-height:60px; }
+
+    #layerMeta{ margin-top:6px; gap:10px; font-size:9.5px; }
+
+    #diagramHead{ padding:8px 12px 0; }
+    #diagramTitle{ font-size:9.5px; }
+    #diagramSub{ font-size:11px; }
+  }
+  @media (max-width: 640px) and (max-height: 700px){
+    /* pantallas muy bajas: el plano 2D pasa a segundo plano para priorizar el 3D */
+    #layerMeta{ display:none; }
   }
 </style>
 </head>
@@ -336,12 +362,6 @@
     </div>
 
     <div class="section">
-      <p class="section-title">Visualización 3D</p>
-      <div class="toggle-row"><span class="label-sm">Cuadrícula base</span><div class="switch on" id="tgGrid"></div></div>
-      <div class="toggle-row"><span class="label-sm">Contornos de bloque</span><div class="switch on" id="tgEdges"></div></div>
-    </div>
-
-    <div class="section">
       <p class="section-title">Compartir</p>
       <p style="font-size:10.5px; color:var(--text-faint); margin:0 0 9px; line-height:1.5;">Descarga tu diseño ya procesado como .json — mucho más liviano que el .dae original. Quien lo reciba solo necesita este visor (3DBlock) y tu .json, sin Studio 2.0 ni el archivo original.</p>
       <button class="btn wide" id="exportBtn" style="width:100%; margin-bottom:8px;">⇩ Descargar diseño (.json)</button>
@@ -437,6 +457,7 @@ const ground = new THREE.Mesh(groundGeo, groundMat);
 ground.rotation.x = -Math.PI/2;
 ground.position.y = -0.001;
 ground.receiveShadow = false;
+ground.visible = false;
 scene.add(ground);
 
 let grid = null;
@@ -445,7 +466,7 @@ function rebuildGrid(colorMain, colorSec){
   grid = new THREE.GridHelper(40, 40, colorMain, colorSec);
   grid.material.transparent = true;
   grid.material.opacity = 0.55;
-  grid.visible = document.getElementById('tgGrid')?.classList.contains('on') ?? true;
+  grid.visible = false;
   scene.add(grid);
 }
 rebuildGrid(0x24314f, 0x141c30);
@@ -567,7 +588,7 @@ const controls = new SimpleOrbitControls(camera, renderer.domElement);
 let instMesh = null, edgeMesh = null;
 const dummy = new THREE.Object3D();
 const tmpColor = new THREE.Color();
-const wireOn = { v:true };
+const wireOn = { v:false };
 
 function clearModelMeshes(){
   if (instMesh){ scene.remove(instMesh); instMesh.geometry.dispose(); instMesh.material.dispose(); instMesh = null; }
@@ -1429,8 +1450,6 @@ function bindSwitch(id,onChange){
   const el = document.getElementById(id);
   el.addEventListener('click', ()=>{ el.classList.toggle('on'); onChange(el.classList.contains('on')); });
 }
-bindSwitch('tgGrid', on=>{ grid.visible=on; ground.visible=on; });
-bindSwitch('tgEdges', on=>{ wireOn.v=on; if (edgeMesh) edgeMesh.visible=on; });
 
 document.getElementById('demoBtn').addEventListener('click', ()=>{
   voxelSize=1;
