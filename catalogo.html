@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>3DBLOCK · Catálogo</title>
+<style>
+  :root{
+    --bg: #080b13;
+    --bg-2: #0d1220;
+    --panel: #0f1524;
+    --panel-2: #131b2e;
+    --border: #1d2740;
+    --border-soft: #161f34;
+    --text: #e8ecf6;
+    --text-dim: #8a93ac;
+    --text-faint: #545e78;
+    --accent: #f2b134;
+    --accent-2: #2dd4bf;
+    --mono: 'SFMono-Regular', 'JetBrains Mono', Consolas, monospace;
+    --sans: 'Inter', ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; background:var(--bg); color:var(--text); font-family:var(--sans); -webkit-font-smoothing:antialiased; }
+
+  #topBar{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:16px 22px; border-bottom:1px solid var(--border-soft);
+    background:linear-gradient(180deg, var(--panel), var(--bg-2)); position:sticky; top:0; z-index:5;
+  }
+  .brand{ display:flex; align-items:center; gap:10px; }
+  .brand-blocks{ display:grid; grid-template-columns:repeat(3,7px); grid-template-rows:repeat(3,7px); gap:2px; }
+  .brand-blocks span{ background:var(--accent); display:block; }
+  .brand-blocks span:nth-child(2){ background:var(--accent-2); }
+  .brand-blocks span:nth-child(5){ background:var(--text-dim); }
+  .brand-blocks span:nth-child(8){ background:var(--accent-2-dim, #1c5049); }
+  .brand-title{ font-size:16px; font-weight:800; letter-spacing:.1em; margin:0; }
+  #topBar p{ margin:0; font-size:11px; color:var(--text-faint); }
+
+  main{ max-width:1180px; margin:0 auto; padding:36px 22px 60px; }
+  #hero{ text-align:center; margin-bottom:34px; }
+  #hero h1{ font-size:clamp(22px,4vw,32px); font-weight:800; margin:0 0 8px; letter-spacing:-.01em; }
+  #hero p{ font-size:13.5px; color:var(--text-dim); max-width:480px; margin:0 auto; line-height:1.6; }
+
+  #grid{
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:18px;
+  }
+  .card{
+    background:var(--panel-2); border:1px solid var(--border-soft); border-radius:12px; overflow:hidden;
+    cursor:pointer; transition: transform .15s ease, border-color .15s ease; display:flex; flex-direction:column;
+  }
+  .card:hover{ transform:translateY(-3px); border-color:var(--accent); }
+  .card .thumb-wrap{ aspect-ratio:1/1; background:#0a0e1a; position:relative; overflow:hidden; }
+  .card img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .card .thumb-wrap.empty{ display:flex; align-items:center; justify-content:center; color:var(--text-faint); font-family:var(--mono); font-size:11px; }
+  .card .price-tag{
+    position:absolute; top:8px; right:8px; background:rgba(8,11,19,.85); backdrop-filter:blur(4px);
+    border:1px solid var(--border); border-radius:6px; padding:3px 8px; font-family:var(--mono); font-size:11.5px;
+    font-weight:700; color:var(--accent);
+  }
+  .card .price-tag.free{ color:var(--accent-2); }
+  .card .info{ padding:12px 14px 14px; }
+  .card .name{ font-size:13.5px; font-weight:700; margin:0 0 4px; }
+  .card .cta{ font-size:10.5px; color:var(--text-faint); letter-spacing:.02em; }
+
+  #emptyState{ text-align:center; padding:60px 20px; color:var(--text-faint); font-size:13px; display:none; }
+  #emptyState.show{ display:block; }
+
+  footer{ text-align:center; padding:24px; font-size:10.5px; color:var(--text-faint); border-top:1px solid var(--border-soft); }
+</style>
+</head>
+<body>
+
+<div id="topBar">
+  <div class="brand">
+    <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+    <h1 class="brand-title">3DBLOCK</h1>
+  </div>
+  <p>Diseños en bloques, listos para armar</p>
+</div>
+
+<main>
+  <div id="hero">
+    <h1>Elegí un diseño</h1>
+    <p>Tocá una imagen para verlo. Los diseños con precio piden pago único antes de mostrar el visor 3D completo.</p>
+  </div>
+
+  <div id="grid"></div>
+  <div id="emptyState">Todavía no hay diseños cargados en el catálogo.</div>
+</main>
+
+<footer>3DBLOCK — hecho con bloques, sin esferas ni "beads".</footer>
+
+<script>
+/* =========================================================================
+   CATÁLOGO — agregá acá un elemento por cada diseño que quieras mostrar.
+   - name: el título que se ve en la tarjeta.
+   - price: en USD. Poné 0 (o quitá la línea) para que sea gratis.
+   - thumb: la imagen de portada (subila al repositorio, ej. carpeta "thumbs/").
+             Dejá "" si todavía no tenés una imagen — se muestra un cartel gris.
+   - src: el link "raw" al .json de ese diseño (el mismo que usás para compartir).
+   ========================================================================= */
+const CATALOG = [
+  {
+    name: 'Greninja',
+    price: 4,
+    thumb: '',
+    src: 'https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/greeninja.json'
+  },
+  {
+    name: 'Squirtle',
+    price: 0,
+    thumb: '',
+    src: 'https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/squirtle%20(2).json'
+  },
+];
+
+const VIEWER_PAGE = 'index.html';
+
+function render(){
+  const grid = document.getElementById('grid');
+  const empty = document.getElementById('emptyState');
+  grid.innerHTML = '';
+  if (!CATALOG.length){ empty.classList.add('show'); return; }
+  empty.classList.remove('show');
+
+  CATALOG.forEach(item=>{
+    const card = document.createElement('div');
+    card.className = 'card';
+    const price = Number(item.price) || 0;
+    const priceLabel = price > 0 ? '$' + price.toFixed(2) + ' USD' : 'Gratis';
+
+    const thumbWrap = document.createElement('div');
+    thumbWrap.className = 'thumb-wrap' + (item.thumb ? '' : ' empty');
+    if (item.thumb){
+      const img = document.createElement('img');
+      img.src = item.thumb;
+      img.alt = item.name;
+      thumbWrap.appendChild(img);
+    } else {
+      thumbWrap.textContent = 'Sin imagen';
+    }
+    const tag = document.createElement('div');
+    tag.className = 'price-tag' + (price>0 ? '' : ' free');
+    tag.textContent = priceLabel;
+    thumbWrap.appendChild(tag);
+
+    const info = document.createElement('div');
+    info.className = 'info';
+    const name = document.createElement('div');
+    name.className = 'name';
+    name.textContent = item.name;
+    const cta = document.createElement('div');
+    cta.className = 'cta';
+    cta.textContent = price>0 ? 'Tocá para comprar y ver →' : 'Tocá para ver →';
+    info.appendChild(name);
+    info.appendChild(cta);
+
+    card.appendChild(thumbWrap);
+    card.appendChild(info);
+    card.addEventListener('click', ()=>{
+      window.location.href = VIEWER_PAGE + '?src=' + encodeURIComponent(item.src);
+    });
+    grid.appendChild(card);
+  });
+}
+render();
+</script>
+</body>
+</html>
