@@ -902,9 +902,9 @@ function rebuildMesh3D(){
   // (que son casi planos entre sí) — eso era lo que se veía como "mancha" sucia.
   const edgeGeo = new THREE.EdgesGeometry(geo, 25);
   const edgeMat = new THREE.LineBasicMaterial({
-    color: 0x000000,
+    color: 0x3a3f4d, // gris suave tipo lápiz, en vez de negro duro
     transparent: true,
-    opacity: showMeshTexture ? 0.8 : 0.5
+    opacity: showMeshTexture ? 0.7 : 0.4
   });
   edgeMesh = new THREE.InstancedMesh(edgeGeo, edgeMat, visible.length);
   edgeMesh.visible = wireOn.v;
@@ -1230,6 +1230,7 @@ function refreshLayerUI(){
 function goToLayer(l){
   currentLayer = Math.max(0, Math.min(maxLayer, l));
   stopPlay();
+  magicSelection = null; // la selección por color es propia de cada capa
   if (showFullDesign){ showFullDesign = false; const b=document.getElementById('fullViewBtn'); if (b) b.classList.remove('active'); }
   refreshLayerUI();
 }
@@ -2153,6 +2154,17 @@ document.querySelectorAll('.tool-btn').forEach(btn=>{
     activeTool = btn.dataset.tool;
   });
 });
+function applyColorToMagicSelection(color){
+  if (!magicSelection || !magicSelection.size) return false;
+  magicSelection.forEach(key=>{
+    const [x,z] = key.split(',').map(Number);
+    const v = voxels.find(v=>v.x===x && Math.round(v.y)===currentLayer && v.z===z);
+    if (v) v.color = color;
+  });
+  magicSelection = null;
+  drawLayerDiagram(); rebuildMesh3D(); refreshLayerUI();
+  return true;
+}
 document.getElementById('paletteRow').addEventListener('click', e=>{
   const sw = e.target.closest('.palette-swatch');
   if (!sw) return;
@@ -2160,11 +2172,13 @@ document.getElementById('paletteRow').addEventListener('click', e=>{
   sw.classList.add('active');
   paintColor = sw.dataset.color;
   document.getElementById('customColorInput').value = paintColor;
+  applyColorToMagicSelection(paintColor);
 });
 document.getElementById('paletteRow').addEventListener('input', e=>{
   if (e.target.id !== 'customColorInput') return;
   paintColor = e.target.value;
   document.querySelectorAll('.palette-swatch').forEach(s=>s.classList.remove('active'));
+  applyColorToMagicSelection(paintColor);
 });
 
 // Aplica la herramienta activa a una celda (gx,gz) de la capa actual.
@@ -2228,6 +2242,57 @@ function applyToolToRect(x0, x1, z0, z1){
   refreshLayerUI();
 }
 
+/* ---------------------------- Selección mágica por color (como Studio 2.0) ----------------------------
+   Tocás un bloque y se seleccionan todos los bloques PEGADOS del mismo color en esa
+   capa (relleno de zona / "magic wand"), se resaltan en celeste, y el próximo color
+   que elijas se aplica a toda la selección junta. */
+let magicSelection = null; // Set de "x,z" seleccionados, o null si no hay selección activa
+
+function floodSelectSameColor(gx, gz){
+  const start = voxels.find(v => v.x===gx && Math.round(v.y)===currentLayer && v.z===gz);
+  if (!start) return null;
+  const targetColor = start.color;
+  const byKey = new Map();
+  voxels.forEach(v=>{ if (Math.round(v.y)===currentLayer) byKey.set(v.x+','+v.z, v); });
+  const selected = new Set();
+  const stack = [gx+','+gz];
+  while (stack.length){
+    const key = stack.pop();
+    if (selected.has(key)) continue;
+    const v = byKey.get(key);
+    if (!v || v.color !== targetColor) continue;
+    selected.add(key);
+    const [x,z] = key.split(',').map(Number);
+    stack.push((x+1)+','+z, (x-1)+','+z, x+','+(z+1), x+','+(z-1));
+  }
+  return selected;
+}
+
+function drawMagicSelectionOverlay(){
+  if (!magicSelection || !magicSelection.size) return;
+  const wrap = document.getElementById('diagramCanvasWrap');
+  const W = wrap.clientWidth, H = wrap.clientHeight;
+  const pad = 28;
+  const cell = Math.max(4, Math.min((W-pad*2)/dims.x, (H-pad*2)/dims.z));
+  const gridW = cell*dims.x, gridH = cell*dims.z;
+  const ox = (W-gridW)/2, oy = (H-gridH)/2;
+  diagCtx.save();
+  diagCtx.fillStyle = 'rgba(45,212,191,0.38)';
+  diagCtx.strokeStyle = '#2dd4bf';
+  diagCtx.lineWidth = 2;
+  magicSelection.forEach(key=>{
+    const [x,z] = key.split(',').map(Number);
+    diagCtx.fillRect(ox+x*cell, oy+z*cell, cell, cell);
+    diagCtx.strokeRect(ox+x*cell+1, oy+z*cell+1, cell-2, cell-2);
+  });
+  diagCtx.restore();
+}
+
+function clearMagicSelection(){
+  magicSelection = null;
+  drawLayerDiagram();
+}
+
 function cellFromDiagramEvent(e){
   const wrap = document.getElementById('diagramCanvasWrap');
   const W = wrap.clientWidth, H = wrap.clientHeight;
@@ -2242,6 +2307,8 @@ function cellFromDiagramEvent(e){
 
 const diagCanvasEl = document.getElementById('diagramCanvas');
 let boxSelectStart = null, boxSelectCurrent = null;
+let pointerDownXY = null;
+const CLICK_MOVE_THRESHOLD = 6; // píxeles: por debajo de esto, es un "clic", no un arrastre
 
 function drawSelectionOverlay(){
   if (!boxSelectStart || !boxSelectCurrent) return;
@@ -2263,27 +2330,55 @@ function drawSelectionOverlay(){
   diagCtx.restore();
 }
 
-// Arrastrar con el mouse en el plano 2D SIEMPRE marca un rectángulo (como Studio
-// 2.0) — no hace falta activar nada aparte; un simple clic (sin arrastrar) sigue
-// funcionando como antes, porque un rectángulo de 1x1 celda es lo mismo que un clic.
+// Un CLIC simple (sin arrastrar) selecciona por color, como en el video de
+// Studio 2.0. Arrastrar de verdad sigue marcando un rectángulo, como antes.
 diagCanvasEl.addEventListener('pointerdown', e=>{
   if (!paintMode || !dims.x || !dims.z) return;
   diagCanvasEl.setPointerCapture(e.pointerId);
+  pointerDownXY = { x: e.clientX, y: e.clientY };
   boxSelectStart = boxSelectCurrent = cellFromDiagramEvent(e);
-  drawLayerDiagram(); drawSelectionOverlay();
 });
 diagCanvasEl.addEventListener('pointermove', e=>{
   if (!paintMode || !boxSelectStart) return;
+  const moved = Math.hypot(e.clientX-pointerDownXY.x, e.clientY-pointerDownXY.y);
+  if (moved < CLICK_MOVE_THRESHOLD) return; // todavía no se considera "arrastre"
   boxSelectCurrent = cellFromDiagramEvent(e);
-  drawLayerDiagram(); drawSelectionOverlay();
+  drawLayerDiagram(); drawMagicSelectionOverlay(); drawSelectionOverlay();
 });
-window.addEventListener('pointerup', ()=>{
-  if (boxSelectStart && boxSelectCurrent){
+window.addEventListener('pointerup', e=>{
+  if (!boxSelectStart){ return; }
+  const moved = pointerDownXY ? Math.hypot(e.clientX-pointerDownXY.x, e.clientY-pointerDownXY.y) : 999;
+  if (moved < CLICK_MOVE_THRESHOLD){
+    // CLIC: selección mágica por color (o, con la herramienta "Colocar", un solo bloque)
+    const { gx, gz } = boxSelectStart;
+    if (activeTool === 'place'){
+      applyToolAtCell(gx, gz);
+    } else {
+      const sel = floodSelectSameColor(gx, gz);
+      if (sel && sel.size){
+        if (activeTool === 'erase'){
+          sel.forEach(key=>{
+            const [x,z] = key.split(',').map(Number);
+            const v = voxels.find(v=>v.x===x && Math.round(v.y)===currentLayer && v.z===z);
+            if (v) voxels.splice(voxels.indexOf(v),1);
+          });
+          drawLayerDiagram(); rebuildMesh3D(); refreshLayerUI();
+        } else {
+          magicSelection = sel; // 'paint': queda resaltado, esperando que elijan un color
+          drawLayerDiagram(); drawMagicSelectionOverlay();
+        }
+      } else {
+        clearMagicSelection();
+      }
+    }
+  } else if (boxSelectCurrent){
+    // ARRASTRE: rectángulo, como antes
     const x0 = Math.min(boxSelectStart.gx, boxSelectCurrent.gx), x1 = Math.max(boxSelectStart.gx, boxSelectCurrent.gx);
     const z0 = Math.min(boxSelectStart.gz, boxSelectCurrent.gz), z1 = Math.max(boxSelectStart.gz, boxSelectCurrent.gz);
     applyToolToRect(x0, x1, z0, z1);
+    clearMagicSelection();
   }
-  boxSelectStart = boxSelectCurrent = null;
+  boxSelectStart = boxSelectCurrent = null; pointerDownXY = null;
   isDragEditing = false; lastEditedCellKey = null;
 });
 
