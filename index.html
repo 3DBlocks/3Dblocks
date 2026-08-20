@@ -446,7 +446,8 @@
       <button class="btn wide primary" id="publishBtn" style="width:100%; margin-top:12px;">🚀 Publicar en el catálogo</button>
       <button class="btn wide" id="deleteBtn" style="width:100%; margin-top:8px; background:rgba(242,102,92,.12); border-color:rgba(242,102,92,.35); color:#f2a49f;">🗑️ Borrar "Nombre" del catálogo</button>
       <p id="publishStatus" style="font-size:11px; margin:9px 0 0; min-height:14px; line-height:1.5;"></p>
-      <p style="font-size:10px; color:var(--text-faint); margin:10px 0 0; line-height:1.5;">La primera vez te va a pedir un token de GitHub — <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" style="color:var(--accent);">crealo acá</a> dándole acceso solo a tu repositorio con permiso "Contents: Read and write". Se guarda solo en tu navegador, nunca se comparte.</p>
+      <button class="btn sm ghost" id="changeTokenBtn" style="margin-top:8px;">🔑 Cambiar token de GitHub</button>
+      <p style="font-size:10px; color:var(--text-faint); margin:10px 0 0; line-height:1.5;">La primera vez te va a pedir un token de GitHub — <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" style="color:var(--accent);">crealo acá</a> dándole acceso solo a tu repositorio con permiso "Contents: Read and write" y sin fecha de vencimiento. Se guarda en este navegador, no hace falta pegarlo de nuevo cada vez.</p>
     </div>
 
     <div class="section admin-only">
@@ -1759,14 +1760,15 @@ const GITHUB_REPO = '3Dblocks';
 const GITHUB_BRANCH = 'main';
 
 function getGithubToken(force){
-  let t = sessionStorage.getItem('gh_pat');
+  let t = localStorage.getItem('gh_pat');
   if (!t || force){
     t = prompt('Pegá tu token de GitHub (Personal Access Token) con permiso de escritura sobre el repositorio 3Dblocks:');
-    if (t) sessionStorage.setItem('gh_pat', t.trim());
+    if (t) localStorage.setItem('gh_pat', t.trim());
     else return null;
   }
-  return sessionStorage.getItem('gh_pat');
+  return localStorage.getItem('gh_pat');
 }
+document.getElementById('changeTokenBtn').addEventListener('click', ()=> getGithubToken(true));
 
 function slugify(name){
   return (name||'').toLowerCase()
@@ -1803,7 +1805,7 @@ async function githubPutFile(path, base64Content, message){
   });
   if (!res.ok){
     const err = await res.json().catch(()=>({}));
-    if (res.status === 401){ sessionStorage.removeItem('gh_pat'); throw new Error('Token inválido o vencido. Probá de nuevo — te va a pedir uno nuevo.'); }
+    if (res.status === 401){ localStorage.removeItem('gh_pat'); throw new Error('Token inválido o vencido. Probá de nuevo — te va a pedir uno nuevo.'); }
     throw new Error('GitHub (' + res.status + '): ' + (err.message || 'no se pudo guardar ' + path));
   }
   return res.json();
