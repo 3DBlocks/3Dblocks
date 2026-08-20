@@ -1123,13 +1123,14 @@ function drawPrintLayer(ctx, W, H, layer){
 
 /* ---------------------------- Foto de presentación (con luces e iluminación real) ----------------------------
    El visor normal usa un material plano a propósito (para que nunca aparezca una
-   sombra rara entre bloques). Para esta foto, cambiamos el material del modelo por
-   uno que sí responde a las luces que ya están puestas en la escena, sacamos la
-   captura, y lo devolvemos todo a como estaba — el visor en sí nunca cambia.
+   sombra rara entre bloques). Para esta foto armamos un "estudio fotográfico"
+   temporal: sin ejes ni grilla, piso gris neutro con sombra suave de verdad, y un
+   material de plástico brillante — y lo devolvemos todo a como estaba al terminar.
    Usa la orientación/cámara actual, tal como esté el modelo en pantalla. */
 async function generatePresentationRender(){
   if (!voxels.length || !instMesh){ setStatus('No hay ningún diseño cargado.', 'err'); return; }
-  setLoading(true, 'Generando la foto…');
+  setLoading(true, 'Generando la foto (puede tardar unos segundos)…');
+  await new Promise(r=>setTimeout(r, 30));
 
   // Si estás viendo el plano 2D, el visor 3D queda oculto (display:none) y la
   // cámara no captura nada útil — lo cambiamos a 3D por un instante para sacar
@@ -1141,6 +1142,42 @@ async function generatePresentationRender(){
   const wasFullDesign = showFullDesign;
   if (!showFullDesign){ showFullDesign = true; rebuildMesh3D(); } // se ve todo el modelo con sus colores reales
 
+  // --- "Estudio fotográfico": sin ejes ni grilla, fondo y piso del mismo gris
+  // neutro (como un ciclorama real, sin línea de horizonte a la vista) ---
+  const wasAxesVisible = axesHelper.visible;
+  axesHelper.visible = false;
+  const wasGridVisible = grid.visible;
+  grid.visible = false;
+  const wasBg = scene.background;
+  const studioColor = new THREE.Color('#c9cdd6');
+  scene.background = studioColor;
+  const wasFog = scene.fog;
+  scene.fog = null;
+
+  const box = centeredBounds();
+  const sizeV = new THREE.Vector3(); box.getSize(sizeV);
+  const maxDim = Math.max(sizeV.x, sizeV.y, sizeV.z, 1);
+  const wasGroundVisible = ground.visible;
+  const wasGroundColor = ground.material.color.clone();
+  const wasGroundScale = ground.scale.clone();
+  ground.visible = true;
+  ground.receiveShadow = true;
+  ground.material.color.copy(studioColor);
+  ground.scale.setScalar(Math.max(1, maxDim*3/40)); // agranda el piso circular según el tamaño del modelo
+
+  // --- Sombra suave real, con mapa de sombras (no la aproximación plana de antes) ---
+  const wasShadowEnabled = renderer.shadowMap.enabled;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  const wasKeyCastShadow = key.castShadow;
+  key.castShadow = true;
+  key.shadow.mapSize.set(1024,1024);
+  key.shadow.camera.left = -maxDim*1.2; key.shadow.camera.right = maxDim*1.2;
+  key.shadow.camera.top = maxDim*1.2; key.shadow.camera.bottom = -maxDim*1.2;
+  key.shadow.camera.near = 0.1; key.shadow.camera.far = maxDim*6;
+  key.shadow.bias = -0.0015;
+  key.shadow.camera.updateProjectionMatrix();
+
   const oldMat = instMesh.material;
   const realMat = new THREE.MeshPhysicalMaterial({
     roughness: 0.32,        // brillo tipo plástico de juguete, no mate como antes
@@ -1149,6 +1186,8 @@ async function generatePresentationRender(){
     clearcoatRoughness: 0.18,
   });
   instMesh.material = realMat;
+  instMesh.castShadow = true;
+  instMesh.receiveShadow = true;
   const wasEdgeVisible = edgeMesh.visible;
   edgeMesh.visible = false; // el contorno grueso no queda bien en una foto con luces reales
   const wasSeamVisible = seamMesh.visible;
@@ -1157,11 +1196,22 @@ async function generatePresentationRender(){
   renderer.render(scene, camera);
   const dataUrl = renderer.domElement.toDataURL('image/png');
 
-  // Devolver todo a como estaba en el visor
+  // Devolver TODO a como estaba en el visor
   instMesh.material = oldMat;
   realMat.dispose();
+  instMesh.castShadow = false;
+  instMesh.receiveShadow = false;
   edgeMesh.visible = wasEdgeVisible;
   seamMesh.visible = wasSeamVisible;
+  key.castShadow = wasKeyCastShadow;
+  renderer.shadowMap.enabled = wasShadowEnabled;
+  ground.visible = wasGroundVisible;
+  ground.material.color.copy(wasGroundColor);
+  ground.scale.copy(wasGroundScale);
+  scene.background = wasBg;
+  scene.fog = wasFog;
+  axesHelper.visible = wasAxesVisible;
+  grid.visible = wasGridVisible;
   if (!wasFullDesign){ showFullDesign = false; rebuildMesh3D(); }
   if (wasShow2D) setView('2d');
   renderer.render(scene, camera);
@@ -3311,10 +3361,13 @@ function buscarDiseno(){
   // Ajusta hasta dónde ve la cámara según el tamaño real del modelo — así un diseño
   // enorme (o uno diminuto) nunca queda "recortado" ni demasiado lejos para verse.
   camera.near = Math.max(0.01, maxDim*0.001);
-  camera.far = Math.max(2000, maxDim*12);
-  camera.updateProjectionMatrix();
   controls.minRadius = Math.max(0.5, maxDim*0.03);
   controls.maxRadius = Math.max(200, maxDim*25);
+  // IMPORTANTE: "far" tiene que ser más lejano que maxRadius siempre — si no, al
+  // alejar del todo con la rueda del mouse, la cámara llegaba más lejos de lo que
+  // el "far" dejaba dibujar, y el modelo desaparecía por completo (quedaba "recortado").
+  camera.far = Math.max(2500, controls.maxRadius * 1.4);
+  camera.updateProjectionMatrix();
   controls.focus(box, true);
 }
 document.getElementById('resetViewBtn').addEventListener('click', buscarDiseno);
