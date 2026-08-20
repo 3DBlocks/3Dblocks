@@ -53,6 +53,15 @@
       "price": 7,
       "thumb": "thumbs/wartortle.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/wartortle.json"
+    },
+    {
+      "slug": "mario-y-yoshi",
+      "name": "mario y yoshi",
+      "description": "mario",
+      "category": "mario fly",
+      "price": 10,
+      "thumb": "thumbs/mario-y-yoshi.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/mario-y-yoshi.json"
     }
   ]
 }
