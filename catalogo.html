@@ -80,9 +80,10 @@
   }
   .card .del-btn:hover{ background:#f2665c; }
   #adminBar{ display:flex; align-items:center; gap:8px; }
-  #adminBtn, #libraryBtn{
+  #adminBtn, #libraryBtn, #viewerLink{
     font-size:11px; color:var(--text-faint); background:var(--panel-2); border:1px solid var(--border-soft);
-    border-radius:16px; padding:6px 12px; cursor:pointer; font-family:var(--sans);
+    border-radius:16px; padding:6px 12px; cursor:pointer; font-family:var(--sans); text-decoration:none;
+    display:inline-flex; align-items:center;
   }
   #adminBtn.on{ color:var(--accent); border-color:var(--accent); }
   #libraryBtn.on{ color:var(--accent-2); border-color:var(--accent-2); }
@@ -106,6 +107,7 @@
   </div>
   <p>Diseños en bloques, listos para armar</p>
   <div id="adminBar">
+    <a id="viewerLink" href="index.html" style="display:none;">🎨 Visor</a>
     <button id="libraryBtn" style="display:none;">📚 Mis compras</button>
     <button id="adminBtn">Iniciar sesión</button>
   </div>
@@ -328,14 +330,17 @@ async function checkAdmin(){
   isAdmin = !!(currentUserEmail && ADMIN_EMAILS.includes(currentUserEmail));
   const btn = document.getElementById('adminBtn');
   const libBtn = document.getElementById('libraryBtn');
+  const viewerLink = document.getElementById('viewerLink');
   if (currentUserEmail){
     btn.textContent = isAdmin ? '🔓 ' + currentUserEmail + ' · Salir' : currentUserEmail + ' · Salir';
     btn.classList.toggle('on', isAdmin);
     libBtn.style.display = '';
+    viewerLink.style.display = isAdmin ? '' : 'none';
   } else {
     btn.textContent = 'Iniciar sesión';
     btn.classList.remove('on');
     libBtn.style.display = 'none';
+    viewerLink.style.display = 'none';
     libraryMode = false;
   }
 }
