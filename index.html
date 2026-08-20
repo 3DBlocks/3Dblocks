@@ -188,6 +188,12 @@
     color:var(--text-faint); font-weight:700; z-index:2; pointer-events:none;
     background:rgba(8,11,19,.55); padding:3px 8px; border-radius:5px; backdrop-filter:blur(4px);
   }
+  #viewIndicator{
+    position:absolute; top:12px; left:50%; transform:translateX(-50%); z-index:6; pointer-events:none;
+    background:rgba(15,21,36,.88); backdrop-filter:blur(6px); border:1px solid var(--border-soft);
+    border-radius:8px; padding:5px 12px; font-size:12px; font-weight:700; color:var(--accent);
+    display:flex; align-items:center; gap:6px;
+  }
   #axesLegend{
     position:absolute; top:12px; right:14px; z-index:2; display:flex; gap:10px;
     background:rgba(8,11,19,.55); padding:5px 10px; border-radius:6px; backdrop-filter:blur(4px);
@@ -439,6 +445,7 @@
         <div id="paletteRow" style="display:none;"></div>
       </div>
       <div id="contextLabel">Contexto 3D</div>
+      <div id="viewIndicator">🧱 <span id="viewIndicatorLabel">Libre</span></div>
       <div id="usedColorsPanel" class="admin-only" style="display:none;"></div>
       <div id="selectionPanel" class="admin-only" style="display:none;">
         <div id="selectionCount">0 bloques</div>
@@ -772,6 +779,7 @@ class SimpleOrbitControls {
       if (this._dragging){
         this.azimuth -= dx * 0.0062;
         this.polar = Math.min(this.maxPolar, Math.max(this.minPolar, this.polar - dy * 0.0062));
+        if (window.markViewAsFree) window.markViewAsFree();
       } else if (this._panning){
         const panSpeed = this.radius * 0.0016;
         const offset = new THREE.Vector3().subVectors(this.camera.position, this.target);
@@ -805,6 +813,7 @@ class SimpleOrbitControls {
         lastTX = t.clientX; lastTY = t.clientY;
         this.azimuth -= dx * 0.0062;
         this.polar = Math.min(this.maxPolar, Math.max(this.minPolar, this.polar - dy * 0.0062));
+        if (window.markViewAsFree) window.markViewAsFree();
       } else if (e.touches.length === 2){
         const d = dist(e.touches[0], e.touches[1]);
         if (lastPinchDist) this.radius = Math.min(this.maxRadius, Math.max(this.minRadius, this.radius*(lastPinchDist/d)));
@@ -848,6 +857,31 @@ class SimpleOrbitControls {
   }
 }
 const controls = new SimpleOrbitControls(camera, renderer.domElement);
+
+/* ---------------------------- Vistas fijas con el teclado numérico (1-6), como Studio 2.0 ---------------------------- */
+window.markViewAsFree = function(){
+  const el = document.getElementById('viewIndicatorLabel');
+  if (el && el.textContent !== 'Libre') el.textContent = 'Libre';
+};
+const VIEW_PRESETS = {
+  '1': { label:'Frente',    azimuth:0,           polar:Math.PI/2 },
+  '2': { label:'Atrás',     azimuth:Math.PI,     polar:Math.PI/2 },
+  '3': { label:'Derecha',   azimuth:-Math.PI/2,  polar:Math.PI/2 },
+  '4': { label:'Izquierda', azimuth:Math.PI/2,   polar:Math.PI/2 },
+  '5': { label:'Arriba',    azimuth:0,           polar:0.06 },
+  '6': { label:'Abajo',     azimuth:0,           polar:Math.PI-0.06 },
+};
+window.addEventListener('keydown', e=>{
+  const preset = VIEW_PRESETS[e.key];
+  if (!preset) return;
+  const tag = (document.activeElement && document.activeElement.tagName) || '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+  controls.azimuth = preset.azimuth;
+  controls.polar = preset.polar;
+  const el = document.getElementById('viewIndicatorLabel');
+  if (el) el.textContent = preset.label;
+});
+
 
 /* ---------------------------- Malla instanciada (3D) ---------------------------- */
 let instMesh = null, edgeMesh = null, seamMesh = null;
@@ -2961,23 +2995,52 @@ function pasteClipboard(offset){
 }
 // "Copiar y Espejo": copia la selección y la pega espejada en el eje X, pegada
 // justo al borde — para completar de un toque la otra mitad de un diseño simétrico.
+// "Copiar y Espejo": copia la selección y la pega espejada, SIEMPRE hacia la
+// derecha de tu pantalla actual (no del eje de la cuadrícula) — gira la cámara y
+// el espejo sigue saliendo para el mismo lado, como pediste.
 function copyAndMirror(){
   const vs = selectionVoxels();
   if (!vs.length){ setStatus('No hay ninguna selección para espejar.', 'err'); return; }
   pushUndoSnapshot();
   const box = selectionBoundingBox(vs);
-  const newSel = new Set();
+
+  // ¿"Derecha de mi pantalla" ahora mismo es el eje X o el eje Z de la cuadrícula,
+  // y para qué lado? Se calcula con hacia dónde mira la cámara en este momento.
+  camera.updateMatrixWorld();
+  const camRight = new THREE.Vector3();
+  camera.matrixWorld.extractBasis(camRight, new THREE.Vector3(), new THREE.Vector3());
+  const useZ = Math.abs(camRight.z) > Math.abs(camRight.x);
+  const sign = useZ ? (camRight.z >= 0 ? 1 : -1) : (camRight.x >= 0 ? 1 : -1);
+
+  let newSel = new Set();
   vs.forEach(v=>{
-    const nx = box.maxX + (box.maxX - v.x) + 1; // espejado, pegado justo al borde derecho de la selección
-    const ny = Math.round(v.y), nz = v.z;
+    let nx = v.x, nz = v.z;
+    if (useZ){ nz = sign>0 ? (box.maxZ + (box.maxZ - v.z) + 1) : (box.minZ - (v.z - box.minZ) - 1); }
+    else { nx = sign>0 ? (box.maxX + (box.maxX - v.x) + 1) : (box.minX - (v.x - box.minX) - 1); }
+    const ny = Math.round(v.y);
     const existing = voxels.find(vv=>vv.x===nx && Math.round(vv.y)===ny && vv.z===nz);
     if (existing){ existing.color = v.color; } else { voxels.push({x:nx,y:ny,z:nz,color:v.color}); }
     newSel.add(nx+','+ny+','+nz);
   });
-  dims.x = Math.max(dims.x, box.maxX + (box.maxX-box.minX) + 2);
+
+  // Si el espejo se fue a coordenadas negativas, corremos TODO el modelo para que
+  // quede en positivo — sin resetear la capa actual ni mover la cámara.
+  const minX = Math.min(0, ...voxels.map(v=>v.x));
+  const minZ = Math.min(0, ...voxels.map(v=>v.z));
+  if (minX < 0 || minZ < 0){
+    voxels.forEach(v=>{ v.x -= minX; v.z -= minZ; });
+    const shifted = new Set();
+    newSel.forEach(key=>{
+      const [x,y,z] = key.split(',').map(Number);
+      shifted.add((x-minX)+','+y+','+(z-minZ));
+    });
+    newSel = shifted;
+  }
+  dims.x = Math.max(...voxels.map(v=>v.x))+1;
+  dims.z = Math.max(...voxels.map(v=>v.z))+1;
   drawLayerDiagram(); refreshLayerUI();
   setBoxSelection(newSel);
-  setStatus('Espejados ' + vs.length + ' bloques al lado de la selección.', 'ok');
+  setStatus('Espejados ' + vs.length + ' bloques hacia ese lado de tu pantalla.', 'ok');
 }
 document.getElementById('selCopyBtn').addEventListener('click', copySelection);
 document.getElementById('selPasteBtn').addEventListener('click', ()=>pasteClipboard());
