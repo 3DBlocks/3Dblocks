@@ -136,6 +136,15 @@
   #usedColorsPanel .label-sm{ align-self:flex-start; margin-bottom:2px; }
   #usedColorsGrid{ display:flex; flex-wrap:wrap; gap:4px; justify-content:flex-end; }
   #usedColorsGrid .palette-swatch{ width:22px; height:22px; }
+  #selectionPanel{
+    position:absolute; top:78px; right:12px; z-index:6;
+    display:flex; flex-direction:column; align-items:stretch; gap:6px;
+    background:rgba(15,21,36,.9); backdrop-filter:blur(6px);
+    border:1px solid #39ff6a; border-radius:10px; padding:8px 10px; max-width:172px;
+  }
+  #selectionCount{ font-size:11.5px; font-weight:700; color:#39ff6a; }
+  #selectionBtns{ display:flex; flex-direction:column; gap:5px; }
+  #selectionBtns .btn{ font-size:11px; text-align:left; }
   #editBar .tool-btn, #editBar #paintModeBtn{
     width:36px; height:36px; padding:0; font-size:16px; display:flex; align-items:center; justify-content:center;
   }
@@ -189,6 +198,10 @@
   #canvasHost{ position:absolute; inset:0; }
   canvas{ display:block; }
   #contextCanvas3d{ width:100%; height:100%; touch-action:none; }
+  #marqueeBox3d{
+    position:absolute; z-index:8; display:none; pointer-events:none;
+    border:2px dashed #39ff6a; background:rgba(57,255,106,0.12);
+  }
 
   #ctxToolbar{
     position:absolute; bottom:12px; left:50%; transform:translateX(-50%); display:flex; gap:5px;
@@ -420,12 +433,22 @@
         <button class="tool-btn" id="toolPlaceBtn" data-tool="place" title="Colocar bloques nuevos en celdas vacías">➕</button>
         <button class="tool-btn" id="toolEraseBtn" data-tool="erase" title="Borrar bloques">🧹</button>
         <button class="tool-btn" id="toolReplaceBtn" data-tool="replace" title="Tocá un bloque de cualquier color: se resaltan TODOS los bloques de ese color en el modelo entero. Después elegí el color nuevo en la paleta para cambiarlos a todos juntos.">🔁</button>
+        <button class="tool-btn" id="toolSelectBtn" data-tool="select" title="Selección: arrastrá un rectángulo (en el plano 2D o en el visor 3D, desde cualquier ángulo) para elegir varios bloques a la vez, y copiarlos o espejarlos">▭</button>
         <button class="tool-btn" id="undoBtn" title="Deshacer (Ctrl+Z)">↩️</button>
         <button class="tool-btn" id="renderBtnFloating" title="Generar una foto de presentación con luces e iluminación real">🖼️</button>
         <div id="paletteRow" style="display:none;"></div>
       </div>
       <div id="contextLabel">Contexto 3D</div>
       <div id="usedColorsPanel" class="admin-only" style="display:none;"></div>
+      <div id="selectionPanel" class="admin-only" style="display:none;">
+        <div id="selectionCount">0 bloques</div>
+        <div id="selectionBtns">
+          <button class="btn sm" id="selCopyBtn" title="Copiar (Ctrl+C)">📋 Copiar</button>
+          <button class="btn sm" id="selPasteBtn" title="Pegar (Ctrl+V)">📥 Pegar</button>
+          <button class="btn sm" id="selMirrorBtn" title="Copia la selección y la espeja en el eje X, pegada al lado — para completar mitades simétricas">🪞 Copiar y Espejo</button>
+          <button class="btn sm" id="selClearBtn" title="Cancelar selección (Esc)">✖</button>
+        </div>
+      </div>
       <div id="axesLegend">
         <span><i style="background:#ff4d4d"></i>X</span>
         <span><i style="background:#4dff88"></i>Y (arriba)</span>
@@ -644,6 +667,9 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 renderer.domElement.id = 'contextCanvas3d';
 host.appendChild(renderer.domElement);
+const marqueeBox = document.createElement('div');
+marqueeBox.id = 'marqueeBox3d';
+host.appendChild(marqueeBox);
 
 const hemi = new THREE.HemisphereLight(0xbfd6ff, 0x3a4258, 1.05);
 scene.add(hemi);
@@ -964,7 +990,8 @@ function rebuildMesh3D(){
     // 2.0) — el relleno del bloque se queda siempre con su color real, nunca lo tapa.
     const isHighlighted =
       (magicSelection && Math.round(v.y)===currentLayer && magicSelection.has(v.x+','+v.z)) ||
-      (replaceSourceColor && v.color === replaceSourceColor);
+      (replaceSourceColor && v.color === replaceSourceColor) ||
+      (boxSelection && boxSelection.has(v.x+','+Math.round(v.y)+','+v.z));
     edgeColor.set(isHighlighted ? '#39ff6a' : '#000000');
     edgeMesh.setColorAt(i, edgeColor);
   });
@@ -1239,10 +1266,74 @@ async function generatePresentationRender(){
 document.getElementById('renderBtn').addEventListener('click', generatePresentationRender);
 document.getElementById('renderBtnFloating').addEventListener('click', generatePresentationRender);
 
+// Ubica la cámara en un ángulo fijo tipo isométrico (como pediste, ~40°), mirando
+// al centro de una caja dada — para que todas las páginas del manual usen el
+// mismo encuadre y ángulo, y se entienda bien cómo se va armando en 3D.
+function positionCameraFixedAngle(box, elevationDeg, azimuthDeg, marginMult){
+  const size = new THREE.Vector3(); box.getSize(size);
+  const center = new THREE.Vector3(); box.getCenter(center);
+  const maxDim = Math.max(size.x, size.y, size.z, 1);
+  const dist = maxDim * (marginMult||2.1);
+  const elevRad = elevationDeg*Math.PI/180, azimRad = azimuthDeg*Math.PI/180;
+  camera.position.set(
+    center.x + dist*Math.cos(elevRad)*Math.sin(azimRad),
+    center.y + dist*Math.sin(elevRad),
+    center.z + dist*Math.cos(elevRad)*Math.cos(azimRad)
+  );
+  camera.near = Math.max(0.01, maxDim*0.001);
+  camera.far = Math.max(2500, dist*3);
+  camera.lookAt(center);
+  camera.updateProjectionMatrix();
+}
+
 async function generateInstructionsPDF(){
   if (!voxels.length){ setStatus('No hay ningún diseño cargado para generar instrucciones.', 'err'); return; }
   if (!window.jspdf){ setStatus('No se pudo cargar el generador de PDF. Revisá tu conexión y probá de nuevo.', 'err'); return; }
-  setLoading(true, 'Generando instrucciones…');
+  if (!instMesh){ setStatus('Esperá a que termine de cargar el visor 3D y probá de nuevo.', 'err'); return; }
+  setLoading(true, 'Generando instrucciones en 3D (puede tardar, layer por layer)…');
+  await new Promise(r=>setTimeout(r, 30));
+
+  // Guarda TODO lo que vamos a tocar, para devolverlo exacto al terminar.
+  const wasCurrentLayer = currentLayer, wasFullDesign = showFullDesign, wasShowBelow = showBelowLayers;
+  const wasCamPos = camera.position.clone();
+  const wasShow2D = mainSplit.classList.contains('show-2d');
+  if (wasShow2D) setView('3d');
+  await new Promise(r=>setTimeout(r, wasShow2D ? 90 : 20));
+
+  const wasAxesVisible = axesHelper.visible; axesHelper.visible = false;
+  const wasGridVisible = grid.visible; grid.visible = false;
+  const wasBg = scene.background;
+  const studioColor = new THREE.Color('#c9cdd6');
+  scene.background = studioColor;
+  const wasFog = scene.fog; scene.fog = null;
+
+  const fullBox = centeredBounds(); // encuadre fijo con el modelo COMPLETO, igual en todas las páginas
+  const fullSize = new THREE.Vector3(); fullBox.getSize(fullSize);
+  const maxDim = Math.max(fullSize.x, fullSize.y, fullSize.z, 1);
+
+  const wasGroundVisible = ground.visible;
+  const wasGroundColor = ground.material.color.clone();
+  const wasGroundScale = ground.scale.clone();
+  ground.visible = true; ground.receiveShadow = true;
+  ground.material.color.copy(studioColor);
+  ground.scale.setScalar(Math.max(1, maxDim*3/40));
+
+  const wasShadowEnabled = renderer.shadowMap.enabled;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  const wasKeyCastShadow = key.castShadow;
+  key.castShadow = true;
+  key.shadow.mapSize.set(1024,1024);
+  key.shadow.camera.left = -maxDim*1.2; key.shadow.camera.right = maxDim*1.2;
+  key.shadow.camera.top = maxDim*1.2; key.shadow.camera.bottom = -maxDim*1.2;
+  key.shadow.camera.near = 0.1; key.shadow.camera.far = maxDim*6;
+  key.shadow.bias = -0.0015;
+  key.shadow.camera.updateProjectionMatrix();
+
+  const realMat = new THREE.MeshPhysicalMaterial({ roughness:0.32, metalness:0.02, clearcoat:0.65, clearcoatRoughness:0.18 });
+
+  showFullDesign = false; showBelowLayers = true; // capa actual con su color real, las de abajo atenuadas — así se ve qué es nuevo
+
   try{
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit:'mm', format:'a4', orientation:'portrait' });
@@ -1260,28 +1351,35 @@ async function generateInstructionsPDF(){
     doc.text(modelName, pageW/2, 125, { align:'center' });
     doc.setFontSize(11);
     doc.setTextColor(180,186,204);
-    doc.text('Guía de armado por capas', pageW/2, 136, { align:'center' });
+    doc.text('Guía de armado por capas — vista en 3D', pageW/2, 136, { align:'center' });
     doc.text(voxels.length + ' bloques · ' + (maxLayer+1) + ' capas', pageW/2, 143, { align:'center' });
 
-    const printCanvas = document.createElement('canvas');
-    printCanvas.width = 900; printCanvas.height = 900;
-    const pctx = printCanvas.getContext('2d');
     const margin = 15;
     const imgSize = pageW - margin*2;
 
     for (let layer=0; layer<=maxLayer; layer++){
+      currentLayer = layer;
+      rebuildMesh3D(); // con showFullDesign=false y showBelowLayers=true: esta capa a color, las de abajo gris
+      instMesh.material = realMat;
+      instMesh.castShadow = true; instMesh.receiveShadow = true;
+      edgeMesh.visible = false; seamMesh.visible = false;
+      positionCameraFixedAngle(fullBox, 40, 38, 2.1); // ángulo fijo ~40°, igual en todas las páginas
+      renderer.render(scene, camera);
+      const imgData = renderer.domElement.toDataURL('image/png');
+
       doc.addPage();
-      drawPrintLayer(pctx, printCanvas.width, printCanvas.height, layer);
-      const imgData = printCanvas.toDataURL('image/png');
       doc.setFontSize(14);
       doc.setTextColor(20,20,20);
       doc.text(modelName + ' — Paso ' + (layer+1) + ' de ' + (maxLayer+1), pageW/2, 12, { align:'center' });
       doc.addImage(imgData, 'PNG', margin, 18, imgSize, imgSize);
+      doc.setFontSize(8.5);
+      doc.setTextColor(120,130,150);
+      doc.text('En color: los bloques NUEVOS de este paso. En gris: lo que ya tenías armado.', pageW/2, 18+imgSize+6, { align:'center' });
 
       const here = voxels.filter(v => Math.round(v.y) === layer);
       const counts = new Map();
       here.forEach(v => counts.set(v.color, (counts.get(v.color)||0)+1));
-      let ly = 18 + imgSize + 9;
+      let ly = 18 + imgSize + 14;
       let lx = margin;
       doc.setFontSize(9.5);
       counts.forEach((count, color)=>{
@@ -1307,6 +1405,25 @@ async function generateInstructionsPDF(){
     console.error(err);
     setStatus('No se pudo generar el PDF: ' + err.message, 'err');
   } finally {
+    // Devolver TODO a como estaba
+    instMesh.material.dispose && null; // (el material viejo lo recrea rebuildMesh3D de nuevo)
+    realMat.dispose();
+    key.castShadow = wasKeyCastShadow;
+    renderer.shadowMap.enabled = wasShadowEnabled;
+    ground.visible = wasGroundVisible;
+    ground.material.color.copy(wasGroundColor);
+    ground.scale.copy(wasGroundScale);
+    scene.background = wasBg;
+    scene.fog = wasFog;
+    axesHelper.visible = wasAxesVisible;
+    grid.visible = wasGridVisible;
+    currentLayer = wasCurrentLayer; showFullDesign = wasFullDesign; showBelowLayers = wasShowBelow;
+    rebuildMesh3D();
+    camera.position.copy(wasCamPos);
+    if (wasShow2D) setView('2d');
+    else buscarDiseno();
+    refreshLayerUI();
+    renderer.render(scene, camera);
     setLoading(false);
   }
 }
@@ -2651,6 +2768,7 @@ document.querySelectorAll('.tool-btn').forEach(btn=>{
     activeTool = btn.dataset.tool;
     endColorReplace(); // cambiar de herramienta cancela un "Cambio" a medio hacer y devuelve la vista
     clearMagicSelection();
+    if (activeTool !== 'select') clearBoxSelection();
   });
 });
 function applyColorToMagicSelection(color){
@@ -2678,6 +2796,14 @@ function applyGlobalColorReplace(newColor){
   setStatus('Listo — se cambiaron ' + count + ' bloques en todo el modelo.', 'ok');
   return true;
 }
+function applyColorToBoxSelection(color){
+  const vs = selectionVoxels();
+  if (!vs.length) return false;
+  pushUndoSnapshot();
+  vs.forEach(v=>{ v.color = color; });
+  drawLayerDiagram(); rebuildMesh3D(); refreshLayerUI();
+  return true;
+}
 document.getElementById('paletteRow').addEventListener('click', e=>{
   const sw = e.target.closest('.palette-swatch');
   if (!sw) return;
@@ -2686,6 +2812,7 @@ document.getElementById('paletteRow').addEventListener('click', e=>{
   paintColor = sw.dataset.color;
   document.getElementById('customColorInput').value = paintColor;
   if (replaceSourceColor) applyGlobalColorReplace(paintColor);
+  else if (boxSelection) applyColorToBoxSelection(paintColor);
   else applyColorToMagicSelection(paintColor);
 });
 document.getElementById('paletteRow').addEventListener('input', e=>{
@@ -2693,6 +2820,7 @@ document.getElementById('paletteRow').addEventListener('input', e=>{
   paintColor = e.target.value;
   document.querySelectorAll('.palette-swatch').forEach(s=>s.classList.remove('active'));
   if (replaceSourceColor) applyGlobalColorReplace(paintColor);
+  else if (boxSelection) applyColorToBoxSelection(paintColor);
   else applyColorToMagicSelection(paintColor);
 });
 
@@ -2761,6 +2889,108 @@ function applyToolToRect(x0, x1, z0, z1){
   rebuildMesh3D();
   refreshLayerUI();
 }
+
+/* ---------------------------- Selección múltiple (rectángulo, 2D o 3D) + Copiar/Pegar/Espejo ----------------------------
+   Arrastrás un rectángulo — en el plano 2D (sobre la capa actual) o en el visor 3D
+   (desde cualquier ángulo, como Studio 2.0, eligiendo bloques de cualquier capa) —
+   y queda una selección persistente resaltada en verde, con acciones para copiar,
+   pegar, o copiar+espejar (para completar mitades simétricas de una). */
+let boxSelection = null; // Set de "x,y,z" (todas las capas)
+let clipboard = null;    // bloques copiados: [{dx,dy,dz,color}, ...] relativos a la esquina mínima
+
+function clearBoxSelection(){
+  boxSelection = null;
+  updateSelectionStatusUI();
+  rebuildMesh3D();
+}
+function setBoxSelection(set){
+  boxSelection = (set && set.size) ? set : null;
+  updateSelectionStatusUI();
+  rebuildMesh3D();
+}
+function updateSelectionStatusUI(){
+  const panel = document.getElementById('selectionPanel');
+  if (!boxSelection || !boxSelection.size){ panel.style.display = 'none'; return; }
+  panel.style.display = 'flex';
+  document.getElementById('selectionCount').textContent = boxSelection.size + (boxSelection.size===1 ? ' bloque' : ' bloques') + ' seleccionados';
+}
+function selectionVoxels(){
+  if (!boxSelection) return [];
+  const out = [];
+  boxSelection.forEach(key=>{
+    const [x,y,z] = key.split(',').map(Number);
+    const v = voxels.find(v=>v.x===x && Math.round(v.y)===y && v.z===z);
+    if (v) out.push(v);
+  });
+  return out;
+}
+function selectionBoundingBox(vs){
+  const xs=vs.map(v=>v.x), ys=vs.map(v=>Math.round(v.y)), zs=vs.map(v=>v.z);
+  return { minX:Math.min(...xs), maxX:Math.max(...xs), minY:Math.min(...ys), maxY:Math.max(...ys), minZ:Math.min(...zs), maxZ:Math.max(...zs) };
+}
+
+function copySelection(){
+  const vs = selectionVoxels();
+  if (!vs.length){ setStatus('No hay ninguna selección para copiar.', 'err'); return; }
+  const box = selectionBoundingBox(vs);
+  clipboard = vs.map(v=>({ dx:v.x-box.minX, dy:Math.round(v.y)-box.minY, dz:v.z-box.minZ, color:v.color }));
+  setStatus('Copiados ' + clipboard.length + ' bloques (Ctrl+V para pegar).', 'ok');
+}
+function pasteClipboard(offset){
+  if (!clipboard || !clipboard.length){ setStatus('No copiaste nada todavía (Ctrl+C primero).', 'err'); return; }
+  pushUndoSnapshot();
+  const vs = selectionVoxels();
+  const base = vs.length ? selectionBoundingBox(vs) : { maxX: dims.x, minY:0, minZ:0 };
+  const ox = offset ? offset.x : (base.maxX!==undefined ? base.maxX+2 : dims.x+2);
+  const oy = offset ? offset.y : (base.minY||0);
+  const oz = offset ? offset.z : (base.minZ||0);
+  const newSel = new Set();
+  clipboard.forEach(c=>{
+    const nx=ox+c.dx, ny=oy+c.dy, nz=oz+c.dz;
+    const existing = voxels.find(v=>v.x===nx && Math.round(v.y)===ny && v.z===nz);
+    if (existing){ existing.color = c.color; } else { voxels.push({x:nx,y:ny,z:nz,color:c.color}); }
+    newSel.add(nx+','+ny+','+nz);
+  });
+  dims.x = Math.max(dims.x, Math.max(...clipboard.map(c=>ox+c.dx))+1);
+  dims.y = Math.max(dims.y, Math.max(...clipboard.map(c=>oy+c.dy))+1);
+  dims.z = Math.max(dims.z, Math.max(...clipboard.map(c=>oz+c.dz))+1);
+  maxLayer = Math.max(0, dims.y-1);
+  drawLayerDiagram(); refreshLayerUI();
+  setBoxSelection(newSel);
+  setStatus('Pegados ' + clipboard.length + ' bloques.', 'ok');
+}
+// "Copiar y Espejo": copia la selección y la pega espejada en el eje X, pegada
+// justo al borde — para completar de un toque la otra mitad de un diseño simétrico.
+function copyAndMirror(){
+  const vs = selectionVoxels();
+  if (!vs.length){ setStatus('No hay ninguna selección para espejar.', 'err'); return; }
+  pushUndoSnapshot();
+  const box = selectionBoundingBox(vs);
+  const newSel = new Set();
+  vs.forEach(v=>{
+    const nx = box.maxX + (box.maxX - v.x) + 1; // espejado, pegado justo al borde derecho de la selección
+    const ny = Math.round(v.y), nz = v.z;
+    const existing = voxels.find(vv=>vv.x===nx && Math.round(vv.y)===ny && vv.z===nz);
+    if (existing){ existing.color = v.color; } else { voxels.push({x:nx,y:ny,z:nz,color:v.color}); }
+    newSel.add(nx+','+ny+','+nz);
+  });
+  dims.x = Math.max(dims.x, box.maxX + (box.maxX-box.minX) + 2);
+  drawLayerDiagram(); refreshLayerUI();
+  setBoxSelection(newSel);
+  setStatus('Espejados ' + vs.length + ' bloques al lado de la selección.', 'ok');
+}
+document.getElementById('selCopyBtn').addEventListener('click', copySelection);
+document.getElementById('selPasteBtn').addEventListener('click', ()=>pasteClipboard());
+document.getElementById('selMirrorBtn').addEventListener('click', copyAndMirror);
+document.getElementById('selClearBtn').addEventListener('click', clearBoxSelection);
+window.addEventListener('keydown', e=>{
+  if (!paintMode || activeTool !== 'select') return;
+  const tag = (document.activeElement && document.activeElement.tagName) || '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase()==='c'){ e.preventDefault(); copySelection(); }
+  else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase()==='v'){ e.preventDefault(); pasteClipboard(); }
+  else if (e.key === 'Escape'){ clearBoxSelection(); }
+});
 
 /* ---------------------------- Selección mágica por color (como Studio 2.0) ----------------------------
    Tocás un bloque y se seleccionan todos los bloques PEGADOS del mismo color en esa
@@ -2913,6 +3143,9 @@ window.addEventListener('pointerup', e=>{
     const { gx, gz } = boxSelectStart;
     if (activeTool === 'place'){
       applyToolAtCell(gx, gz);
+    } else if (activeTool === 'select'){
+      const hit = voxels.find(v => v.x===gx && Math.round(v.y)===currentLayer && v.z===gz);
+      setBoxSelection(hit ? new Set([hit.x+','+Math.round(hit.y)+','+hit.z]) : null);
     } else if (activeTool === 'replace'){
       const hit = voxels.find(v => v.x===gx && Math.round(v.y)===currentLayer && v.z===gz);
       if (hit){
@@ -2940,11 +3173,22 @@ window.addEventListener('pointerup', e=>{
       }
     }
   } else if (boxSelectCurrent){
-    // ARRASTRE: rectángulo, como antes
     const x0 = Math.min(boxSelectStart.gx, boxSelectCurrent.gx), x1 = Math.max(boxSelectStart.gx, boxSelectCurrent.gx);
     const z0 = Math.min(boxSelectStart.gz, boxSelectCurrent.gz), z1 = Math.max(boxSelectStart.gz, boxSelectCurrent.gz);
-    applyToolToRect(x0, x1, z0, z1);
-    clearMagicSelection();
+    if (activeTool === 'select'){
+      // ARRASTRE con "Selección": junta todos los bloques del rectángulo EN ESTA
+      // CAPA, y los deja resaltados en vez de aplicarles algo — para después
+      // copiarlos, pegarlos o espejarlos.
+      const sel = new Set();
+      voxels.forEach(v=>{
+        if (Math.round(v.y)===currentLayer && v.x>=x0 && v.x<=x1 && v.z>=z0 && v.z<=z1) sel.add(v.x+','+currentLayer+','+v.z);
+      });
+      setBoxSelection(sel);
+    } else {
+      // ARRASTRE: rectángulo, como antes
+      applyToolToRect(x0, x1, z0, z1);
+      clearMagicSelection();
+    }
   }
   boxSelectStart = boxSelectCurrent = null; pointerDownXY = null;
   isDragEditing = false; lastEditedCellKey = null;
@@ -3002,6 +3246,19 @@ renderer.domElement.addEventListener('pointermove', e=>{
   if (!paintMode || !isDragEditing || !pointer3DDownXY) return;
   const moved = Math.hypot(e.clientX-pointer3DDownXY.x, e.clientY-pointer3DDownXY.y);
   if (moved < CLICK_MOVE_THRESHOLD) return; // todavía no se considera "arrastre"
+  if (activeTool === 'select'){
+    // Dibuja el recuadro de selección en pantalla mientras arrastrás — funciona
+    // desde cualquier ángulo, como en Studio 2.0.
+    const hostRect = host.getBoundingClientRect();
+    const x0 = Math.min(pointer3DDownXY.x, e.clientX) - hostRect.left;
+    const y0 = Math.min(pointer3DDownXY.y, e.clientY) - hostRect.top;
+    const w = Math.abs(e.clientX - pointer3DDownXY.x);
+    const h = Math.abs(e.clientY - pointer3DDownXY.y);
+    marqueeBox.style.display = 'block';
+    marqueeBox.style.left = x0+'px'; marqueeBox.style.top = y0+'px';
+    marqueeBox.style.width = w+'px'; marqueeBox.style.height = h+'px';
+    return;
+  }
   apply3DEditAt(e);
 });
 renderer.domElement.addEventListener('pointerup', e=>{
@@ -3016,6 +3273,38 @@ renderer.domElement.addEventListener('pointerup', e=>{
   }
   if (!paintMode || !pointer3DDownXY) return;
   const moved = Math.hypot(e.clientX-pointer3DDownXY.x, e.clientY-pointer3DDownXY.y);
+  if (activeTool === 'select'){
+    marqueeBox.style.display = 'none';
+    if (moved < CLICK_MOVE_THRESHOLD){
+      // CLIC simple: selecciona un solo bloque
+      if (instMesh && lastVisibleVoxels.length){
+        const hit = cellFrom3DEvent(e, instMesh);
+        const v = hit ? lastVisibleVoxels[hit.instanceId] : null;
+        setBoxSelection(v ? new Set([v.x+','+Math.round(v.y)+','+v.z]) : null);
+      }
+    } else {
+      // ARRASTRE: cualquier bloque VISIBLE cuya posición en pantalla caiga dentro
+      // del recuadro queda seleccionado — sin importar la capa ni la profundidad,
+      // igual que arrastrar en Studio 2.0 desde cualquier ángulo de cámara.
+      const hostRect = host.getBoundingClientRect();
+      const rx0 = Math.min(pointer3DDownXY.x, e.clientX), rx1 = Math.max(pointer3DDownXY.x, e.clientX);
+      const ry0 = Math.min(pointer3DDownXY.y, e.clientY), ry1 = Math.max(pointer3DDownXY.y, e.clientY);
+      const offsetX = (dims.x*voxelSize)/2, offsetZ = (dims.z*voxelSize)/2;
+      const p = new THREE.Vector3();
+      const sel = new Set();
+      lastVisibleVoxels.forEach(v=>{
+        p.set(v.x*voxelSize - offsetX, v.y*voxelSize + voxelSize/2, v.z*voxelSize - offsetZ);
+        p.project(camera);
+        if (p.z < -1 || p.z > 1) return; // detrás de la cámara
+        const sx = hostRect.left + (p.x*0.5+0.5)*hostRect.width;
+        const sy = hostRect.top + (-p.y*0.5+0.5)*hostRect.height;
+        if (sx>=rx0 && sx<=rx1 && sy>=ry0 && sy<=ry1) sel.add(v.x+','+Math.round(v.y)+','+v.z);
+      });
+      setBoxSelection(sel);
+    }
+    pointer3DDownXY = null; isDragEditing = false; lastEditedCellKey = null;
+    return;
+  }
   if (moved < CLICK_MOVE_THRESHOLD){
     // CLIC simple sobre el visor 3D: selección mágica por color (igual que en el plano 2D)
     if (activeTool === 'place' || activeTool === 'brush'){
