@@ -44,6 +44,15 @@
       "price": 5,
       "thumb": "thumbs/yvisour.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/yvisour.json"
+    },
+    {
+      "slug": "wartortle",
+      "name": "wartortle",
+      "description": "pokemon",
+      "category": "pokemon",
+      "price": 7,
+      "thumb": "thumbs/wartortle.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/wartortle.json"
     }
   ]
 }
