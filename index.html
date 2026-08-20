@@ -126,6 +126,12 @@
   }
   #editBar:has(.tool-btn.active) #paletteRow{ margin-top:2px; }
   #paletteRow{ display:flex; flex-wrap:wrap; gap:4px; max-width:200px; align-content:flex-start; }
+  #renderBtnFloating{
+    position:absolute; top:64px; left:12px; z-index:6;
+    width:36px; height:36px; padding:0; font-size:16px;
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(15,21,36,.88); backdrop-filter:blur(6px);
+  }
   #usedColorsPanel{
     position:absolute; top:12px; right:12px; z-index:6;
     display:flex; flex-direction:column; align-items:flex-end; gap:5px;
@@ -423,6 +429,7 @@
         <button class="tool-btn" id="undoBtn" title="Deshacer (Ctrl+Z)">↩️</button>
         <div id="paletteRow" style="display:none;"></div>
       </div>
+      <button class="tool-btn" id="renderBtnFloating" title="Generar una foto de presentación con luces e iluminación real">🖼️</button>
       <div id="contextLabel">Contexto 3D</div>
       <div id="usedColorsPanel" class="admin-only" style="display:none;"></div>
       <div id="axesLegend">
@@ -1160,16 +1167,28 @@ async function generatePresentationRender(){
   if (wasShow2D) setView('2d');
   renderer.render(scene, camera);
 
+  // Bajamos el PNG como archivo real (Blob), no como un link "data:" directo —
+  // en algunas combinaciones de navegador/Windows, el link directo se guardaba
+  // corrupto o incompleto. Así el archivo queda íntegro seguro.
+  const [header, base64] = dataUrl.split(',');
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i=0; i<binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const blob = new Blob([bytes], { type: 'image/png' });
+  const blobUrl = URL.createObjectURL(blob);
+
   const a = document.createElement('a');
   const baseName = (document.getElementById('modelNameText').textContent || 'diseno')
     .replace(/\.(dae|vox|json)\b.*/i, '').trim().replace(/[^\w\-]+/g, '_') || 'diseno';
-  a.href = dataUrl; a.download = baseName + '_render.png';
+  a.href = blobUrl; a.download = baseName + '_render.png';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(blobUrl);
 
   setLoading(false);
   setStatus('Foto de presentación descargada: ' + baseName + '_render.png', 'ok');
 }
 document.getElementById('renderBtn').addEventListener('click', generatePresentationRender);
+document.getElementById('renderBtnFloating').addEventListener('click', generatePresentationRender);
 
 async function generateInstructionsPDF(){
   if (!voxels.length){ setStatus('No hay ningún diseño cargado para generar instrucciones.', 'err'); return; }
