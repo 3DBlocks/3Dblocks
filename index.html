@@ -818,11 +818,45 @@ function mergeGeometries(geoms){
 
 /* Geometría de "bloque tipo pieza": cuerpo + stud redondo arriba + tubo de encaje abajo,
    como en la referencia de Studio 2.0 — un solo dibujo, reutilizado por todas las instancias. */
+// Combina varias BufferGeometry en una sola (necesario para que InstancedMesh reciba
+// una única geometría, ya que el cuerpo acanalado y la protuberancia de arriba se
+// arman como piezas separadas y después se unen).
+function mergeGeometries(geoms){
+  let vertexCount = 0;
+  const positions = [], normals = [], uvs = [], indices = [];
+  geoms.forEach(g=>{
+    const posAttr = g.attributes.position, normAttr = g.attributes.normal, uvAttr = g.attributes.uv;
+    for (let i=0;i<posAttr.count;i++){
+      positions.push(posAttr.getX(i), posAttr.getY(i), posAttr.getZ(i));
+      normals.push(normAttr.getX(i), normAttr.getY(i), normAttr.getZ(i));
+      if (uvAttr) uvs.push(uvAttr.getX(i), uvAttr.getY(i)); else uvs.push(0,0);
+    }
+    const idx = g.index;
+    if (idx){ for (let i=0;i<idx.count;i++) indices.push(idx.getX(i)+vertexCount); }
+    else { for (let i=0;i<posAttr.count;i++) indices.push(i+vertexCount); }
+    vertexCount += posAttr.count;
+  });
+  const merged = new THREE.BufferGeometry();
+  merged.setAttribute('position', new THREE.Float32BufferAttribute(positions,3));
+  merged.setAttribute('normal', new THREE.Float32BufferAttribute(normals,3));
+  merged.setAttribute('uv', new THREE.Float32BufferAttribute(uvs,2));
+  merged.setIndex(indices);
+  return merged;
+}
+
 function buildBrickGeometry(size){
-  // Bloque simple y plano, como el visor de Securpat/Studio2.0: un cubo que llena
-  // toda la celda por completo, sin stud ni tubo — así no puede haber ningún tipo
-  // de separación o desalineación entre bloques apilados o contiguos.
-  return new THREE.BoxGeometry(size, size, size);
+  // Pieza tipo "clavija acanalada" (como el Magic Bloks real): un cuerpo cilíndrico
+  // de caras planas — que se lee como "gajos" gracias al contorno que dibuja el
+  // wireframe de bordes — más una protuberancia redondeada arriba. Cuerpo y
+  // protuberancia juntos ocupan exactamente el alto de la celda, así las capas
+  // siguen encastrando sin huecos ni superposición entre ellas.
+  const flutes = 10;
+  const bodyH = size*0.82, studH = size*0.18;
+  const body = new THREE.CylinderGeometry(size*0.49, size*0.49, bodyH, flutes, 1, false);
+  body.translate(0, -size/2 + bodyH/2, 0);
+  const stud = new THREE.CylinderGeometry(size*0.23, size*0.26, studH, 16, 1, false);
+  stud.translate(0, size/2 - studH/2, 0);
+  return mergeGeometries([body, stud]);
 }
 
 /* Textura simple: solo el contorno de cada cara del bloque, en negro — sin
@@ -868,7 +902,7 @@ function rebuildMesh3D(){
   instMesh = new THREE.InstancedMesh(geo, mat, visible.length);
   instMesh.castShadow = false; instMesh.receiveShadow = false;
 
-  const edgeGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(voxelSize, voxelSize, voxelSize));
+  const edgeGeo = new THREE.EdgesGeometry(geo);
   const edgeMat = new THREE.LineBasicMaterial({ color:0x000000, transparent:true, opacity:0.3 });
   edgeMesh = new THREE.InstancedMesh(edgeGeo, edgeMat, visible.length);
   edgeMesh.visible = wireOn.v;
