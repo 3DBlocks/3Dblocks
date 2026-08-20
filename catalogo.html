@@ -8,6 +8,7 @@
 <link rel="icon" href="icon-192.png" />
 <link rel="apple-touch-icon" href="icon-192.png" />
 <meta name="theme-color" content="#080b13" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
   :root{
     --bg: #080b13;
@@ -72,6 +73,19 @@
     font-weight:700; color:var(--accent);
   }
   .card .price-tag.free{ color:var(--accent-2); }
+  .card .del-btn{
+    position:absolute; top:8px; left:8px; width:26px; height:26px; border-radius:6px;
+    background:rgba(242,102,92,.85); backdrop-filter:blur(4px); border:1px solid rgba(242,102,92,.6);
+    color:#fff; font-size:13px; display:flex; align-items:center; justify-content:center; cursor:pointer;
+  }
+  .card .del-btn:hover{ background:#f2665c; }
+  #adminBar{ display:flex; align-items:center; gap:8px; }
+  #adminBtn, #libraryBtn{
+    font-size:11px; color:var(--text-faint); background:var(--panel-2); border:1px solid var(--border-soft);
+    border-radius:16px; padding:6px 12px; cursor:pointer; font-family:var(--sans);
+  }
+  #adminBtn.on{ color:var(--accent); border-color:var(--accent); }
+  #libraryBtn.on{ color:var(--accent-2); border-color:var(--accent-2); }
   .card .info{ padding:12px 14px 14px; }
   .card .name{ font-size:13.5px; font-weight:700; margin:0 0 4px; }
   .card .desc{ font-size:11px; color:var(--text-dim); line-height:1.4; margin:0 0 6px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
@@ -91,6 +105,10 @@
     <h1 class="brand-title">3DBLOCK</h1>
   </div>
   <p>Diseños en bloques, listos para armar</p>
+  <div id="adminBar">
+    <button id="libraryBtn" style="display:none;">📚 Mis compras</button>
+    <button id="adminBtn">Iniciar sesión</button>
+  </div>
 </div>
 
 <main>
@@ -110,6 +128,79 @@
 <script>
 const VIEWER_PAGE = 'index.html';
 const CATALOG_URL = 'catalog.json';
+
+const SUPABASE_URL = 'https://cqzfbeyeecypamsgguye.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_4mccTooTedhMrGrQAIKcZQ_iQQv-Lc2';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const ADMIN_EMAILS = ['rcuyap@gmail.com'];
+
+const GITHUB_OWNER = '3DBlocks';
+const GITHUB_REPO = '3Dblocks';
+const GITHUB_BRANCH = 'main';
+
+let isAdmin = false;
+let catalogData = { designs: [] };
+
+function utf8ToBase64(str){ return btoa(unescape(encodeURIComponent(str))); }
+function base64ToUtf8(b64){ return decodeURIComponent(escape(atob(b64.replace(/\n/g,'')))); }
+
+function getGithubToken(){
+  let t = sessionStorage.getItem('gh_pat');
+  if (!t){
+    t = prompt('Pegá tu token de GitHub (Personal Access Token) para poder borrar diseños del catálogo:');
+    if (t) sessionStorage.setItem('gh_pat', t.trim());
+    else return null;
+  }
+  return sessionStorage.getItem('gh_pat');
+}
+
+async function githubGetFile(path){
+  const token = getGithubToken();
+  if (!token) throw new Error('Hace falta el token de GitHub.');
+  const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${path}?ref=${GITHUB_BRANCH}&_=${Date.now()}`;
+  const res = await fetch(url, { cache:'no-store', headers: { Authorization: 'token '+token, Accept: 'application/vnd.github+json' } });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error('GitHub (' + res.status + '): no se pudo leer ' + path);
+  return res.json();
+}
+async function githubPutFile(path, base64Content, message){
+  const token = getGithubToken();
+  const existing = await githubGetFile(path).catch(()=>null);
+  const body = { message, content: base64Content, branch: GITHUB_BRANCH };
+  if (existing && existing.sha) body.sha = existing.sha;
+  const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${path}`;
+  const res = await fetch(url, { method:'PUT', headers:{ Authorization:'token '+token, Accept:'application/vnd.github+json','Content-Type':'application/json' }, body: JSON.stringify(body) });
+  if (!res.ok){ const err = await res.json().catch(()=>({})); throw new Error('GitHub (' + res.status + '): ' + (err.message || 'no se pudo guardar ' + path)); }
+  return res.json();
+}
+async function githubDeleteFile(path, message){
+  const existing = await githubGetFile(path).catch(()=>null);
+  if (!existing) return;
+  const token = getGithubToken();
+  const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${path}`;
+  const res = await fetch(url, { method:'DELETE', headers:{ Authorization:'token '+token, Accept:'application/vnd.github+json','Content-Type':'application/json' }, body: JSON.stringify({ message, sha: existing.sha, branch: GITHUB_BRANCH }) });
+  if (!res.ok){ const err = await res.json().catch(()=>({})); throw new Error('GitHub (' + res.status + '): ' + (err.message || 'no se pudo borrar ' + path)); }
+}
+
+async function deleteDesign(item){
+  if (!confirm('¿Borrar "' + item.name + '" del catálogo? También se borra su archivo y su foto. No se puede deshacer.')) return;
+  if (!getGithubToken()) return;
+  try{
+    const file = await githubGetFile('catalog.json');
+    if (file){
+      const data = JSON.parse(base64ToUtf8(file.content));
+      data.designs = (data.designs || []).filter(d => d.slug !== item.slug);
+      await githubPutFile('catalog.json', utf8ToBase64(JSON.stringify(data, null, 2)), 'Borrar del catálogo: ' + item.name);
+    }
+    if (item.slug){
+      await githubDeleteFile('designs/' + item.slug + '.json', 'Borrar diseño: ' + item.name);
+      await githubDeleteFile('thumbs/' + item.slug + '.png', 'Borrar portada: ' + item.name);
+    }
+    init();
+  } catch(err){
+    alert('Error al borrar: ' + err.message);
+  }
+}
 
 // Diseños de respaldo, por si "catalog.json" todavía no existe en el repositorio
 // (el botón "Publicar" del visor lo crea solo la primera vez que se usa).
@@ -169,6 +260,15 @@ function renderGrid(designs){
     tag.textContent = priceLabel;
     thumbWrap.appendChild(tag);
 
+    if (isAdmin){
+      const del = document.createElement('div');
+      del.className = 'del-btn';
+      del.textContent = '🗑';
+      del.title = 'Borrar del catálogo';
+      del.addEventListener('click', e=>{ e.stopPropagation(); deleteDesign(item); });
+      thumbWrap.appendChild(del);
+    }
+
     const info = document.createElement('div');
     info.className = 'info';
     const name = document.createElement('div');
@@ -206,6 +306,7 @@ async function init(){
     }
   } catch(e){ /* usa el respaldo */ }
   document.getElementById('loadingState').classList.remove('show');
+  catalogData = data;
 
   const active = currentCategory();
   const all = data.designs;
@@ -215,6 +316,78 @@ async function init(){
   renderCatNav(all, active);
   renderGrid(filtered);
 }
+
+/* ---------------------------- Sesión: cualquiera puede iniciar sesión para
+   ver su biblioteca de compras; la cuenta admin además puede borrar diseños. ---------------------------- */
+let libraryMode = false;
+let currentUserEmail = null;
+
+async function checkAdmin(){
+  const { data } = await sb.auth.getSession();
+  currentUserEmail = data.session?.user?.email?.toLowerCase() || null;
+  isAdmin = !!(currentUserEmail && ADMIN_EMAILS.includes(currentUserEmail));
+  const btn = document.getElementById('adminBtn');
+  const libBtn = document.getElementById('libraryBtn');
+  if (currentUserEmail){
+    btn.textContent = isAdmin ? '🔓 ' + currentUserEmail + ' · Salir' : currentUserEmail + ' · Salir';
+    btn.classList.toggle('on', isAdmin);
+    libBtn.style.display = '';
+  } else {
+    btn.textContent = 'Iniciar sesión';
+    btn.classList.remove('on');
+    libBtn.style.display = 'none';
+    libraryMode = false;
+  }
+}
+
+async function loadMyPurchasedSrcs(){
+  const { data: userData } = await sb.auth.getUser();
+  if (!userData.user) return [];
+  const { data } = await sb.from('purchases').select('design_id').eq('user_id', userData.user.id);
+  return (data || []).map(r => r.design_id);
+}
+
+async function showLibrary(){
+  libraryMode = true;
+  document.getElementById('libraryBtn').classList.add('on');
+  document.getElementById('catNav').style.display = 'none';
+  document.getElementById('heroTitle').textContent = 'Tu biblioteca';
+  document.getElementById('loadingState').classList.add('show');
+  const purchasedSrcs = await loadMyPurchasedSrcs();
+  document.getElementById('loadingState').classList.remove('show');
+  const mine = catalogData.designs.filter(d => purchasedSrcs.includes(d.src));
+  renderGrid(mine);
+  if (!mine.length) document.getElementById('emptyState').textContent = 'Todavía no compraste ningún diseño.';
+}
+
+function exitLibrary(){
+  libraryMode = false;
+  document.getElementById('libraryBtn').classList.remove('on');
+  document.getElementById('catNav').style.display = '';
+  document.getElementById('emptyState').textContent = 'Todavía no hay diseños en esta categoría.';
+  const active = currentCategory();
+  document.getElementById('heroTitle').textContent = active ? ('Categoría: ' + active) : 'Elegí un diseño';
+  renderGrid(active ? catalogData.designs.filter(d=>(d.category||'').trim()===active) : catalogData.designs);
+}
+
+document.getElementById('libraryBtn').addEventListener('click', ()=>{
+  if (libraryMode) exitLibrary(); else showLibrary();
+});
+
+document.getElementById('adminBtn').addEventListener('click', async ()=>{
+  const { data } = await sb.auth.getSession();
+  if (data.session){ await sb.auth.signOut(); location.reload(); return; }
+  await sb.auth.signInWithOAuth({ provider:'google', options:{ redirectTo: window.location.href } });
+});
+sb.auth.onAuthStateChange(async ()=>{
+  await checkAdmin();
+  if (!libraryMode){
+    const active = currentCategory();
+    renderGrid(active ? catalogData.designs.filter(d=>(d.category||'').trim()===active) : catalogData.designs);
+  }
+});
+
+checkAdmin();
 init();
 </script>
 </body>
