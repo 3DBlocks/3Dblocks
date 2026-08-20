@@ -126,6 +126,16 @@
   }
   #editBar:has(.tool-btn.active) #paletteRow{ margin-top:2px; }
   #paletteRow{ display:flex; flex-wrap:wrap; gap:4px; max-width:200px; align-content:flex-start; }
+  #usedColorsPanel{
+    position:absolute; top:12px; right:12px; z-index:6;
+    display:flex; flex-direction:column; align-items:flex-end; gap:5px;
+    background:rgba(15,21,36,.88); backdrop-filter:blur(6px);
+    border:1px solid var(--border-soft); border-radius:10px; padding:8px;
+    max-width:150px;
+  }
+  #usedColorsPanel .label-sm{ align-self:flex-start; margin-bottom:2px; }
+  #usedColorsGrid{ display:flex; flex-wrap:wrap; gap:4px; justify-content:flex-end; }
+  #usedColorsGrid .palette-swatch{ width:22px; height:22px; }
   #editBar .tool-btn, #editBar #paintModeBtn{
     width:36px; height:36px; padding:0; font-size:16px; display:flex; align-items:center; justify-content:center;
   }
@@ -412,6 +422,7 @@
         <div id="paletteRow" style="display:none;"></div>
       </div>
       <div id="contextLabel">Contexto 3D</div>
+      <div id="usedColorsPanel" class="admin-only" style="display:none;"></div>
       <div id="axesLegend">
         <span><i style="background:#ff4d4d"></i>X</span>
         <span><i style="background:#4dff88"></i>Y (arriba)</span>
@@ -467,6 +478,7 @@
         <div class="stat-box"><div class="k">Dimensiones</div><div class="v" id="statDims">—</div></div>
         <div class="stat-box"><div class="k">Bloques totales</div><div class="v" id="statCount">—</div></div>
       </div>
+      <button class="btn wide admin-only" id="hollowBtn" style="width:100%; margin-top:10px;" title="Saca los bloques que quedan tapados por dentro (no se ven) — las piezas encastran por los bordes, no hace falta rellenar el centro de cada capa">🕳️ Vaciar interior (ahorrar piezas)</button>
     </div>
 
     <div class="section">
@@ -961,6 +973,88 @@ function rebuildMesh3D(){
   scene.add(instMesh); scene.add(edgeMesh); scene.add(seamMesh);
 
   layerPlane.position.y = currentLayer*voxelSize + voxelSize*1.001;
+  refreshUsedColorsPanel();
+}
+
+// Panel de colores "en uso" en el modelo actual — para tenerlos a mano sin buscar
+// en toda la paleta cuando estás retocando.
+// "Vaciar interior": saca los bloques que quedan completamente TAPADOS por otros
+// bloques de la misma capa (no se ven desde ningún lado) — las piezas encastran
+// por los bordes/dientes, así que el centro de una capa rellena no aporta nada,
+// solo gasta piezas. Recorre de arriba hacia abajo, capa por capa: un bloque solo
+// se saca si el de arriba (en la misma posición) también se sacó o no existe —
+// así nunca puede quedar un bloque flotando sin apoyo debajo.
+function hollowInteriorBlocks(){
+  if (!voxels.length){ setStatus('No hay ningún modelo cargado.', 'err'); return; }
+  if (!confirm('Esto va a sacar los bloques que quedan tapados por dentro de cada capa (no se ven desde afuera). No se puede deshacer. ¿Seguimos?')) return;
+
+  const byLayer = new Map(); // y -> Set("x,z")
+  const byPos = new Map();   // "x,y,z" -> bloque
+  let maxY = 0;
+  voxels.forEach(v=>{
+    const y = Math.round(v.y);
+    maxY = Math.max(maxY, y);
+    if (!byLayer.has(y)) byLayer.set(y, new Set());
+    byLayer.get(y).add(v.x+','+v.z);
+    byPos.set(v.x+','+y+','+v.z, v);
+  });
+
+  let openColumns = new Set(); // posiciones "x,z" que se vienen vaciando desde la capa de arriba
+  const removeSet = new Set();
+
+  for (let y = maxY; y >= 0; y--){
+    const set = byLayer.get(y);
+    if (!set){ openColumns = new Set(); continue; }
+    const stillOpen = new Set();
+    set.forEach(key=>{
+      const [x,z] = key.split(',').map(Number);
+      const isInterior = [[x+1,z],[x-1,z],[x,z+1],[x,z-1]].every(([nx,nz]) => set.has(nx+','+nz));
+      const hasAbove = byPos.has(x+','+(y+1)+','+z);
+      if (isInterior && (!hasAbove || openColumns.has(key))){
+        removeSet.add(byPos.get(x+','+y+','+z));
+        stillOpen.add(key);
+      }
+    });
+    openColumns = stillOpen;
+  }
+
+  const before = voxels.length;
+  const kept = voxels.filter(v=>!removeSet.has(v));
+  voxels.length = 0; voxels.push(...kept);
+  drawLayerDiagram(); rebuildMesh3D(); refreshLayerUI();
+  const removedCount = before - voxels.length;
+  setStatus('Interior vaciado: se sacaron ' + removedCount + ' bloques que no se veían (quedan ' + voxels.length + '). Nada quedó flotando.', 'ok');
+}
+document.getElementById('hollowBtn').addEventListener('click', hollowInteriorBlocks);
+
+function refreshUsedColorsPanel(){
+  const panel = document.getElementById('usedColorsPanel');
+  const grid = document.getElementById('usedColorsGrid') || (()=>{
+    const g = document.createElement('div'); g.id = 'usedColorsGrid';
+    const label = document.createElement('div');
+    label.className = 'label-sm'; label.textContent = 'Colores del modelo';
+    panel.appendChild(label); panel.appendChild(g);
+    return g;
+  })();
+  if (!voxels.length){ panel.style.display = 'none'; return; }
+  panel.style.display = paintMode ? 'flex' : 'none';
+  const used = Array.from(new Set(voxels.map(v=>v.color)));
+  grid.innerHTML = '';
+  used.forEach(hex=>{
+    const sw = document.createElement('div');
+    sw.className = 'palette-swatch' + (hex === paintColor ? ' active' : '');
+    sw.style.background = hex;
+    sw.title = hex;
+    sw.addEventListener('click', ()=>{
+      paintColor = hex;
+      document.getElementById('customColorInput').value = hex;
+      document.querySelectorAll('.palette-swatch').forEach(s=>s.classList.remove('active'));
+      grid.querySelectorAll('.palette-swatch').forEach(s=>s.classList.toggle('active', s.title===hex));
+      if (replaceSourceColor) applyGlobalColorReplace(hex);
+      else if (magicSelection) applyColorToMagicSelection(hex);
+    });
+    grid.appendChild(sw);
+  });
 }
 
 /* ---------------------------- Plano 2D de la capa (foco principal) ---------------------------- */
@@ -2355,10 +2449,11 @@ function endColorReplace(){
 document.getElementById('paintModeBtn').addEventListener('click', e=>{
   paintMode = !paintMode;
   e.currentTarget.classList.toggle('active', paintMode);
-  e.currentTarget.textContent = paintMode ? '✏️ Editar: encendido' : '✏️ Editar: apagado';
+  e.currentTarget.title = paintMode ? 'Edición encendida — tocá para apagar' : 'Activar edición: pintar/colocar/borrar en el plano 2D o el visor 3D';
   document.getElementById('paletteRow').style.display = paintMode ? 'flex' : 'none';
   document.getElementById('diagramCanvasWrap').classList.toggle('paint-cursor', paintMode);
   document.getElementById('contextCanvas3d').classList.toggle('paint-cursor', paintMode);
+  refreshUsedColorsPanel();
   setStatus(paintMode ? 'Modo edición activado: tocá (o mantené presionado y arrastrá) sobre el plano 2D o el visor 3D.' : '', paintMode ? 'ok' : '');
 });
 document.querySelectorAll('.tool-btn').forEach(btn=>{
