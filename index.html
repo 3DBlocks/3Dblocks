@@ -131,6 +131,7 @@
   .tool-btn.active{ background:var(--accent); color:#1a1305; border-color:var(--accent); }
   .tool-btn[data-tool="erase"].active{ background:#f2665c; border-color:#f2665c; color:#fff; }
   .tool-btn[data-tool="place"].active{ background:var(--accent-2); border-color:var(--accent-2); color:#08251f; }
+  .tool-btn[data-tool="replace"].active{ background:#5b8def; border-color:#5b8def; color:#fff; }
   .palette-swatch{
     width:19px; height:19px; border-radius:5px; cursor:pointer; border:2px solid var(--border);
     transition: transform .1s ease, border-color .1s ease;
@@ -386,6 +387,7 @@
       <button class="tool-btn active" id="toolPaintBtn" data-tool="paint" title="Pintar bloques existentes">🎨 Pintar</button>
       <button class="tool-btn" id="toolPlaceBtn" data-tool="place" title="Colocar bloques nuevos en celdas vacías">➕ Colocar</button>
       <button class="tool-btn" id="toolEraseBtn" data-tool="erase" title="Borrar bloques">🧹 Borrar</button>
+      <button class="tool-btn" id="toolReplaceBtn" data-tool="replace" title="Tocá un bloque de cualquier color y después elegí el color nuevo — cambia TODOS los bloques de ese color en el modelo entero, no solo esta capa">🔁 Reemplazar</button>
       <button class="btn sm" id="paintModeBtn" title="Activar edición: pintar/colocar/borrar en el plano 2D o el visor 3D">✏️ Editar: apagado</button>
     </div>
     <div id="paletteRow" style="display:none;"></div>
@@ -2253,13 +2255,14 @@ document.getElementById('deleteBtn').addEventListener('click', async ()=>{
 });
 
 
-/* ---------------------------- Editar bloques: Pintar / Colocar / Borrar, con arrastre continuo ---------------------------- */
+/* ---------------------------- Editar bloques: Pintar / Colocar / Borrar / Reemplazar, con arrastre continuo ---------------------------- */
 let paintMode = false;
 let paintColor = '#f2b134';
-let activeTool = 'paint'; // 'paint' | 'place' | 'erase'
+let activeTool = 'paint'; // 'paint' | 'place' | 'erase' | 'replace'
 let lastVisibleVoxels = [];
 let isDragEditing = false;
 let lastEditedCellKey = null; // evita repetir la misma acción mil veces mientras se arrastra sobre la misma celda
+let replaceSourceColor = null; // color "origen" elegido con la herramienta Reemplazar, esperando el color nuevo
 
 // Genera 36 colores (rueda de matices + una fila de grises/neutros) directo por
 // código, en vez de escribir 36 líneas repetidas en el HTML.
@@ -2306,6 +2309,8 @@ document.querySelectorAll('.tool-btn').forEach(btn=>{
     document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
     activeTool = btn.dataset.tool;
+    replaceSourceColor = null; // cambiar de herramienta cancela un reemplazo a medio hacer
+    clearMagicSelection();
   });
 });
 function applyColorToMagicSelection(color){
@@ -2319,6 +2324,17 @@ function applyColorToMagicSelection(color){
   drawLayerDiagram(); rebuildMesh3D(); refreshLayerUI();
   return true;
 }
+// Reemplaza un color por otro en TODO el modelo (todas las capas de una), no solo
+// la zona pegada de una capa — para casos tipo "todo lo que está negro, a blanco".
+function applyGlobalColorReplace(newColor){
+  if (!replaceSourceColor) return false;
+  let count = 0;
+  voxels.forEach(v=>{ if (v.color === replaceSourceColor){ v.color = newColor; count++; } });
+  replaceSourceColor = null;
+  drawLayerDiagram(); rebuildMesh3D(); refreshLayerUI();
+  setStatus('Listo — se cambiaron ' + count + ' bloques en todo el modelo.', 'ok');
+  return true;
+}
 document.getElementById('paletteRow').addEventListener('click', e=>{
   const sw = e.target.closest('.palette-swatch');
   if (!sw) return;
@@ -2326,13 +2342,15 @@ document.getElementById('paletteRow').addEventListener('click', e=>{
   sw.classList.add('active');
   paintColor = sw.dataset.color;
   document.getElementById('customColorInput').value = paintColor;
-  applyColorToMagicSelection(paintColor);
+  if (replaceSourceColor) applyGlobalColorReplace(paintColor);
+  else applyColorToMagicSelection(paintColor);
 });
 document.getElementById('paletteRow').addEventListener('input', e=>{
   if (e.target.id !== 'customColorInput') return;
   paintColor = e.target.value;
   document.querySelectorAll('.palette-swatch').forEach(s=>s.classList.remove('active'));
-  applyColorToMagicSelection(paintColor);
+  if (replaceSourceColor) applyGlobalColorReplace(paintColor);
+  else applyColorToMagicSelection(paintColor);
 });
 
 // Aplica la herramienta activa a una celda (gx,gz) de la capa actual.
@@ -2507,6 +2525,14 @@ window.addEventListener('pointerup', e=>{
     const { gx, gz } = boxSelectStart;
     if (activeTool === 'place'){
       applyToolAtCell(gx, gz);
+    } else if (activeTool === 'replace'){
+      const hit = voxels.find(v => v.x===gx && Math.round(v.y)===currentLayer && v.z===gz);
+      if (hit){
+        replaceSourceColor = hit.color;
+        setStatus('Elegí el color nuevo en la paleta para reemplazar ese color en TODO el modelo.', 'ok');
+      } else {
+        setStatus('No hay ningún bloque ahí.', 'err');
+      }
     } else {
       const sel = floodSelectSameColor(gx, gz);
       if (sel && sel.size){
@@ -2591,6 +2617,19 @@ renderer.domElement.addEventListener('pointerup', e=>{
     // CLIC simple sobre el visor 3D: selección mágica por color (igual que en el plano 2D)
     if (activeTool === 'place'){
       apply3DEditAt(e);
+    } else if (activeTool === 'replace'){
+      if (instMesh && lastVisibleVoxels.length){
+        const hit = cellFrom3DEvent(e, instMesh);
+        if (hit){
+          const v = lastVisibleVoxels[hit.instanceId];
+          if (v){
+            replaceSourceColor = v.color;
+            setStatus('Elegí el color nuevo en la paleta para reemplazar ese color en TODO el modelo.', 'ok');
+          }
+        } else {
+          setStatus('Tocá directo sobre un bloque.', 'err');
+        }
+      }
     } else if (instMesh && lastVisibleVoxels.length){
       const hit = cellFrom3DEvent(e, instMesh);
       if (hit){
