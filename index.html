@@ -739,6 +739,24 @@ function fitAxesToModel(){
   axesHelper.scale.setScalar(len);
 }
 
+// Recuadro cyan alrededor de TODA la selección múltiple (herramienta "Selección"),
+// como en Studio 2.0 — además del contorno cyan de cada bloque individual.
+const selectionBoxHelper = new THREE.Box3Helper(new THREE.Box3(), 0x22d3ee);
+selectionBoxHelper.visible = false;
+scene.add(selectionBoxHelper);
+function updateSelectionBoxHelper(){
+  if (!boxSelection || !boxSelection.size){ selectionBoxHelper.visible = false; return; }
+  const vs = selectionVoxels();
+  if (!vs.length){ selectionBoxHelper.visible = false; return; }
+  const bb = selectionBoundingBox(vs);
+  const offsetX = (dims.x*voxelSize)/2, offsetZ = (dims.z*voxelSize)/2;
+  selectionBoxHelper.box.set(
+    new THREE.Vector3(bb.minX*voxelSize - offsetX - voxelSize*0.5, bb.minY*voxelSize, bb.minZ*voxelSize - offsetZ - voxelSize*0.5),
+    new THREE.Vector3(bb.maxX*voxelSize - offsetX + voxelSize*0.5, (bb.maxY+1)*voxelSize, bb.maxZ*voxelSize - offsetZ + voxelSize*0.5)
+  );
+  selectionBoxHelper.visible = true;
+}
+
 /* highlight plane marking the current layer height, for spatial context */
 const layerPlaneGeo = new THREE.PlaneGeometry(30, 30);
 const layerPlaneMat = new THREE.MeshBasicMaterial({ color:0xf2b134, transparent:true, opacity:0.05, side:THREE.DoubleSide });
@@ -1020,13 +1038,15 @@ function rebuildMesh3D(){
     const isCurrentLayer = showFullDesign || Math.round(v.y) === currentLayer;
     if (isCurrentLayer){ tmpColor.set(v.color); } else { tmpColor.copy(belowLayerColor); }
     instMesh.setColorAt(i, tmpColor);
-    // Resaltado de selección: SOLO el contorno cambia a verde neón (como Studio
-    // 2.0) — el relleno del bloque se queda siempre con su color real, nunca lo tapa.
+    // Resaltado de selección: SOLO el contorno cambia de color — el relleno del
+    // bloque se queda siempre con su color real, nunca lo tapa. La selección
+    // múltiple (herramienta "Selección") usa cyan, como en Studio 2.0; "Pintar" y
+    // "Cambio" siguen en verde neón.
+    const isBoxSelected = boxSelection && boxSelection.has(v.x+','+Math.round(v.y)+','+v.z);
     const isHighlighted =
       (magicSelection && Math.round(v.y)===currentLayer && magicSelection.has(v.x+','+v.z)) ||
-      (replaceSourceColor && v.color === replaceSourceColor) ||
-      (boxSelection && boxSelection.has(v.x+','+Math.round(v.y)+','+v.z));
-    edgeColor.set(isHighlighted ? '#39ff6a' : '#000000');
+      (replaceSourceColor && v.color === replaceSourceColor);
+    edgeColor.set(isBoxSelected ? '#22d3ee' : (isHighlighted ? '#39ff6a' : '#000000'));
     edgeMesh.setColorAt(i, edgeColor);
   });
   instMesh.instanceMatrix.needsUpdate = true;
@@ -1368,6 +1388,14 @@ async function generateInstructionsPDF(){
 
   showFullDesign = false; showBelowLayers = true; // capa actual con su color real, las de abajo atenuadas — así se ve qué es nuevo
 
+  // Resolución alta SOLO para la captura (no cambia el tamaño visible del panel en
+  // pantalla) — así la figura sale nítida aunque la agrandemos en la hoja.
+  const origSize = new THREE.Vector2();
+  renderer.getSize(origSize);
+  const origAspect = camera.aspect;
+  renderer.setSize(1500, 1500, false);
+  camera.aspect = 1;
+
   try{
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit:'mm', format:'a4', orientation:'portrait' });
@@ -1388,7 +1416,7 @@ async function generateInstructionsPDF(){
     doc.text('Guía de armado por capas — vista en 3D', pageW/2, 136, { align:'center' });
     doc.text(voxels.length + ' bloques · ' + (maxLayer+1) + ' capas', pageW/2, 143, { align:'center' });
 
-    const margin = 15;
+    const margin = 8;
     const imgSize = pageW - margin*2;
 
     for (let layer=0; layer<=maxLayer; layer++){
@@ -1396,8 +1424,8 @@ async function generateInstructionsPDF(){
       rebuildMesh3D(); // con showFullDesign=false y showBelowLayers=true: esta capa a color, las de abajo gris
       instMesh.material = realMat;
       instMesh.castShadow = true; instMesh.receiveShadow = true;
-      edgeMesh.visible = false; seamMesh.visible = false;
-      positionCameraFixedAngle(fullBox, 40, 38, 2.1); // ángulo fijo ~40°, igual en todas las páginas
+      edgeMesh.visible = true; seamMesh.visible = false; // "malla": el contorno de cada bloque ayuda a distinguirlos en la hoja
+      positionCameraFixedAngle(fullBox, 30, 38, 2.1); // ángulo fijo a 30°, igual en todas las páginas
       renderer.render(scene, camera);
       const imgData = renderer.domElement.toDataURL('image/png');
 
@@ -1452,6 +1480,8 @@ async function generateInstructionsPDF(){
     axesHelper.visible = wasAxesVisible;
     grid.visible = wasGridVisible;
     currentLayer = wasCurrentLayer; showFullDesign = wasFullDesign; showBelowLayers = wasShowBelow;
+    renderer.setSize(origSize.x, origSize.y, false);
+    camera.aspect = origAspect;
     rebuildMesh3D();
     camera.position.copy(wasCamPos);
     if (wasShow2D) setView('2d');
@@ -1532,6 +1562,7 @@ function drawLayerDiagram(){
   diagCtx.rotate(-Math.PI/2);
   diagCtx.fillText('Z →', 0, 0);
   diagCtx.restore();
+  if (typeof drawBoxSelectionOverlay === 'function') drawBoxSelectionOverlay();
 }
 function roundRect(ctx,x,y,w,h,r){
   ctx.beginPath();
@@ -2935,11 +2966,13 @@ let clipboard = null;    // bloques copiados: [{dx,dy,dz,color}, ...] relativos 
 function clearBoxSelection(){
   boxSelection = null;
   updateSelectionStatusUI();
+  updateSelectionBoxHelper();
   rebuildMesh3D();
 }
 function setBoxSelection(set){
   boxSelection = (set && set.size) ? set : null;
   updateSelectionStatusUI();
+  updateSelectionBoxHelper();
   rebuildMesh3D();
 }
 function updateSelectionStatusUI(){
@@ -3098,6 +3131,32 @@ function drawMagicSelectionOverlay(){
     diagCtx.fillRect(ox+x*cell, oy+z*cell, cell, cell);
     diagCtx.strokeRect(ox+x*cell+1, oy+z*cell+1, cell-2, cell-2);
   });
+  diagCtx.restore();
+}
+
+// Selección múltiple (herramienta "Selección") en el plano 2D: recuadro cyan
+// alrededor de todo el grupo, igual que en el visor 3D y que Studio 2.0.
+function drawBoxSelectionOverlay(){
+  if (!boxSelection || !boxSelection.size) return;
+  const wrap = document.getElementById('diagramCanvasWrap');
+  const W = wrap.clientWidth, H = wrap.clientHeight;
+  const pad = 28;
+  const cell = Math.max(4, Math.min((W-pad*2)/dims.x, (H-pad*2)/dims.z));
+  const gridW = cell*dims.x, gridH = cell*dims.z;
+  const ox = (W-gridW)/2, oy = (H-gridH)/2;
+  let minX=Infinity, maxX=-Infinity, minZ=Infinity, maxZ=-Infinity;
+  boxSelection.forEach(key=>{
+    const [x,,z] = key.split(',').map(Number);
+    if (Math.round(Number(key.split(',')[1])) !== currentLayer) return;
+    minX=Math.min(minX,x); maxX=Math.max(maxX,x); minZ=Math.min(minZ,z); maxZ=Math.max(maxZ,z);
+  });
+  if (minX===Infinity) return; // la selección no tiene bloques en esta capa
+  diagCtx.save();
+  diagCtx.fillStyle = 'rgba(34,211,238,0.16)';
+  diagCtx.strokeStyle = '#22d3ee';
+  diagCtx.lineWidth = 2;
+  diagCtx.fillRect(ox+minX*cell, oy+minZ*cell, (maxX-minX+1)*cell, (maxZ-minZ+1)*cell);
+  diagCtx.strokeRect(ox+minX*cell+1, oy+minZ*cell+1, (maxX-minX+1)*cell-2, (maxZ-minZ+1)*cell-2);
   diagCtx.restore();
 }
 
