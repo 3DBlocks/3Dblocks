@@ -403,6 +403,7 @@
       <div id="diagramHead">
         <div id="diagramHeadRow">
           <div id="diagramTitle">Plano de la capa — vista superior</div>
+          <button class="btn sm" id="renderBtn" title="Genera una foto de presentación con luces e iluminación real, según cómo esté orientado el modelo ahora mismo">🖼️ Render</button>
           <button class="btn sm" id="printInstructionsBtn" title="Descargar un PDF con todas las capas, listo para imprimir">🖨️ Imprimir instrucciones</button>
         </div>
         <div id="diagramSub">Coloca <b id="diagramCount">0</b> bloques nuevos en esta capa. Los bloques atenuados ya están colocados debajo.</div>
@@ -1118,6 +1119,50 @@ function drawPrintLayer(ctx, W, H, layer){
     }
   });
 }
+
+/* ---------------------------- Foto de presentación (con luces e iluminación real) ----------------------------
+   El visor normal usa un material plano a propósito (para que nunca aparezca una
+   sombra rara entre bloques). Para esta foto, cambiamos el material del modelo por
+   uno que sí responde a las luces que ya están puestas en la escena, sacamos la
+   captura, y lo devolvemos todo a como estaba — el visor en sí nunca cambia.
+   Usa la orientación/cámara actual, tal como esté el modelo en pantalla. */
+async function generatePresentationRender(){
+  if (!voxels.length || !instMesh){ setStatus('No hay ningún diseño cargado.', 'err'); return; }
+  setLoading(true, 'Generando la foto…');
+  await new Promise(r=>setTimeout(r, 30)); // deja pintar el mensaje antes de la pausa de trabajo
+
+  const wasFullDesign = showFullDesign;
+  if (!showFullDesign){ showFullDesign = true; rebuildMesh3D(); } // se ve todo el modelo con sus colores reales
+
+  const oldMat = instMesh.material;
+  const realMat = new THREE.MeshStandardMaterial({ roughness: 0.62, metalness: 0.04 });
+  instMesh.material = realMat;
+  const wasEdgeVisible = edgeMesh.visible;
+  edgeMesh.visible = false; // el contorno grueso no queda bien en una foto con luces reales
+  const wasSeamVisible = seamMesh.visible;
+  seamMesh.visible = false;
+
+  renderer.render(scene, camera);
+  const dataUrl = renderer.domElement.toDataURL('image/png');
+
+  // Devolver todo a como estaba en el visor
+  instMesh.material = oldMat;
+  realMat.dispose();
+  edgeMesh.visible = wasEdgeVisible;
+  seamMesh.visible = wasSeamVisible;
+  if (!wasFullDesign){ showFullDesign = false; rebuildMesh3D(); }
+  renderer.render(scene, camera);
+
+  const a = document.createElement('a');
+  const baseName = (document.getElementById('modelNameText').textContent || 'diseno')
+    .replace(/\.(dae|vox|json)\b.*/i, '').trim().replace(/[^\w\-]+/g, '_') || 'diseno';
+  a.href = dataUrl; a.download = baseName + '_render.png';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+
+  setLoading(false);
+  setStatus('Foto de presentación descargada: ' + baseName + '_render.png', 'ok');
+}
+document.getElementById('renderBtn').addEventListener('click', generatePresentationRender);
 
 async function generateInstructionsPDF(){
   if (!voxels.length){ setStatus('No hay ningún diseño cargado para generar instrucciones.', 'err'); return; }
