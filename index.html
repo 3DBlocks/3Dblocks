@@ -1051,7 +1051,12 @@ function rebuildMesh3D(){
     const isHighlighted =
       (magicSelection && Math.round(v.y)===currentLayer && magicSelection.has(v.x+','+v.z)) ||
       (replaceSourceColor && v.color === replaceSourceColor);
-    edgeColor.set(isBoxSelected ? '#22d3ee' : (isHighlighted ? '#39ff6a' : '#000000'));
+    // En bloques oscuros/negros, un contorno negro no se nota (todo se ve como una
+    // sola masa) — así que el contorno pasa a blanco solo ahí; en el resto de
+    // colores (más claros) se mantiene negro, como siempre.
+    const lum = tmpColor.r*0.299 + tmpColor.g*0.587 + tmpColor.b*0.114;
+    const defaultEdgeColor = lum < 0.35 ? '#ffffff' : '#000000';
+    edgeColor.set(isBoxSelected ? '#22d3ee' : (isHighlighted ? '#39ff6a' : defaultEdgeColor));
     edgeMesh.setColorAt(i, edgeColor);
   });
   instMesh.instanceMatrix.needsUpdate = true;
