@@ -62,6 +62,15 @@
       "price": 0,
       "thumb": "thumbs/sasuke-uchiha.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/sasuke-uchiha.json"
+    },
+    {
+      "slug": "lucario",
+      "name": "lucario",
+      "description": "pokemon",
+      "category": "pokemon",
+      "price": 7,
+      "thumb": "thumbs/lucario.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/lucario.json"
     }
   ]
 }
