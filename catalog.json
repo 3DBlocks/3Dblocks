@@ -44,6 +44,15 @@
       "price": 7,
       "thumb": "thumbs/wartortle.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/wartortle.json"
+    },
+    {
+      "slug": "naruto",
+      "name": "Naruto",
+      "description": "Naruto uzumaki",
+      "category": "naruto",
+      "price": 0,
+      "thumb": "thumbs/naruto.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/naruto.json"
     }
   ]
 }
