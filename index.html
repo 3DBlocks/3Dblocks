@@ -1129,7 +1129,13 @@ function drawPrintLayer(ctx, W, H, layer){
 async function generatePresentationRender(){
   if (!voxels.length || !instMesh){ setStatus('No hay ningún diseño cargado.', 'err'); return; }
   setLoading(true, 'Generando la foto…');
-  await new Promise(r=>setTimeout(r, 30)); // deja pintar el mensaje antes de la pausa de trabajo
+
+  // Si estás viendo el plano 2D, el visor 3D queda oculto (display:none) y la
+  // cámara no captura nada útil — lo cambiamos a 3D por un instante para sacar
+  // la foto, y volvemos a como estabas al terminar.
+  const wasShow2D = mainSplit.classList.contains('show-2d');
+  if (wasShow2D) setView('3d');
+  await new Promise(r=>setTimeout(r, wasShow2D ? 90 : 30)); // deja que el layout/resize del canvas termine
 
   const wasFullDesign = showFullDesign;
   if (!showFullDesign){ showFullDesign = true; rebuildMesh3D(); } // se ve todo el modelo con sus colores reales
@@ -1151,6 +1157,7 @@ async function generatePresentationRender(){
   edgeMesh.visible = wasEdgeVisible;
   seamMesh.visible = wasSeamVisible;
   if (!wasFullDesign){ showFullDesign = false; rebuildMesh3D(); }
+  if (wasShow2D) setView('2d');
   renderer.render(scene, camera);
 
   const a = document.createElement('a');
