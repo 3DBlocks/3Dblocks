@@ -373,7 +373,7 @@
       </div>
       <div id="canvasHost"></div>
       <div id="ctxToolbar">
-        <button class="btn icon" id="resetViewBtn" title="Centrar vista">⤢</button>
+        <button class="btn icon" id="resetViewBtn" title="Buscar y centrar el diseño en la pantalla">🔍 Buscar</button>
         <button class="btn icon" id="rotateBtn" title="Rotación automática">↻</button>
         <button class="btn icon active" id="belowLayersBtn" title="Mostrar/ocultar capas ya construidas (en gris)">▤ Gris</button>
         <button class="btn icon" id="fullViewBtn" title="Ver el diseño completo, con todos los colores">👁 Completo</button>
@@ -697,12 +697,18 @@ class SimpleOrbitControls {
     }, {passive:true});
     function dist(a,b){ return Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY); }
   }
-  focus(box){
+  focus(box, instant){
     const size = new THREE.Vector3(); box.getSize(size);
     const center = new THREE.Vector3(); box.getCenter(center);
     this.target.copy(center);
     const maxDim = Math.max(size.x, size.y, size.z, 1);
     this.radius = maxDim * 1.9 + 1.5;
+    if (instant){
+      // salta directo ahí, sin esperar la animación suave — para "encontrar" el
+      // diseño ya, en vez de que tarde en llegar si estaba lejísimos de la cámara.
+      this._ta.copy(this.target);
+      this._ra = this.radius;
+    }
   }
   update(dt){
     if (this.autoRotate && !this._dragging) this.azimuth += this.autoRotateSpeed*dt;
@@ -1030,7 +1036,7 @@ function setVoxels(list, opts){
   refreshLayerUI();
   document.getElementById('statDims').textContent = `${dims.x}×${dims.y}×${dims.z}`;
   document.getElementById('statCount').textContent = `${voxels.length}`;
-  controls.focus(centeredBounds());
+  buscarDiseno();
   fitAxesToModel();
 }
 
@@ -1387,29 +1393,52 @@ function buildVoxelsFromInstances(instances){
   if (!instances || instances.length < 2) return null;
   function axisUnit(axisMin, axisMax){
     const vals = Array.from(new Set(instances.map(p => Math.round(((p[axisMin]+p[axisMax])/2)*20)/20))).sort((a,b)=>a-b);
-    let minGap = Infinity;
+    const gaps = [];
     for (let i=1;i<vals.length;i++){
       const gap = vals[i]-vals[i-1];
-      if (gap > 0.05 && gap < minGap) minGap = gap;
+      if (gap > 0.05) gaps.push(gap);
     }
-    return (minGap===Infinity || minGap<=0) ? 1 : minGap;
+    if (!gaps.length) return 1;
+    // Usamos la separación MÁS COMÚN entre piezas (no la más chica): si el .dae mezcla
+    // piezas normales con alguna diminuta, esa piecita rara ya no arruina la escala
+    // de todo el modelo. Agrupamos separaciones parecidas antes de contar.
+    const buckets = new Map();
+    gaps.forEach(g=>{
+      const key = Math.round(g*4)/4;
+      buckets.set(key, (buckets.get(key)||0)+1);
+    });
+    let bestKey = null, bestCount = 0;
+    buckets.forEach((count,key)=>{
+      // en empate, preferimos la separación MÁS GRANDE — es la opción más segura
+      // cuando hay pocas piezas para comparar (menos riesgo de inflar el conteo).
+      if (count>bestCount || (count===bestCount && key>bestKey)){ bestCount=count; bestKey=key; }
+    });
+    return bestKey || Math.min(...gaps);
   }
   const ux = axisUnit('minX','maxX'), uy = axisUnit('minY','maxY'), uz = axisUnit('minZ','maxZ');
+  const MAX_SPAN = 24; // ninguna pieza real de un set (placas, ladrillos largos) ocupa más que esto de un lado
   function span(minV, maxV, unit){
     const start = Math.round(minV/unit);
-    const count = Math.max(1, Math.round((maxV-minV)/unit));
+    let count = Math.max(1, Math.round((maxV-minV)/unit));
+    if (count > MAX_SPAN) count = MAX_SPAN;
     return { start, end: start+count-1 };
   }
   const occ = new Map();
-  instances.forEach(p=>{
+  const MAX_TOTAL = 300000; // tope de seguridad: deja margen amplio para diseños reales de 20-30 mil piezas
+  outer:
+  for (const p of instances){
     const rx = span(p.minX, p.maxX, ux), ry = span(p.minY, p.maxY, uy), rz = span(p.minZ, p.maxZ, uz);
     for (let gx=rx.start; gx<=rx.end; gx++)
       for (let gy=ry.start; gy<=ry.end; gy++)
         for (let gz=rz.start; gz<=rz.end; gz++){
           const key = gx+','+gy+','+gz;
           if (!occ.has(key)) occ.set(key, { x:gx, y:gy, z:gz, color: p.color || '#f2b134' });
+          if (occ.size > MAX_TOTAL) break outer;
         }
-  });
+  }
+  if (occ.size > MAX_TOTAL){
+    throw new Error('Este archivo generó demasiadas celdas (más de ' + MAX_TOTAL.toLocaleString('es') + '); alguna pieza del .dae tiene una medida fuera de lo normal. Probá exportarlo de nuevo desde Studio 2.0, o usá la opción de voxelizado por resolución en su lugar.');
+  }
   const list = Array.from(occ.values());
   return list.length ? normalize(list) : null;
 }
@@ -1945,7 +1974,7 @@ async function tryLoadModelFromUrl(){
       const obj = decodeModelFromEmbedded(m);
       const designId = 'embed:' + m.slice(0,60);
       const price = Number(obj.price_usd || 0);
-      if (price > 0 && !(await checkPurchase(designId))) await showPaywall(designId, price);
+      if (!isAdmin && price > 0 && !(await checkPurchase(designId))) await showPaywall(designId, price);
       const list = parseJsonModel(obj);
       voxelSize = 1;
       setVoxels(list);
@@ -1969,7 +1998,7 @@ async function tryLoadModelFromUrl(){
       setLoading(false);
       const designId = src;
       const price = Number(obj.price_usd || 0);
-      if (price > 0 && !(await checkPurchase(designId))) await showPaywall(designId, price);
+      if (!isAdmin && price > 0 && !(await checkPurchase(designId))) await showPaywall(designId, price);
       const list = parseJsonModel(obj);
       voxelSize = 1;
       setVoxels(list);
@@ -2002,7 +2031,21 @@ function enterViewerOnlyMode(){
   if (demoSection) demoSection.style.display = 'none';
 }
 
-document.getElementById('resetViewBtn').addEventListener('click', ()=> controls.focus(centeredBounds()));
+function buscarDiseno(){
+  if (!voxels.length) return;
+  const box = centeredBounds();
+  const size = new THREE.Vector3(); box.getSize(size);
+  const maxDim = Math.max(size.x, size.y, size.z, 1);
+  // Ajusta hasta dónde ve la cámara según el tamaño real del modelo — así un diseño
+  // enorme (o uno diminuto) nunca queda "recortado" ni demasiado lejos para verse.
+  camera.near = Math.max(0.01, maxDim*0.001);
+  camera.far = Math.max(2000, maxDim*12);
+  camera.updateProjectionMatrix();
+  controls.minRadius = Math.max(0.5, maxDim*0.03);
+  controls.maxRadius = Math.max(200, maxDim*25);
+  controls.focus(box, true);
+}
+document.getElementById('resetViewBtn').addEventListener('click', buscarDiseno);
 document.getElementById('rotateBtn').addEventListener('click', e=>{
   controls.autoRotate = !controls.autoRotate;
   e.currentTarget.classList.toggle('active', controls.autoRotate);
