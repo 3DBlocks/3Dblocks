@@ -387,7 +387,7 @@
       <button class="tool-btn active" id="toolPaintBtn" data-tool="paint" title="Pintar bloques existentes">🎨 Pintar</button>
       <button class="tool-btn" id="toolPlaceBtn" data-tool="place" title="Colocar bloques nuevos en celdas vacías">➕ Colocar</button>
       <button class="tool-btn" id="toolEraseBtn" data-tool="erase" title="Borrar bloques">🧹 Borrar</button>
-      <button class="tool-btn" id="toolReplaceBtn" data-tool="replace" title="Tocá un bloque de cualquier color y después elegí el color nuevo — cambia TODOS los bloques de ese color en el modelo entero, no solo esta capa">🔁 Reemplazar</button>
+      <button class="tool-btn" id="toolReplaceBtn" data-tool="replace" title="Tocá un bloque de cualquier color: se resaltan TODOS los bloques de ese color en el modelo entero. Después elegí el color nuevo en la paleta para cambiarlos a todos juntos.">🔁 Cambio</button>
       <button class="btn sm" id="paintModeBtn" title="Activar edición: pintar/colocar/borrar en el plano 2D o el visor 3D">✏️ Editar: apagado</button>
     </div>
     <div id="paletteRow" style="display:none;"></div>
@@ -495,8 +495,9 @@
 
     <div class="section admin-only">
       <p class="section-title">Compartir manualmente</p>
-      <p style="font-size:10.5px; color:var(--text-faint); margin:10px 0 9px; line-height:1.5;">Descarga tu diseño ya procesado como .json — mucho más liviano que el .dae original. Quien lo reciba solo necesita este visor (3DBlock) y tu .json, sin Studio 2.0 ni el archivo original.</p>
-      <button class="btn wide" id="exportBtn" style="width:100%; margin-bottom:8px;">⇩ Descargar diseño (.json)</button>
+      <p style="font-size:10.5px; color:var(--text-faint); margin:10px 0 9px; line-height:1.5;">Guardá tu diseño ya procesado como .json (mucho más liviano que el .dae original) — quien lo reciba solo necesita este visor y ese archivo, sin Studio 2.0.</p>
+      <button class="btn wide primary" id="saveBtn" style="width:100%; margin-bottom:8px;">💾 Guardar</button>
+      <button class="btn wide" id="exportBtn" style="width:100%; margin-bottom:8px;">⇩ Descargar copia nueva (.json)</button>
       <p style="font-size:10.5px; color:var(--text-faint); margin:2px 0 9px; line-height:1.5;">O genera un código QR que abre este visor con el diseño ya cargado, listo para armar — sin botón de importar. Los diseños chicos van comprimidos directo en el código; los grandes necesitan que subas tu .json a algún sitio y pegues ese link (te lo pide automáticamente si hace falta).</p>
       <button class="btn wide" id="qrBtn" style="width:100%;">▦ Generar código QR</button>
     </div>
@@ -938,6 +939,12 @@ function rebuildMesh3D(){
     // (mismo estilo que el plano 2D), para que también se vea marcada en el visor 3D.
     if (magicSelection && Math.round(v.y)===currentLayer && magicSelection.has(v.x+','+v.z)){
       tmpColor.lerp(new THREE.Color('#2dd4bf'), 0.55);
+    }
+    // Herramienta "Cambio": resalta en un tono fuerte TODOS los bloques de ese
+    // color, en cualquier capa — así se ve de verdad qué se va a cambiar antes
+    // de elegir el color nuevo.
+    if (replaceSourceColor && v.color === replaceSourceColor){
+      tmpColor.set('#ff7a1a');
     }
     instMesh.setColorAt(i, tmpColor);
   });
@@ -1888,8 +1895,28 @@ let lastVoxelizerTris = null; // triángulos de un .obj/.stl importado, para pod
 
 /* ---------------------------- Formato .json propio ---------------------------- */
 function parseJsonModel(obj){
-  if (!obj || !Array.isArray(obj.voxels)) throw new Error('El .json debe tener la forma { voxels: [[x,y,z,"#hex"], ...] }');
-  return normalize(obj.voxels.map(v=>({x:v[0],y:v[1],z:v[2],color:v[3]||'#f2b134'})));
+  if (!obj) throw new Error('El .json debe tener la forma { voxels: [[x,y,z,"#hex"], ...] }');
+  // Formato liviano nuevo: { pal:["#hex",...], v:[[x,y,z,índiceDeColor],...] } — el
+  // color no se repite en cada bloque, así el archivo pesa mucho menos.
+  if (Array.isArray(obj.pal) && Array.isArray(obj.v)){
+    return normalize(obj.v.map(v=>({x:v[0], y:v[1], z:v[2], color: obj.pal[v[3]] || '#f2b134'})));
+  }
+  if (Array.isArray(obj.voxels)){
+    return normalize(obj.voxels.map(v=>({x:v[0],y:v[1],z:v[2],color:v[3]||'#f2b134'})));
+  }
+  throw new Error('El .json debe tener la forma { voxels: [[x,y,z,"#hex"], ...] }');
+}
+
+// Arma el formato liviano (paleta + índices) a partir de la lista de bloques actual.
+function buildCompactPayload(){
+  const palette = [];
+  const paletteIndex = new Map();
+  const v = voxels.map(vx=>{
+    let idx = paletteIndex.get(vx.color);
+    if (idx === undefined){ idx = palette.length; palette.push(vx.color); paletteIndex.set(vx.color, idx); }
+    return [vx.x, vx.y, vx.z, idx];
+  });
+  return { pal: palette, v };
 }
 
 /* ---------------------------- Carga de archivos ---------------------------- */
@@ -1901,6 +1928,7 @@ async function handleFile(file){
   const ext = file.name.split('.').pop().toLowerCase();
   setLoading(true, 'Procesando ' + file.name + '…');
   document.getElementById('voxelizeSection').style.display = 'none';
+  savedFileHandle = null; // un modelo nuevo no debe pisar el archivo guardado del anterior
   try{
     if (ext==='vox'){
       const buf = await file.arrayBuffer();
@@ -2183,7 +2211,7 @@ document.getElementById('publishBtn').addEventListener('click', async ()=>{
 
   try{
     statusEl.textContent = 'Subiendo diseño…';
-    const payload = { voxels: voxels.map(v => [v.x, v.y, v.z, v.color]) };
+    const payload = buildCompactPayload();
     if (price > 0) payload.price_usd = price;
     await githubPutFile('designs/' + slug + '.json', utf8ToBase64(JSON.stringify(payload)), 'Agregar diseño: ' + name);
 
@@ -2262,7 +2290,29 @@ let activeTool = 'paint'; // 'paint' | 'place' | 'erase' | 'replace'
 let lastVisibleVoxels = [];
 let isDragEditing = false;
 let lastEditedCellKey = null; // evita repetir la misma acción mil veces mientras se arrastra sobre la misma celda
-let replaceSourceColor = null; // color "origen" elegido con la herramienta Reemplazar, esperando el color nuevo
+let replaceSourceColor = null; // color "origen" elegido con la herramienta Cambio, esperando el color nuevo
+let showFullDesignBeforeReplace = null; // recuerda cómo estaba la vista, para devolverla al terminar "Cambio"
+
+function startColorReplaceSelection(color){
+  replaceSourceColor = color;
+  if (showFullDesignBeforeReplace === null){
+    showFullDesignBeforeReplace = showFullDesign;
+    showFullDesign = true;
+    const b = document.getElementById('fullViewBtn');
+    if (b) b.classList.add('active');
+  }
+  rebuildMesh3D();
+  setStatus('Bloques resaltados en naranja = los que se van a cambiar. Elegí el color nuevo en la paleta.', 'ok');
+}
+function endColorReplace(){
+  replaceSourceColor = null;
+  if (showFullDesignBeforeReplace !== null){
+    showFullDesign = showFullDesignBeforeReplace;
+    showFullDesignBeforeReplace = null;
+    const b = document.getElementById('fullViewBtn');
+    if (b) b.classList.toggle('active', showFullDesign);
+  }
+}
 
 // Genera 36 colores (rueda de matices + una fila de grises/neutros) directo por
 // código, en vez de escribir 36 líneas repetidas en el HTML.
@@ -2309,7 +2359,7 @@ document.querySelectorAll('.tool-btn').forEach(btn=>{
     document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
     activeTool = btn.dataset.tool;
-    replaceSourceColor = null; // cambiar de herramienta cancela un reemplazo a medio hacer
+    endColorReplace(); // cambiar de herramienta cancela un "Cambio" a medio hacer y devuelve la vista
     clearMagicSelection();
   });
 });
@@ -2328,9 +2378,10 @@ function applyColorToMagicSelection(color){
 // la zona pegada de una capa — para casos tipo "todo lo que está negro, a blanco".
 function applyGlobalColorReplace(newColor){
   if (!replaceSourceColor) return false;
+  const sourceColor = replaceSourceColor;
   let count = 0;
-  voxels.forEach(v=>{ if (v.color === replaceSourceColor){ v.color = newColor; count++; } });
-  replaceSourceColor = null;
+  voxels.forEach(v=>{ if (v.color === sourceColor){ v.color = newColor; count++; } });
+  endColorReplace();
   drawLayerDiagram(); rebuildMesh3D(); refreshLayerUI();
   setStatus('Listo — se cambiaron ' + count + ' bloques en todo el modelo.', 'ok');
   return true;
@@ -2528,8 +2579,7 @@ window.addEventListener('pointerup', e=>{
     } else if (activeTool === 'replace'){
       const hit = voxels.find(v => v.x===gx && Math.round(v.y)===currentLayer && v.z===gz);
       if (hit){
-        replaceSourceColor = hit.color;
-        setStatus('Elegí el color nuevo en la paleta para reemplazar ese color en TODO el modelo.', 'ok');
+        startColorReplaceSelection(hit.color);
       } else {
         setStatus('No hay ningún bloque ahí.', 'err');
       }
@@ -2623,8 +2673,7 @@ renderer.domElement.addEventListener('pointerup', e=>{
         if (hit){
           const v = lastVisibleVoxels[hit.instanceId];
           if (v){
-            replaceSourceColor = v.color;
-            setStatus('Elegí el color nuevo en la paleta para reemplazar ese color en TODO el modelo.', 'ok');
+            startColorReplaceSelection(v.color);
           }
         } else {
           setStatus('Tocá directo sobre un bloque.', 'err');
@@ -2665,11 +2714,16 @@ renderer.domElement.addEventListener('pointerup', e=>{
 
 document.getElementById('printInstructionsBtn').addEventListener('click', generateInstructionsPDF);
 
+function buildExportPayload(){
+  const price = Math.max(0, parseFloat(document.getElementById('priceInput').value) || 0);
+  const payload = buildCompactPayload(); // { pal, v } — mucho más liviano que repetir el color en cada bloque
+  if (price > 0) payload.price_usd = price;
+  return payload;
+}
+
 document.getElementById('exportBtn').addEventListener('click', ()=>{
   if (!voxels.length){ setStatus('No hay ningún modelo cargado para exportar.', 'err'); return; }
-  const price = Math.max(0, parseFloat(document.getElementById('priceInput').value) || 0);
-  const payload = { voxels: voxels.map(v => [v.x, v.y, v.z, v.color]) };
-  if (price > 0) payload.price_usd = price;
+  const payload = buildExportPayload();
   const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -2678,7 +2732,45 @@ document.getElementById('exportBtn').addEventListener('click', ()=>{
   a.href = url; a.download = baseName + '.json';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  setStatus('Diseño descargado como ' + baseName + '.json' + (price>0 ? ' (precio: $'+price.toFixed(2)+' USD)' : '') + ' — compártelo junto con este visor.', 'ok');
+  setStatus('Copia nueva descargada como ' + baseName + '.json' + (payload.price_usd ? ' (precio: $'+payload.price_usd.toFixed(2)+' USD)' : '') + '.', 'ok');
+});
+
+// "Guardar": en Chrome/Edge, la primera vez elegís dónde, y las siguientes veces
+// pisa el MISMO archivo (como Guardar en cualquier programa de escritorio). En
+// navegadores que no dejan hacer esto (Safari, Firefox), descarga normal.
+let savedFileHandle = null;
+document.getElementById('saveBtn').addEventListener('click', async ()=>{
+  if (!voxels.length){ setStatus('No hay ningún modelo cargado para guardar.', 'err'); return; }
+  const payload = buildExportPayload();
+  const text = JSON.stringify(payload);
+  const baseName = (document.getElementById('modelNameText').textContent || 'modelo')
+    .replace(/\.(dae|vox|json)\b.*/i, '').trim().replace(/[^\w\-]+/g, '_') || 'modelo';
+
+  if (window.showSaveFilePicker){
+    try{
+      if (!savedFileHandle){
+        savedFileHandle = await window.showSaveFilePicker({
+          suggestedName: baseName + '.json',
+          types: [{ description: 'Diseño 3DBlock', accept: {'application/json': ['.json']} }]
+        });
+      }
+      const writable = await savedFileHandle.createWritable();
+      await writable.write(text);
+      await writable.close();
+      setStatus('Guardado en ' + (savedFileHandle.name || baseName+'.json') + '.', 'ok');
+      return;
+    } catch(err){
+      if (err.name === 'AbortError') return; // canceló el diálogo — no hacer nada
+      savedFileHandle = null; // algo falló: seguimos con la descarga normal de respaldo
+    }
+  }
+  const blob = new Blob([text], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = baseName + '.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  setStatus('Guardado como ' + baseName + '.json.', 'ok');
 });
 
 /* ---------------------------- Pago con PayPal para desbloquear un diseño ---------------------------- */
@@ -2764,7 +2856,7 @@ function base64ToBytes(b64){
 // un límite físico de unos pocos miles de caracteres, así que diseños con miles
 // de piezas nunca van a entrar embebidos directamente en el código.
 function encodeModelForUrl(){
-  const payload = { voxels: voxels.map(v => [v.x, v.y, v.z, v.color]) };
+  const payload = buildCompactPayload();
   const json = JSON.stringify(payload);
   const compressed = pako.deflate(json);
   return encodeURIComponent(bytesToBase64(compressed));
