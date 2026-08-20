@@ -447,6 +447,12 @@
       <div class="row"><span class="label-sm">Resolución de bloques</span><span class="value-mono" id="resVal">32</span></div>
       <input type="range" id="resSlider" min="6" max="130" step="1" value="32" />
       <button class="btn wide" id="revoxelizeBtn" style="width:100%; margin-top:8px;">Volver a voxelizar</button>
+
+      <p class="section-title" style="margin-top:16px;">Pintar con imagen de referencia</p>
+      <p style="font-size:10.5px; color:var(--text-faint); margin:0 0 9px; line-height:1.5;">Subí una foto o dibujo a color (de frente) y cada bloque se pinta solo según lo que le toque en esa imagen — después solo corregís los detalles que hagan falta a mano.</p>
+      <input id="refImageInput" type="file" accept="image/*" style="width:100%; font-size:11px; margin-bottom:8px;" />
+      <button class="btn wide" id="paintFromImageBtn" style="width:100%;">🖼️ Pintar según la imagen</button>
+      <p id="refImageStatus" style="font-size:11px; margin:8px 0 0; min-height:14px; line-height:1.5;"></p>
     </div>
 
     <div class="section">
@@ -856,7 +862,7 @@ function getMeshTexture(){
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0,0,size,size);
-  ctx.strokeStyle = '#8a93ac';
+  ctx.strokeStyle = '#000000';
   ctx.lineWidth = 2.5;
   ctx.strokeRect(2,2,size-4,size-4);
   meshTexture = new THREE.CanvasTexture(canvas);
@@ -896,7 +902,7 @@ function rebuildMesh3D(){
   // (que son casi planos entre sí) — eso era lo que se veía como "mancha" sucia.
   const edgeGeo = new THREE.EdgesGeometry(geo, 25);
   const edgeMat = new THREE.LineBasicMaterial({
-    color: 0x3a3f4d, // gris suave tipo lápiz, en vez de negro duro
+    color: 0x000000,
     transparent: true,
     opacity: showMeshTexture ? 0.7 : 0.4
   });
@@ -1881,6 +1887,59 @@ document.getElementById('revoxelizeBtn').addEventListener('click', async ()=>{
 });
 document.getElementById('resSlider').addEventListener('input', e=>{ document.getElementById('resVal').textContent = e.target.value; });
 
+/* ---------------------------- Pintar automáticamente según una imagen de referencia ----------------------------
+   Proyecta cada bloque sobre una foto/dibujo de frente (mirando hacia +Z, como si
+   la cámara estuviera mirando el modelo de frente) y le asigna el color del píxel
+   que le toca. Todos los bloques que comparten la misma columna (mismo x,y) quedan
+   del mismo color, sea cual sea su profundidad — es una aproximación práctica, no
+   una reconstrucción 3D real, pero deja el grueso del color puesto de una y el
+   usuario solo retoca detalles chicos a mano después. */
+let refImageEl = null;
+document.getElementById('refImageInput').addEventListener('change', e=>{
+  const file = e.target.files[0];
+  if (!file) return;
+  const img = new Image();
+  img.onload = () => {
+    refImageEl = img;
+    document.getElementById('refImageStatus').style.color = 'var(--text-faint)';
+    document.getElementById('refImageStatus').textContent = 'Imagen cargada (' + img.width + '×' + img.height + '). Tocá "Pintar según la imagen".';
+  };
+  img.onerror = () => {
+    document.getElementById('refImageStatus').style.color = '#f2a49f';
+    document.getElementById('refImageStatus').textContent = 'No se pudo leer esa imagen.';
+  };
+  img.src = URL.createObjectURL(file);
+});
+
+document.getElementById('paintFromImageBtn').addEventListener('click', ()=>{
+  const statusEl = document.getElementById('refImageStatus');
+  if (!voxels.length){ statusEl.style.color='#f2a49f'; statusEl.textContent='No hay ningún diseño cargado.'; return; }
+  if (!refImageEl){ statusEl.style.color='#f2a49f'; statusEl.textContent='Primero elegí una imagen de referencia.'; return; }
+  const canvas = document.createElement('canvas');
+  canvas.width = refImageEl.width; canvas.height = refImageEl.height;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(refImageEl, 0, 0);
+  let imgData;
+  try{ imgData = ctx.getImageData(0,0,canvas.width,canvas.height).data; }
+  catch(err){ statusEl.style.color='#f2a49f'; statusEl.textContent='No se pudo leer los colores de esa imagen.'; return; }
+
+  const w = canvas.width, h = canvas.height;
+  const maxX = Math.max(1, dims.x-1), maxY = Math.max(1, dims.y-1);
+  voxels.forEach(v=>{
+    const nx = v.x / maxX;               // 0 (izquierda) a 1 (derecha)
+    const ny = 1 - (v.y / maxY);         // 0 (arriba) a 1 (abajo) — el modelo crece hacia arriba, la imagen hacia abajo
+    const px = Math.min(w-1, Math.max(0, Math.round(nx*(w-1))));
+    const py = Math.min(h-1, Math.max(0, Math.round(ny*(h-1))));
+    const idx = (py*w+px)*4;
+    const r = imgData[idx], g = imgData[idx+1], b = imgData[idx+2], a = imgData[idx+3];
+    if (a < 40) return; // píxel transparente en la imagen: no tocar ese bloque
+    v.color = '#' + [r,g,b].map(n=>n.toString(16).padStart(2,'0')).join('');
+  });
+  drawLayerDiagram(); rebuildMesh3D(); refreshLayerUI();
+  statusEl.style.color = '#8be0d4';
+  statusEl.textContent = 'Listo — se pintaron ' + voxels.length + ' bloques según la imagen. Revisá y corregí lo que haga falta a mano.';
+});
+
 /* ---------------------------- Orientación (post-transformación de la nube de bloques) ---------------------------- */
 function transformVoxels(fn){
   const transformed = voxels.map(v => { const p = fn(v); return { x:p.x, y:p.y, z:p.z, color:v.color }; });
@@ -2443,7 +2502,11 @@ renderer.domElement.addEventListener('pointerup', e=>{
       const hit = cellFrom3DEvent(e, instMesh);
       if (hit){
         const v = lastVisibleVoxels[hit.instanceId];
-        if (v && Math.round(v.y) === currentLayer){
+        if (v){
+          // Si el bloque tocado es de OTRA capa (ej: una capa de abajo mostrada en
+          // gris), cambia a esa capa automáticamente antes de seleccionar — antes
+          // esto no hacía nada ni avisaba, y parecía que la herramienta no andaba.
+          if (Math.round(v.y) !== currentLayer) goToLayer(Math.round(v.y));
           const sel = floodSelectSameColor(v.x, v.z);
           if (sel && sel.size){
             if (activeTool === 'erase'){
@@ -2790,9 +2853,27 @@ function onResize(){
 }
 window.addEventListener('resize', onResize);
 
+/* ---------------------------- Orientación con teclado: A/D girar, W/S inclinar ---------------------------- */
+const keysHeld = {};
+window.addEventListener('keydown', e=>{
+  const tag = (document.activeElement && document.activeElement.tagName) || '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return; // no interferir si están escribiendo/eligiendo color
+  const k = e.key.toLowerCase();
+  if (['a','d','w','s'].includes(k)) keysHeld[k] = true;
+});
+window.addEventListener('keyup', e=>{ keysHeld[e.key.toLowerCase()] = false; });
+function applyKeyboardOrbit(dt){
+  const rotSpeed = 1.6; // radianes por segundo
+  if (keysHeld['a']) controls.azimuth -= rotSpeed*dt;
+  if (keysHeld['d']) controls.azimuth += rotSpeed*dt;
+  if (keysHeld['w']) controls.polar = Math.max(controls.minPolar, controls.polar - rotSpeed*dt);
+  if (keysHeld['s']) controls.polar = Math.min(controls.maxPolar, controls.polar + rotSpeed*dt);
+}
+
 let lastT = performance.now();
 function loop(t){
   const dt = Math.min(0.05,(t-lastT)/1000); lastT = t;
+  applyKeyboardOrbit(dt);
   controls.update(dt);
   renderer.render(scene,camera);
   requestAnimationFrame(loop);
