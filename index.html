@@ -126,12 +126,6 @@
   }
   #editBar:has(.tool-btn.active) #paletteRow{ margin-top:2px; }
   #paletteRow{ display:flex; flex-wrap:wrap; gap:4px; max-width:200px; align-content:flex-start; }
-  #renderBtnFloating{
-    position:absolute; top:64px; left:12px; z-index:6;
-    width:36px; height:36px; padding:0; font-size:16px;
-    display:flex; align-items:center; justify-content:center;
-    background:rgba(15,21,36,.88); backdrop-filter:blur(6px);
-  }
   #usedColorsPanel{
     position:absolute; top:12px; right:12px; z-index:6;
     display:flex; flex-direction:column; align-items:flex-end; gap:5px;
@@ -427,9 +421,9 @@
         <button class="tool-btn" id="toolEraseBtn" data-tool="erase" title="Borrar bloques">🧹</button>
         <button class="tool-btn" id="toolReplaceBtn" data-tool="replace" title="Tocá un bloque de cualquier color: se resaltan TODOS los bloques de ese color en el modelo entero. Después elegí el color nuevo en la paleta para cambiarlos a todos juntos.">🔁</button>
         <button class="tool-btn" id="undoBtn" title="Deshacer (Ctrl+Z)">↩️</button>
+        <button class="tool-btn" id="renderBtnFloating" title="Generar una foto de presentación con luces e iluminación real">🖼️</button>
         <div id="paletteRow" style="display:none;"></div>
       </div>
-      <button class="tool-btn" id="renderBtnFloating" title="Generar una foto de presentación con luces e iluminación real">🖼️</button>
       <div id="contextLabel">Contexto 3D</div>
       <div id="usedColorsPanel" class="admin-only" style="display:none;"></div>
       <div id="axesLegend">
@@ -1148,7 +1142,12 @@ async function generatePresentationRender(){
   if (!showFullDesign){ showFullDesign = true; rebuildMesh3D(); } // se ve todo el modelo con sus colores reales
 
   const oldMat = instMesh.material;
-  const realMat = new THREE.MeshStandardMaterial({ roughness: 0.62, metalness: 0.04 });
+  const realMat = new THREE.MeshPhysicalMaterial({
+    roughness: 0.32,        // brillo tipo plástico de juguete, no mate como antes
+    metalness: 0.02,
+    clearcoat: 0.65,        // capa brillante fina por encima, como una pieza inyectada de verdad
+    clearcoatRoughness: 0.18,
+  });
   instMesh.material = realMat;
   const wasEdgeVisible = edgeMesh.visible;
   edgeMesh.visible = false; // el contorno grueso no queda bien en una foto con luces reales
