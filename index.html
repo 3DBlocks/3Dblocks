@@ -2655,11 +2655,25 @@ function drawSelectionOverlay(){
   diagCtx.restore();
 }
 
+// "Gotero" con clic derecho: toma el color de un bloque sin cambiar de
+// herramienta, así no hay que volver a la paleta cada vez que cambia el color a pintar.
+function pickColorFromVoxel(v){
+  if (!v) return;
+  paintColor = v.color;
+  document.getElementById('customColorInput').value = paintColor;
+  document.querySelectorAll('.palette-swatch').forEach(s=>s.classList.toggle('active', s.dataset.color===paintColor));
+  refreshUsedColorsPanel();
+  setStatus('Color tomado (' + paintColor + ') — pintá con clic izquierdo.', 'ok');
+}
+let rightDown2DXY = null;
+diagCanvasEl.addEventListener('contextmenu', e=> e.preventDefault());
+
 // Un CLIC simple (sin arrastrar) selecciona por color, como en el video de
 // Studio 2.0. Arrastrar de verdad marca un rectángulo — salvo con el Pincel, que
 // pinta bloque por bloque mientras arrastrás (para retoques finos).
 diagCanvasEl.addEventListener('pointerdown', e=>{
   if (!paintMode || !dims.x || !dims.z) return;
+  if (e.button === 2){ rightDown2DXY = { x: e.clientX, y: e.clientY }; return; }
   diagCanvasEl.setPointerCapture(e.pointerId);
   pointerDownXY = { x: e.clientX, y: e.clientY };
   boxSelectStart = boxSelectCurrent = cellFromDiagramEvent(e);
@@ -2667,6 +2681,15 @@ diagCanvasEl.addEventListener('pointerdown', e=>{
     isDragEditing = true; lastEditedCellKey = null;
     applyToolAtCell(boxSelectStart.gx, boxSelectStart.gz);
   }
+});
+diagCanvasEl.addEventListener('pointerup', e=>{
+  if (e.button !== 2 || !rightDown2DXY) return;
+  const moved = Math.hypot(e.clientX-rightDown2DXY.x, e.clientY-rightDown2DXY.y);
+  rightDown2DXY = null;
+  if (moved >= CLICK_MOVE_THRESHOLD || !paintMode) return;
+  const {gx,gz} = cellFromDiagramEvent(e);
+  const hit = voxels.find(v => v.x===gx && Math.round(v.y)===currentLayer && v.z===gz);
+  pickColorFromVoxel(hit);
 });
 diagCanvasEl.addEventListener('pointermove', e=>{
   if (!paintMode || !boxSelectStart) return;
@@ -2769,8 +2792,11 @@ function apply3DEditAt(e){
   }
 }
 let pointer3DDownXY = null;
+let rightDown3DXY = null;
 renderer.domElement.addEventListener('pointerdown', e=>{
-  if (!paintMode || e.button !== 0) return; // solo clic izquierdo; el derecho sigue siendo orbitar
+  if (!paintMode) return;
+  if (e.button === 2){ rightDown3DXY = { x: e.clientX, y: e.clientY }; return; } // no interfiere con orbitar
+  if (e.button !== 0) return;
   pointer3DDownXY = { x: e.clientX, y: e.clientY };
   isDragEditing = true; lastEditedCellKey = null;
 });
@@ -2781,6 +2807,15 @@ renderer.domElement.addEventListener('pointermove', e=>{
   apply3DEditAt(e);
 });
 renderer.domElement.addEventListener('pointerup', e=>{
+  if (e.button === 2 && rightDown3DXY){
+    const moved = Math.hypot(e.clientX-rightDown3DXY.x, e.clientY-rightDown3DXY.y);
+    rightDown3DXY = null;
+    if (moved < CLICK_MOVE_THRESHOLD && paintMode && instMesh && lastVisibleVoxels.length){
+      const hit = cellFrom3DEvent(e, instMesh);
+      if (hit) pickColorFromVoxel(lastVisibleVoxels[hit.instanceId]);
+    }
+    return; // si fue arrastre, dejamos que siga siendo "orbitar" como siempre
+  }
   if (!paintMode || !pointer3DDownXY) return;
   const moved = Math.hypot(e.clientX-pointer3DDownXY.x, e.clientY-pointer3DDownXY.y);
   if (moved < CLICK_MOVE_THRESHOLD){
