@@ -113,7 +113,9 @@
     background: var(--panel-3);
   }
   #diagramHead{ padding:12px 18px 0; flex-shrink:0; }
+  #diagramHeadRow{ display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
   #diagramTitle{ font-size:11px; text-transform:uppercase; letter-spacing:.14em; color:var(--text-faint); font-weight:700; }
+  #printInstructionsBtn{ flex-shrink:0; }
   #diagramSub{ font-size:12.5px; color:var(--text-dim); margin-top:3px; }
   #diagramSub b{ color:var(--accent); }
   #diagramCanvasWrap{ flex:1; position:relative; min-height:0; }
@@ -357,7 +359,10 @@
   <div id="mainSplit" class="show-2d">
     <section id="diagramPane">
       <div id="diagramHead">
-        <div id="diagramTitle">Plano de la capa — vista superior</div>
+        <div id="diagramHeadRow">
+          <div id="diagramTitle">Plano de la capa — vista superior</div>
+          <button class="btn sm" id="printInstructionsBtn" title="Descargar un PDF con todas las capas, listo para imprimir">🖨️ Imprimir instrucciones</button>
+        </div>
         <div id="diagramSub">Coloca <b id="diagramCount">0</b> bloques nuevos en esta capa. Los bloques atenuados ya están colocados debajo.</div>
       </div>
       <div id="diagramCanvasWrap"><canvas id="diagramCanvas"></canvas></div>
@@ -470,6 +475,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.0.3/qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <!-- Modo PRUEBA (sandbox) — cuando quieras cobrar de verdad, cambiá este client-id por el de "Live" -->
 <script src="https://www.paypal.com/sdk/js?client-id=BAAFIIacFoi0N0oyF5bnWz_JdmGmeOtysRuW2LLN_reSSRzZXV0lY7qIupbZnxrOlYqARywDNtFPbRePS0&currency=USD"></script>
 <script type="module">
@@ -850,6 +856,124 @@ function resizeDiagCanvas(){
   diagCanvas.style.width = wrap.clientWidth + 'px';
   diagCanvas.style.height = wrap.clientHeight + 'px';
   diagCtx.setTransform(dpr,0,0,dpr,0,0);
+}
+
+/* ---------------------------- Imprimir instrucciones (PDF, una página por capa) ---------------------------- */
+function hexToRgbArr(hex){
+  const h = (hex||'#f2b134').replace('#','');
+  return [parseInt(h.substr(0,2),16)||0, parseInt(h.substr(2,2),16)||0, parseInt(h.substr(4,2),16)||0];
+}
+
+function drawPrintLayer(ctx, W, H, layer){
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0,0,W,H);
+  if (!voxels.length || dims.x===0 || dims.z===0) return;
+  const pad = W*0.04;
+  const cell = Math.max(2, Math.min((W-pad*2)/dims.x, (H-pad*2)/dims.z));
+  const gridW = cell*dims.x, gridH = cell*dims.z;
+  const ox = (W-gridW)/2, oy = (H-gridH)/2;
+
+  ctx.strokeStyle = '#d8dbe4'; ctx.lineWidth = 1;
+  for (let x=0;x<=dims.x;x++){ ctx.beginPath(); ctx.moveTo(ox+x*cell, oy); ctx.lineTo(ox+x*cell, oy+gridH); ctx.stroke(); }
+  for (let z=0;z<=dims.z;z++){ ctx.beginPath(); ctx.moveTo(ox, oy+z*cell); ctx.lineTo(ox+gridW, oy+z*cell); ctx.stroke(); }
+
+  const below = new Map(), here = new Map();
+  voxels.forEach(v=>{
+    const yy = Math.round(v.y), k = v.x+','+v.z;
+    if (yy < layer) below.set(k, v.color);
+    if (yy === layer) here.set(k, v.color);
+  });
+  below.forEach((color,k)=>{
+    if (here.has(k)) return;
+    const [x,z] = k.split(',').map(Number);
+    ctx.fillStyle = '#eef0f5';
+    ctx.fillRect(ox+x*cell+1, oy+z*cell+1, Math.max(1,cell-2), Math.max(1,cell-2));
+  });
+  const inset = Math.max(0.5, cell*0.06);
+  here.forEach((color,k)=>{
+    const [x,z] = k.split(',').map(Number);
+    const px=ox+x*cell+inset, py=oy+z*cell+inset, s=cell-inset*2;
+    ctx.fillStyle = color;
+    ctx.fillRect(px,py,s,s);
+    ctx.strokeStyle='rgba(0,0,0,0.35)'; ctx.lineWidth=1; ctx.strokeRect(px,py,s,s);
+    if (s>8){
+      ctx.beginPath(); ctx.arc(px+s/2,py+s/2,s*0.2,0,Math.PI*2);
+      ctx.fillStyle='rgba(0,0,0,0.18)'; ctx.fill();
+    }
+  });
+}
+
+async function generateInstructionsPDF(){
+  if (!voxels.length){ setStatus('No hay ningún diseño cargado para generar instrucciones.', 'err'); return; }
+  if (!window.jspdf){ setStatus('No se pudo cargar el generador de PDF. Revisá tu conexión y probá de nuevo.', 'err'); return; }
+  setLoading(true, 'Generando instrucciones…');
+  try{
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit:'mm', format:'a4', orientation:'portrait' });
+    const pageW = 210, pageH = 297;
+    const modelName = (document.getElementById('modelNameText').textContent || 'Diseño 3DBlock').trim();
+
+    // Portada
+    doc.setFillColor(8,11,19);
+    doc.rect(0,0,pageW,pageH,'F');
+    doc.setTextColor(242,177,52);
+    doc.setFontSize(30);
+    doc.text('3DBLOCK', pageW/2, 110, { align:'center' });
+    doc.setTextColor(255,255,255);
+    doc.setFontSize(18);
+    doc.text(modelName, pageW/2, 125, { align:'center' });
+    doc.setFontSize(11);
+    doc.setTextColor(180,186,204);
+    doc.text('Guía de armado por capas', pageW/2, 136, { align:'center' });
+    doc.text(voxels.length + ' bloques · ' + (maxLayer+1) + ' capas', pageW/2, 143, { align:'center' });
+
+    const printCanvas = document.createElement('canvas');
+    printCanvas.width = 900; printCanvas.height = 900;
+    const pctx = printCanvas.getContext('2d');
+    const margin = 15;
+    const imgSize = pageW - margin*2;
+
+    for (let layer=0; layer<=maxLayer; layer++){
+      doc.addPage();
+      drawPrintLayer(pctx, printCanvas.width, printCanvas.height, layer);
+      const imgData = printCanvas.toDataURL('image/png');
+      doc.setFontSize(14);
+      doc.setTextColor(20,20,20);
+      doc.text(modelName + ' — Paso ' + (layer+1) + ' de ' + (maxLayer+1), pageW/2, 12, { align:'center' });
+      doc.addImage(imgData, 'PNG', margin, 18, imgSize, imgSize);
+
+      const here = voxels.filter(v => Math.round(v.y) === layer);
+      const counts = new Map();
+      here.forEach(v => counts.set(v.color, (counts.get(v.color)||0)+1));
+      let ly = 18 + imgSize + 9;
+      let lx = margin;
+      doc.setFontSize(9.5);
+      counts.forEach((count, color)=>{
+        const [r,g,b] = hexToRgbArr(color);
+        doc.setFillColor(r,g,b);
+        doc.rect(lx, ly-3.2, 3.6, 3.6, 'F');
+        doc.setDrawColor(120,120,120);
+        doc.rect(lx, ly-3.2, 3.6, 3.6);
+        doc.setTextColor(40,40,40);
+        doc.text('×' + count, lx+5.5, ly);
+        lx += 20;
+        if (lx > pageW - margin - 15){ lx = margin; ly += 6; }
+      });
+      doc.setFontSize(8.5);
+      doc.setTextColor(150,150,150);
+      doc.text('Bloques en esta capa: ' + here.length + '  ·  Acumulado: ' + voxels.filter(v=>Math.round(v.y)<=layer).length + ' / ' + voxels.length, pageW/2, pageH-10, { align:'center' });
+    }
+
+    const baseName = modelName.replace(/[^\w\-]+/g,'_') || 'diseno';
+    doc.save(baseName + '_instrucciones.pdf');
+    setStatus('Instrucciones descargadas: ' + baseName + '_instrucciones.pdf', 'ok');
+  } catch(err){
+    console.error(err);
+    setStatus('No se pudo generar el PDF: ' + err.message, 'err');
+  } finally {
+    setLoading(false);
+  }
 }
 
 function drawLayerDiagram(){
@@ -1781,6 +1905,8 @@ document.getElementById('deleteBtn').addEventListener('click', async ()=>{
   }
 });
 
+
+document.getElementById('printInstructionsBtn').addEventListener('click', generateInstructionsPDF);
 
 document.getElementById('exportBtn').addEventListener('click', ()=>{
   if (!voxels.length){ setStatus('No hay ningún modelo cargado para exportar.', 'err'); return; }
