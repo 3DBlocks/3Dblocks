@@ -847,15 +847,17 @@ function makeGearSquareBody(coreHalf, outerHalf, teeth, height){
 }
 
 function buildBrickGeometry(size){
-  // Pieza real de Magic Bloks / bloques chinos (calculada a partir de fotos): cuerpo
-  // con dedos y muescas cuadradas en los 4 lados + protuberancia redonda arriba.
-  // Cuerpo y protuberancia ocupan exactamente el alto de la celda, así las capas
-  // siguen encastrando sin huecos ni superposición.
-  const bodyH = size*0.82, studH = size*0.18;
+  // Pieza real de Magic Bloks / bloques chinos: cuerpo con dedos y muescas cuadradas
+  // en los 4 lados + protuberancia redonda arriba.
+  // IMPORTANTE: el cuerpo ocupa el 100% del alto de la celda (no se angosta arriba),
+  // así el cuerpo ancho de una capa apoya directo sobre el cuerpo ancho de la capa
+  // de abajo, sin ningún escalón ni hueco en el borde. El botón es solo un bulto
+  // chico que sobresale apenas por ENCIMA del límite de la celda (como en la pieza
+  // real, donde el botón entra en el hueco de la pieza de arriba).
+  const bodyH = size, studH = size*0.16;
   const body = makeGearSquareBody(size*0.30, size*0.47, 3, bodyH);
-  body.translate(0, -size/2 + bodyH/2, 0);
-  const stud = new THREE.CylinderGeometry(size*0.23, size*0.26, studH, 16, 1, false);
-  stud.translate(0, size/2 - studH/2, 0);
+  const stud = new THREE.CylinderGeometry(size*0.24, size*0.27, studH, 16, 1, false);
+  stud.translate(0, size/2 + studH/2, 0);
   return mergeGeometries([body, stud]);
 }
 
