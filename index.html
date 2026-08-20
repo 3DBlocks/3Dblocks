@@ -385,7 +385,7 @@
         <button class="btn icon" id="bgToggleBtn" title="Cambiar fondo del visor">◐ Fondo</button>
         <button class="btn icon active" id="meshTexBtn" title="Textura de malla sobre cada bloque">▦ Malla</button>
       </div>
-      <div id="ctxHint">arrastrar: orbitar<br/>rueda: zoom</div>
+      <div id="ctxHint">clic derecho: orbitar<br/>rueda: zoom</div>
     </section>
   </div>
 
@@ -667,7 +667,9 @@ class SimpleOrbitControls {
     dom.addEventListener('pointerdown', e=>{
       dom.setPointerCapture(e.pointerId);
       this._lastX = e.clientX; this._lastY = e.clientY;
-      if (e.button === 2 || e.shiftKey) this._panning = true; else this._dragging = true;
+      // Como en Studio 2.0: clic derecho orbita la vista; clic medio o Shift desplaza.
+      if (e.button === 2) this._dragging = true;
+      else if (e.button === 1 || e.shiftKey) this._panning = true;
     });
     window.addEventListener('pointerup', ()=>{ this._dragging=false; this._panning=false; });
     window.addEventListener('pointermove', e=>{
