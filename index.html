@@ -435,9 +435,9 @@
       <div id="dropzone">
         <div class="dz-icon">▦</div>
         <div class="dz-text"><b>Arrastra un archivo</b> o haz clic para elegir</div>
-        <div class="fmt-row"><span class="fmt-badge">.VOX</span><span class="fmt-badge">.DAE</span><span class="fmt-badge">.JSON</span><span class="fmt-badge admin-only">.OBJ</span><span class="fmt-badge admin-only">.STL</span></div>
+        <div class="fmt-row"><span class="fmt-badge">.VOX</span><span class="fmt-badge">.DAE</span><span class="fmt-badge">.JSON</span><span class="fmt-badge admin-only">.OBJ</span><span class="fmt-badge admin-only">.STL</span><span class="fmt-badge admin-only">.3MF</span></div>
       </div>
-      <input id="fileInput" type="file" accept=".vox,.dae,.json,.obj,.stl" />
+      <input id="fileInput" type="file" accept=".vox,.dae,.json,.obj,.stl,.3mf" />
       <div id="statusMsg"></div>
     </div>
 
@@ -518,6 +518,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <!-- Modo PRUEBA (sandbox) — cuando quieras cobrar de verdad, cambiá este client-id por el de "Live" -->
 <script src="https://www.paypal.com/sdk/js?client-id=BAAFIIacFoi0N0oyF5bnWz_JdmGmeOtysRuW2LLN_reSSRzZXV0lY7qIupbZnxrOlYqARywDNtFPbRePS0&currency=USD"></script>
 <script type="module">
@@ -1378,6 +1379,88 @@ function parseObjTriangles(text){
   return tris;
 }
 
+/* ---------------------------- Lector .3MF (con colores pintados, ej. Bambu Studio) ----------------------------
+   El .3mf es en realidad un .zip con archivos XML adentro. Si el modelo fue
+   "pintado" en Bambu Studio / PrusaSlicer con varios colores, cada triángulo trae
+   su propio color (paint_color) — mucho más preciso que un .obj/.stl liso. */
+async function parse3MF(arrayBuffer){
+  if (!window.JSZip) throw new Error('No se pudo cargar el lector de .3mf. Revisá tu conexión y probá de nuevo.');
+  const zip = await JSZip.loadAsync(arrayBuffer);
+  const modelFile = zip.file('3D/3dmodel.model');
+  if (!modelFile) throw new Error('Ese .3mf no tiene el archivo de modelo esperado (3D/3dmodel.model).');
+  const xml = await modelFile.async('string');
+
+  // Colores reales de los filamentos usados en el proyecto (si los trae)
+  let filamentColors = ['#f2b134'];
+  const settingsFile = zip.file('Metadata/project_settings.config');
+  if (settingsFile){
+    try{
+      const settings = JSON.parse(await settingsFile.async('string'));
+      if (Array.isArray(settings.filament_colour) && settings.filament_colour.length){
+        filamentColors = settings.filament_colour;
+      }
+    } catch(e){ /* seguimos con el color por defecto */ }
+  }
+  function decodePaintColor(code){
+    if (!code) return null; // sin pintar: que voxelizeTriangles use su degradado por defecto
+    // Formato simple detectado (Bambu Studio): un dígito + "C" = color de ese filamento.
+    if (code.length === 2 && code[1] === 'C'){
+      const idx = parseInt(code[0], 16);
+      if (!Number.isNaN(idx) && idx < filamentColors.length) return filamentColors[idx];
+    }
+    // Códigos más raros (bordes entre colores, o sin pintar explícito): usamos el
+    // primer filamento como base — se puede corregir a mano después con "Pintar".
+    return filamentColors[0];
+  }
+
+  // Vértices
+  const verts = [];
+  const vertRe = /<vertex x="([^"]+)" y="([^"]+)" z="([^"]+)"\/>/g;
+  let m;
+  while ((m = vertRe.exec(xml))){
+    verts.push([parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3])]);
+  }
+  if (!verts.length) throw new Error('No se encontraron vértices en el .3mf.');
+
+  // Transformación final del objeto ya colocado en la placa (rotación/escala + posición)
+  let M = [1,0,0, 0,1,0, 0,0,1], T = [0,0,0];
+  const itemMatch = xml.match(/<item[^>]*transform="([^"]+)"/);
+  if (itemMatch){
+    const nums = itemMatch[1].trim().split(/\s+/).map(Number);
+    if (nums.length === 12 && nums.every(n=>!Number.isNaN(n))){
+      M = [nums[0],nums[1],nums[2], nums[3],nums[4],nums[5], nums[6],nums[7],nums[8]];
+      T = [nums[9],nums[10],nums[11]];
+    }
+  }
+  function applyTransform(x,y,z){
+    return [
+      x*M[0] + y*M[3] + z*M[6] + T[0],
+      x*M[1] + y*M[4] + z*M[7] + T[1],
+      x*M[2] + y*M[5] + z*M[8] + T[2],
+    ];
+  }
+
+  // Triángulos, con su color pintado si lo tienen
+  const triRe = /<triangle v1="(\d+)" v2="(\d+)" v3="(\d+)"(?: paint_color="([^"]*)")?\/>/g;
+  const tris = [];
+  while ((m = triRe.exec(xml))){
+    const v1 = verts[+m[1]], v2 = verts[+m[2]], v3 = verts[+m[3]];
+    if (!v1 || !v2 || !v3) continue;
+    const [x1,y1,z1] = applyTransform(v1[0],v1[1],v1[2]);
+    const [x2,y2,z2] = applyTransform(v2[0],v2[1],v2[2]);
+    const [x3,y3,z3] = applyTransform(v3[0],v3[1],v3[2]);
+    // Bambu/Prusa exportan con Z hacia arriba; nuestro visor usa Y hacia arriba.
+    tris.push({
+      a: new THREE.Vector3(x1, z1, y1),
+      b: new THREE.Vector3(x2, z2, y2),
+      c: new THREE.Vector3(x3, z3, y3),
+      color: decodePaintColor(m[4])
+    });
+  }
+  if (!tris.length) throw new Error('No se encontraron triángulos en el .3mf.');
+  return tris;
+}
+
 function parseStlBuffer(buffer){
   const expectedBinaryTris = (buffer.byteLength - 84) / 50;
   const looksBinary = buffer.byteLength > 84 && Number.isInteger(expectedBinaryTris) && expectedBinaryTris > 0;
@@ -1861,8 +1944,18 @@ async function handleFile(file){
       document.getElementById('modelNameText').textContent = file.name + ' (voxelizado)';
       document.getElementById('voxelizeSection').style.display = 'block';
       setStatus('Modelo .' + ext + ' voxelizado: ' + list.length + ' bloques. Ajustá la resolución si querés más o menos detalle.', 'ok');
+    } else if (ext==='3mf'){
+      setLoading(true, 'Leyendo el .3mf (puede tardar si el archivo es grande)…');
+      lastVoxelizerTris = await parse3MF(await file.arrayBuffer());
+      lastDaeParsed = null;
+      const res = parseInt(document.getElementById('resSlider').value,10);
+      const {list} = voxelizeTriangles(lastVoxelizerTris, res);
+      voxelSize = 1; setVoxels(list);
+      document.getElementById('modelNameText').textContent = file.name + ' (con colores del .3mf)';
+      document.getElementById('voxelizeSection').style.display = 'block';
+      setStatus('Modelo .3mf voxelizado con sus colores pintados: ' + list.length + ' bloques. Revisá y corregí lo que haga falta con "Pintar".', 'ok');
     } else {
-      throw new Error('Formato no soportado. Usa .vox, .dae, .json, .obj o .stl');
+      throw new Error('Formato no soportado. Usa .vox, .dae, .json, .obj, .stl o .3mf');
     }
     closeSidebar();
   } catch(err){
