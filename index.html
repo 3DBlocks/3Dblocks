@@ -1673,15 +1673,22 @@ async function parse3MF(arrayBuffer){
       }
     } catch(e){ /* seguimos con el color por defecto */ }
   }
+  // Tabla real de códigos de Bambu Studio / PrusaSlicer (investigada por la
+  // comunidad, no es un invento nuestro): extrusor 1 → "4", extrusor 2 → "8",
+  // y desde el extrusor 3 en adelante sigue el patrón <dígito hex>+"C", donde
+  // el dígito es (número de extrusor - 3). O sea que "0C" es el extrusor 3, NO
+  // el 1 — antes asumíamos mal ese desfase y por eso salían colores cambiados.
+  const codeToExtruderIndex = new Map([['4',0], ['8',1]]);
+  for (let n=3; n<=16; n++) codeToExtruderIndex.set((n-3).toString(16).toUpperCase()+'C', n-1);
+
   function decodePaintColor(code){
     if (!code) return null; // sin pintar: que voxelizeTriangles use su degradado por defecto
-    // Formato simple detectado (Bambu Studio): un dígito + "C" = color de ese filamento.
-    if (code.length === 2 && code[1] === 'C'){
-      const idx = parseInt(code[0], 16);
-      if (!Number.isNaN(idx) && idx < filamentColors.length) return filamentColors[idx];
+    if (codeToExtruderIndex.has(code)){
+      const idx = codeToExtruderIndex.get(code);
+      if (idx < filamentColors.length) return filamentColors[idx];
     }
-    // Códigos más raros (bordes entre colores, o sin pintar explícito): usamos el
-    // primer filamento como base — se puede corregir a mano después con "Pintar".
+    // Códigos compuestos (bordes entre colores pintados, poco frecuentes): usamos
+    // el primer filamento como base — se puede corregir a mano después con "Pintar".
     return filamentColors[0];
   }
 
