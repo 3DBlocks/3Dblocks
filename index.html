@@ -38,7 +38,7 @@
   /* ---------- Top identity bar (slim) ---------- */
   #idBar{
     display:flex; align-items:center; justify-content:space-between; gap:10px;
-    padding:10px 14px; border-bottom:1px solid var(--border-soft); background:var(--panel-3); flex-shrink:0; z-index:20;
+    padding:6px 14px; border-bottom:1px solid var(--border-soft); background:var(--panel-3); flex-shrink:0; z-index:20;
   }
   .brand-mark{ display:flex; align-items:center; gap:9px; }
   .brand-blocks{ display:grid; grid-template-columns:repeat(3,6px); grid-template-rows:repeat(3,6px); gap:2px; }
@@ -69,20 +69,20 @@
 
   /* ---------- Layer command strip (the focus of the whole app) ---------- */
   #layerStrip{
-    flex-shrink:0; padding:14px 18px 12px; border-bottom:1px solid var(--border-soft);
+    flex-shrink:0; padding:8px 16px 6px; border-bottom:1px solid var(--border-soft);
     background: linear-gradient(180deg, var(--panel), var(--bg-2)); z-index:15;
   }
-  #stepperRow{ display:flex; align-items:center; justify-content:center; gap:14px; }
+  #stepperRow{ display:flex; align-items:center; justify-content:center; gap:10px; }
   .stepBtn{
-    min-width:96px; height:48px; padding:0 18px; border-radius:10px; background:var(--panel-2); border:1px solid var(--border);
-    color:var(--text); font-size:15px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:6px; flex-shrink:0;
+    min-width:76px; height:34px; padding:0 14px; border-radius:9px; background:var(--panel-2); border:1px solid var(--border);
+    color:var(--text); font-size:13px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:6px; flex-shrink:0;
   }
   .stepBtn:hover{ border-color:var(--accent); color:var(--accent); }
   .stepBtn:disabled{ opacity:.25; pointer-events:none; }
-  #layerCenter{ text-align:center; min-width:180px; }
-  #layerBigNum{ font-size:34px; font-weight:800; line-height:1; font-family:var(--mono); color:var(--accent); }
-  #layerOfTxt{ font-size:12px; color:var(--text-faint); letter-spacing:.04em; margin-top:2px; }
-  #playBtn{ width:48px; height:48px; border-radius:10px; flex-shrink:0; font-size:16px; }
+  #layerCenter{ text-align:center; min-width:130px; }
+  #layerBigNum{ font-size:22px; font-weight:800; line-height:1; font-family:var(--mono); color:var(--accent); }
+  #layerOfTxt{ font-size:10.5px; color:var(--text-faint); letter-spacing:.04em; margin-top:1px; }
+  #playBtn{ width:34px; height:34px; border-radius:9px; flex-shrink:0; font-size:13px; }
 
   /* ---------- view switch (2D / 3D) ---------- */
   #viewSwitch{ display:flex; gap:0; border:1px solid var(--border); border-radius:9px; overflow:hidden; flex-shrink:0; }
@@ -95,11 +95,11 @@
   #orientRow{ display:flex; gap:6px; flex-wrap:wrap; justify-content:center; }
   #orientRow .btn{ padding:8px 10px; font-size:12px; }
 
-  #strataTrack{ display:flex; gap:2px; margin-top:12px; max-width:640px; margin-left:auto; margin-right:auto; }
+  #strataTrack{ display:flex; gap:2px; margin-top:7px; max-width:640px; margin-left:auto; margin-right:auto; }
   .strataSeg{ flex:1; height:7px; border-radius:2px; cursor:pointer; transition:transform .1s ease; }
   .strataSeg:hover{ transform:scaleY(1.4); }
 
-  #layerMeta{ display:flex; justify-content:center; gap:18px; margin-top:10px; font-size:11.5px; color:var(--text-dim); font-family:var(--mono); flex-wrap:wrap; }
+  #layerMeta{ display:flex; justify-content:center; gap:18px; margin-top:6px; font-size:11px; color:var(--text-dim); font-family:var(--mono); flex-wrap:wrap; }
   #layerMeta b{ color:var(--text); }
 
   /* ---------- Main split: 2D build plan (dominant) + 3D context ---------- */
@@ -116,22 +116,28 @@
   #diagramHeadRow{ display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
   #diagramTitle{ font-size:11px; text-transform:uppercase; letter-spacing:.14em; color:var(--text-faint); font-weight:700; }
   #printInstructionsBtn{ flex-shrink:0; }
+  /* Barra de herramientas flotante, vertical, pegada al costado izquierdo del
+     visor 3D (no le quita ancho a la escena, va superpuesta). */
   #editBar{
-    padding:10px 18px; border-bottom:1px solid var(--border-soft);
-    background:linear-gradient(180deg, var(--panel), var(--bg-2)); flex-shrink:0;
-    display:flex; gap:14px; align-items:flex-start;
+    position:absolute; top:12px; left:12px; z-index:6;
+    display:flex; flex-direction:column; align-items:flex-start; gap:6px;
+    background:rgba(15,21,36,.88); backdrop-filter:blur(6px);
+    border:1px solid var(--border-soft); border-radius:10px; padding:8px;
   }
-  #editBarRow{ display:flex; flex-direction:column; align-items:stretch; gap:6px; }
-  #editBarRow .tool-btn, #editBarRow #paintModeBtn{ width:100%; text-align:left; }
-  #paletteRow{ display:flex; align-items:flex-start; gap:5px; flex-wrap:wrap; max-width:420px; align-content:flex-start; }
+  #editBar:has(.tool-btn.active) #paletteRow{ margin-top:2px; }
+  #paletteRow{ display:flex; flex-wrap:wrap; gap:4px; max-width:200px; align-content:flex-start; }
+  #editBar .tool-btn, #editBar #paintModeBtn{
+    width:36px; height:36px; padding:0; font-size:16px; display:flex; align-items:center; justify-content:center;
+  }
   .tool-btn{
-    font-size:11px; font-weight:600; color:var(--text-dim); background:var(--panel-2);
-    border:1px solid var(--border); border-radius:7px; padding:6px 10px; cursor:pointer; font-family:var(--sans);
+    font-weight:600; color:var(--text-dim); background:var(--panel-2);
+    border:1px solid var(--border); border-radius:7px; cursor:pointer; font-family:var(--sans);
   }
   .tool-btn.active{ background:var(--accent); color:#1a1305; border-color:var(--accent); }
   .tool-btn[data-tool="erase"].active{ background:#f2665c; border-color:#f2665c; color:#fff; }
   .tool-btn[data-tool="place"].active{ background:var(--accent-2); border-color:var(--accent-2); color:#08251f; }
   .tool-btn[data-tool="replace"].active{ background:#5b8def; border-color:#5b8def; color:#fff; }
+  .tool-btn[data-tool="brush"].active{ background:#c084fc; border-color:#c084fc; color:#1a1305; }
   .palette-swatch{
     width:19px; height:19px; border-radius:5px; cursor:pointer; border:2px solid var(--border);
     transition: transform .1s ease, border-color .1s ease;
@@ -362,7 +368,7 @@
       <button class="stepBtn" id="nextBtn" title="Capa siguiente (→)">Siguiente ›</button>
       <button class="btn primary" id="playBtn" title="Reproducir armado completo">▶</button>
     </div>
-    <div id="viewSwitchRow" style="display:flex; justify-content:center; align-items:center; gap:12px; margin-top:12px; flex-wrap:wrap;">
+    <div id="viewSwitchRow" style="display:flex; justify-content:center; align-items:center; gap:12px; margin-top:7px; flex-wrap:wrap;">
       <div id="viewSwitch">
         <button id="view2dBtn" class="active">▦ 2D</button>
         <button id="view3dBtn">◈ 3D</button>
@@ -382,17 +388,6 @@
     </div>
   </div>
 
-  <div id="editBar" class="admin-only">
-    <div id="editBarRow">
-      <button class="tool-btn active" id="toolPaintBtn" data-tool="paint" title="Pintar bloques existentes">🎨 Pintar</button>
-      <button class="tool-btn" id="toolPlaceBtn" data-tool="place" title="Colocar bloques nuevos en celdas vacías">➕ Colocar</button>
-      <button class="tool-btn" id="toolEraseBtn" data-tool="erase" title="Borrar bloques">🧹 Borrar</button>
-      <button class="tool-btn" id="toolReplaceBtn" data-tool="replace" title="Tocá un bloque de cualquier color: se resaltan TODOS los bloques de ese color en el modelo entero. Después elegí el color nuevo en la paleta para cambiarlos a todos juntos.">🔁 Cambio</button>
-      <button class="btn sm" id="paintModeBtn" title="Activar edición: pintar/colocar/borrar en el plano 2D o el visor 3D">✏️ Editar: apagado</button>
-    </div>
-    <div id="paletteRow" style="display:none;"></div>
-  </div>
-
   <div id="mainSplit" class="show-2d">
     <section id="diagramPane">
       <div id="diagramHead">
@@ -407,6 +402,15 @@
     </section>
 
     <section id="contextPane">
+      <div id="editBar" class="admin-only">
+        <button class="btn icon" id="paintModeBtn" title="Activar edición: pintar/colocar/borrar en el plano 2D o el visor 3D">✏️</button>
+        <button class="tool-btn active" id="toolPaintBtn" data-tool="paint" title="Pintar (selecciona toda la zona pegada del mismo color)">🎨</button>
+        <button class="tool-btn" id="toolBrushBtn" data-tool="brush" title="Pincel: pinta un solo bloque a la vez, para retoques finos">🖌️</button>
+        <button class="tool-btn" id="toolPlaceBtn" data-tool="place" title="Colocar bloques nuevos en celdas vacías">➕</button>
+        <button class="tool-btn" id="toolEraseBtn" data-tool="erase" title="Borrar bloques">🧹</button>
+        <button class="tool-btn" id="toolReplaceBtn" data-tool="replace" title="Tocá un bloque de cualquier color: se resaltan TODOS los bloques de ese color en el modelo entero. Después elegí el color nuevo en la paleta para cambiarlos a todos juntos.">🔁</button>
+        <div id="paletteRow" style="display:none;"></div>
+      </div>
       <div id="contextLabel">Contexto 3D</div>
       <div id="axesLegend">
         <span><i style="background:#ff4d4d"></i>X</span>
@@ -808,6 +812,7 @@ const controls = new SimpleOrbitControls(camera, renderer.domElement);
 let instMesh = null, edgeMesh = null, seamMesh = null;
 const dummy = new THREE.Object3D();
 const tmpColor = new THREE.Color();
+const edgeColor = new THREE.Color();
 const wireOn = { v:false };
 
 function clearModelMeshes(){
@@ -905,10 +910,14 @@ function rebuildMesh3D(){
   // pieza (dedos, muescas, silueta), y no cada triangulito interno de la malla real
   // (que son casi planos entre sí) — eso era lo que se veía como "mancha" sucia.
   const edgeGeo = new THREE.EdgesGeometry(geo, 25);
+  // vertexColors:true + instanceColor nos deja poner un color de contorno DISTINTO
+  // por bloque (negro normal, o verde neón cuando está resaltado/seleccionado) sin
+  // tocar el color de relleno real del bloque.
   const edgeMat = new THREE.LineBasicMaterial({
-    color: 0x000000,
+    color: 0xffffff,
+    vertexColors: true,
     transparent: true,
-    opacity: showMeshTexture ? 0.7 : 0.4
+    opacity: showMeshTexture ? 0.75 : 0.45
   });
   edgeMesh = new THREE.InstancedMesh(edgeGeo, edgeMat, visible.length);
   edgeMesh.visible = wireOn.v;
@@ -935,23 +944,20 @@ function rebuildMesh3D(){
     seamMesh.setMatrixAt(i, dummy.matrix);
     const isCurrentLayer = showFullDesign || Math.round(v.y) === currentLayer;
     if (isCurrentLayer){ tmpColor.set(v.color); } else { tmpColor.copy(belowLayerColor); }
-    // Si esta celda está dentro de la selección mágica activa, la resalta en celeste
-    // (mismo estilo que el plano 2D), para que también se vea marcada en el visor 3D.
-    if (magicSelection && Math.round(v.y)===currentLayer && magicSelection.has(v.x+','+v.z)){
-      tmpColor.lerp(new THREE.Color('#2dd4bf'), 0.55);
-    }
-    // Herramienta "Cambio": resalta en un tono fuerte TODOS los bloques de ese
-    // color, en cualquier capa — así se ve de verdad qué se va a cambiar antes
-    // de elegir el color nuevo.
-    if (replaceSourceColor && v.color === replaceSourceColor){
-      tmpColor.set('#ff7a1a');
-    }
     instMesh.setColorAt(i, tmpColor);
+    // Resaltado de selección: SOLO el contorno cambia a verde neón (como Studio
+    // 2.0) — el relleno del bloque se queda siempre con su color real, nunca lo tapa.
+    const isHighlighted =
+      (magicSelection && Math.round(v.y)===currentLayer && magicSelection.has(v.x+','+v.z)) ||
+      (replaceSourceColor && v.color === replaceSourceColor);
+    edgeColor.set(isHighlighted ? '#39ff6a' : '#000000');
+    edgeMesh.setColorAt(i, edgeColor);
   });
   instMesh.instanceMatrix.needsUpdate = true;
   edgeMesh.instanceMatrix.needsUpdate = true;
   seamMesh.instanceMatrix.needsUpdate = true;
   if (instMesh.instanceColor) instMesh.instanceColor.needsUpdate = true;
+  if (edgeMesh.instanceColor) edgeMesh.instanceColor.needsUpdate = true;
   scene.add(instMesh); scene.add(edgeMesh); scene.add(seamMesh);
 
   layerPlane.position.y = currentLayer*voxelSize + voxelSize*1.001;
@@ -2327,11 +2333,12 @@ function endColorReplace(){
     return '#' + toHex(f(0)) + toHex(f(8)) + toHex(f(4));
   }
   const colors = [];
-  // 18 tonos pasteles (suaves, poco saturados) + 12 tonos oscuros/apagados —
-  // mucho más fáciles de distinguir entre sí que colores tipo neón.
-  for (let i=0; i<18; i++) colors.push(hslToHex(Math.round((360/18)*i), 46, 74));
-  for (let i=0; i<12; i++) colors.push(hslToHex(Math.round((360/12)*i), 42, 36));
-  ['#ffffff','#c9cedb','#8a93ac','#545e78','#1a1305','#000000'].forEach(c=>colors.push(c));
+  // Colores primarios y secundarios bien vivos (no pasteles), en 2 tonos cada
+  // uno (vivo + oscuro) para tener variedad sin perder distinción entre ellos.
+  const hues = [0, 30, 45, 60, 90, 120, 165, 185, 215, 245, 270, 300, 330];
+  hues.forEach(h => colors.push(hslToHex(h, 88, 50)));
+  hues.forEach(h => colors.push(hslToHex(h, 80, 32)));
+  ['#ffffff','#c9cedb','#8a93ac','#3a3f4d','#000000'].forEach(c=>colors.push(c));
   colors.forEach((hex,i)=>{
     const sw = document.createElement('div');
     sw.className = 'palette-swatch' + (i===0 ? ' active' : '');
@@ -2430,7 +2437,7 @@ function applyToolAtCellCore(gx, gz){
     return;
   }
   const hit = voxels.find(v => v.x===gx && Math.round(v.y)===currentLayer && v.z===gz);
-  if (activeTool === 'paint'){
+  if (activeTool === 'paint' || activeTool === 'brush'){
     if (!hit) return;
     hit.color = paintColor;
   } else if (activeTool === 'erase'){
@@ -2500,8 +2507,8 @@ function drawMagicSelectionOverlay(){
   const gridW = cell*dims.x, gridH = cell*dims.z;
   const ox = (W-gridW)/2, oy = (H-gridH)/2;
   diagCtx.save();
-  diagCtx.fillStyle = 'rgba(45,212,191,0.38)';
-  diagCtx.strokeStyle = '#2dd4bf';
+  diagCtx.fillStyle = 'rgba(57,255,106,0.16)';
+  diagCtx.strokeStyle = '#39ff6a';
   diagCtx.lineWidth = 2;
   magicSelection.forEach(key=>{
     const [x,z] = key.split(',').map(Number);
@@ -2554,15 +2561,26 @@ function drawSelectionOverlay(){
 }
 
 // Un CLIC simple (sin arrastrar) selecciona por color, como en el video de
-// Studio 2.0. Arrastrar de verdad sigue marcando un rectángulo, como antes.
+// Studio 2.0. Arrastrar de verdad marca un rectángulo — salvo con el Pincel, que
+// pinta bloque por bloque mientras arrastrás (para retoques finos).
 diagCanvasEl.addEventListener('pointerdown', e=>{
   if (!paintMode || !dims.x || !dims.z) return;
   diagCanvasEl.setPointerCapture(e.pointerId);
   pointerDownXY = { x: e.clientX, y: e.clientY };
   boxSelectStart = boxSelectCurrent = cellFromDiagramEvent(e);
+  if (activeTool === 'brush'){
+    isDragEditing = true; lastEditedCellKey = null;
+    applyToolAtCell(boxSelectStart.gx, boxSelectStart.gz);
+  }
 });
 diagCanvasEl.addEventListener('pointermove', e=>{
   if (!paintMode || !boxSelectStart) return;
+  if (activeTool === 'brush'){
+    if (!isDragEditing) return;
+    const {gx,gz} = cellFromDiagramEvent(e);
+    applyToolAtCell(gx,gz);
+    return;
+  }
   const moved = Math.hypot(e.clientX-pointerDownXY.x, e.clientY-pointerDownXY.y);
   if (moved < CLICK_MOVE_THRESHOLD) return; // todavía no se considera "arrastre"
   boxSelectCurrent = cellFromDiagramEvent(e);
@@ -2570,6 +2588,11 @@ diagCanvasEl.addEventListener('pointermove', e=>{
 });
 window.addEventListener('pointerup', e=>{
   if (!boxSelectStart){ return; }
+  if (activeTool === 'brush'){
+    boxSelectStart = boxSelectCurrent = null; pointerDownXY = null;
+    isDragEditing = false; lastEditedCellKey = null;
+    return; // ya se fue pintando bloque a bloque durante el arrastre, nada más que hacer
+  }
   const moved = pointerDownXY ? Math.hypot(e.clientX-pointerDownXY.x, e.clientY-pointerDownXY.y) : 999;
   if (moved < CLICK_MOVE_THRESHOLD){
     // CLIC: selección mágica por color (o, con la herramienta "Colocar", un solo bloque)
@@ -2631,6 +2654,8 @@ function apply3DEditAt(e){
     const gx = Math.floor((hit.point.x + offsetX)/voxelSize);
     const gz = Math.floor((hit.point.z + offsetZ)/voxelSize);
     applyToolAtCell(gx, gz);
+  } else if (activeTool === 'replace'){
+    return; // "Cambio" solo funciona con un clic, no arrastrando
   } else {
     if (!instMesh || !lastVisibleVoxels.length) return;
     const hit = cellFrom3DEvent(e, instMesh);
@@ -2665,7 +2690,7 @@ renderer.domElement.addEventListener('pointerup', e=>{
   const moved = Math.hypot(e.clientX-pointer3DDownXY.x, e.clientY-pointer3DDownXY.y);
   if (moved < CLICK_MOVE_THRESHOLD){
     // CLIC simple sobre el visor 3D: selección mágica por color (igual que en el plano 2D)
-    if (activeTool === 'place'){
+    if (activeTool === 'place' || activeTool === 'brush'){
       apply3DEditAt(e);
     } else if (activeTool === 'replace'){
       if (instMesh && lastVisibleVoxels.length){
