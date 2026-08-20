@@ -419,6 +419,7 @@
         <button class="tool-btn" id="toolPlaceBtn" data-tool="place" title="Colocar bloques nuevos en celdas vacías">➕</button>
         <button class="tool-btn" id="toolEraseBtn" data-tool="erase" title="Borrar bloques">🧹</button>
         <button class="tool-btn" id="toolReplaceBtn" data-tool="replace" title="Tocá un bloque de cualquier color: se resaltan TODOS los bloques de ese color en el modelo entero. Después elegí el color nuevo en la paleta para cambiarlos a todos juntos.">🔁</button>
+        <button class="tool-btn" id="undoBtn" title="Deshacer (Ctrl+Z)">↩️</button>
         <div id="paletteRow" style="display:none;"></div>
       </div>
       <div id="contextLabel">Contexto 3D</div>
@@ -986,7 +987,8 @@ function rebuildMesh3D(){
 // así nunca puede quedar un bloque flotando sin apoyo debajo.
 function hollowInteriorBlocks(){
   if (!voxels.length){ setStatus('No hay ningún modelo cargado.', 'err'); return; }
-  if (!confirm('Esto va a sacar los bloques que quedan tapados por dentro de cada capa (no se ven desde afuera). No se puede deshacer. ¿Seguimos?')) return;
+  if (!confirm('Esto va a sacar los bloques que quedan tapados por dentro de cada capa (no se ven desde afuera). Podés deshacerlo después con Ctrl+Z si no te convence. ¿Seguimos?')) return;
+  pushUndoSnapshot();
 
   const byLayer = new Map(); // y -> Set("x,z")
   const byPos = new Map();   // "x,y,z" -> bloque
@@ -1358,6 +1360,47 @@ function centeredBounds(){
     new THREE.Vector3(halfX, dims.y*voxelSize, halfZ)
   );
 }
+
+/* ---------------------------- Deshacer (Ctrl+Z) ---------------------------- */
+let undoStack = [];
+let undoPendingGesture = false; // true = todavía no se guardó una foto para este clic/arrastre en curso
+function maybeSnapshotForGesture(){
+  if (!undoPendingGesture) return;
+  pushUndoSnapshot();
+  undoPendingGesture = false;
+}
+const MAX_UNDO = 30; // límite para no acumular memoria de más
+
+function pushUndoSnapshot(){
+  undoStack.push({
+    voxels: voxels.map(v=>({x:v.x, y:v.y, z:v.z, color:v.color})),
+    dims: {x:dims.x, y:dims.y, z:dims.z},
+  });
+  if (undoStack.length > MAX_UNDO) undoStack.shift();
+}
+
+function undo(){
+  if (!undoStack.length){ setStatus('No hay ninguna acción para deshacer.', 'err'); return; }
+  const snap = undoStack.pop();
+  voxels.length = 0; voxels.push(...snap.voxels);
+  dims.x = snap.dims.x; dims.y = snap.dims.y; dims.z = snap.dims.z;
+  magicSelection = null; replaceSourceColor = null;
+  maxLayer = Math.max(0, dims.y-1);
+  currentLayer = Math.min(currentLayer, maxLayer);
+  drawLayerDiagram(); rebuildMesh3D(); refreshLayerUI();
+  document.getElementById('statDims').textContent = `${dims.x}×${dims.y}×${dims.z}`;
+  document.getElementById('statCount').textContent = `${voxels.length}`;
+  setStatus('Se deshizo la última acción. (' + undoStack.length + ' pasos más para atrás)', 'ok');
+}
+document.getElementById('undoBtn').addEventListener('click', undo);
+window.addEventListener('keydown', e=>{
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z'){
+    const tag = (document.activeElement && document.activeElement.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    e.preventDefault();
+    undo();
+  }
+});
 
 function setVoxels(list, opts){
   opts = opts || {};
@@ -2045,6 +2088,7 @@ async function handleFile(file){
   setLoading(true, 'Procesando ' + file.name + '…');
   document.getElementById('voxelizeSection').style.display = 'none';
   savedFileHandle = null; // un modelo nuevo no debe pisar el archivo guardado del anterior
+  undoStack = []; undoPendingGesture = false; // ni tiene sentido "deshacer" hacia un modelo distinto
   try{
     if (ext==='vox'){
       const buf = await file.arrayBuffer();
@@ -2181,6 +2225,7 @@ document.getElementById('paintFromImageBtn').addEventListener('click', ()=>{
 
 /* ---------------------------- Orientación (post-transformación de la nube de bloques) ---------------------------- */
 function transformVoxels(fn){
+  pushUndoSnapshot();
   const transformed = voxels.map(v => { const p = fn(v); return { x:p.x, y:p.y, z:p.z, color:v.color }; });
   setVoxels(normalize(transformed));
 }
@@ -2483,6 +2528,7 @@ document.querySelectorAll('.tool-btn').forEach(btn=>{
 });
 function applyColorToMagicSelection(color){
   if (!magicSelection || !magicSelection.size) return false;
+  pushUndoSnapshot();
   magicSelection.forEach(key=>{
     const [x,z] = key.split(',').map(Number);
     const v = voxels.find(v=>v.x===x && Math.round(v.y)===currentLayer && v.z===z);
@@ -2496,6 +2542,7 @@ function applyColorToMagicSelection(color){
 // la zona pegada de una capa — para casos tipo "todo lo que está negro, a blanco".
 function applyGlobalColorReplace(newColor){
   if (!replaceSourceColor) return false;
+  pushUndoSnapshot();
   const sourceColor = replaceSourceColor;
   let count = 0;
   voxels.forEach(v=>{ if (v.color === sourceColor){ v.color = newColor; count++; } });
@@ -2543,6 +2590,9 @@ function ensureGridCovers(gx, gz){
 function applyToolAtCellCore(gx, gz){
   if (activeTool === 'place'){
     if (gx < -200 || gz < -200 || gx > dims.x+200 || gz > dims.z+200) return;
+    // ensureGridCovers puede desplazar bloques ya existentes al agrandar la rejilla
+    // — hay que guardar la foto ANTES de eso, no después.
+    maybeSnapshotForGesture();
     ({ gx, gz } = ensureGridCovers(gx, gz));
   } else if (gx<0 || gz<0 || gx>=dims.x || gz>=dims.z){
     return;
@@ -2550,9 +2600,11 @@ function applyToolAtCellCore(gx, gz){
   const hit = voxels.find(v => v.x===gx && Math.round(v.y)===currentLayer && v.z===gz);
   if (activeTool === 'paint' || activeTool === 'brush'){
     if (!hit) return;
+    maybeSnapshotForGesture();
     hit.color = paintColor;
   } else if (activeTool === 'erase'){
     if (!hit) return;
+    maybeSnapshotForGesture();
     voxels.splice(voxels.indexOf(hit), 1);
   } else if (activeTool === 'place'){
     if (hit) return;
@@ -2693,6 +2745,7 @@ diagCanvasEl.addEventListener('pointerdown', e=>{
   diagCanvasEl.setPointerCapture(e.pointerId);
   pointerDownXY = { x: e.clientX, y: e.clientY };
   boxSelectStart = boxSelectCurrent = cellFromDiagramEvent(e);
+  undoPendingGesture = true;
   if (activeTool === 'brush'){
     isDragEditing = true; lastEditedCellKey = null;
     applyToolAtCell(boxSelectStart.gx, boxSelectStart.gz);
@@ -2744,6 +2797,7 @@ window.addEventListener('pointerup', e=>{
       const sel = floodSelectSameColor(gx, gz);
       if (sel && sel.size){
         if (activeTool === 'erase'){
+          maybeSnapshotForGesture();
           sel.forEach(key=>{
             const [x,z] = key.split(',').map(Number);
             const v = voxels.find(v=>v.x===x && Math.round(v.y)===currentLayer && v.z===z);
@@ -2815,6 +2869,7 @@ renderer.domElement.addEventListener('pointerdown', e=>{
   if (e.button !== 0) return;
   pointer3DDownXY = { x: e.clientX, y: e.clientY };
   isDragEditing = true; lastEditedCellKey = null;
+  undoPendingGesture = true;
 });
 renderer.domElement.addEventListener('pointermove', e=>{
   if (!paintMode || !isDragEditing || !pointer3DDownXY) return;
@@ -2862,6 +2917,7 @@ renderer.domElement.addEventListener('pointerup', e=>{
           const sel = floodSelectSameColor(v.x, v.z);
           if (sel && sel.size){
             if (activeTool === 'erase'){
+              maybeSnapshotForGesture();
               sel.forEach(key=>{
                 const [x,z] = key.split(',').map(Number);
                 const vv = voxels.find(vv=>vv.x===x && Math.round(vv.y)===currentLayer && vv.z===z);
