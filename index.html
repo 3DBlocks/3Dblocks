@@ -1247,23 +1247,13 @@ async function generatePresentationRender(){
   const wasGroundColor = ground.material.color.clone();
   const wasGroundScale = ground.scale.clone();
   ground.visible = true;
-  ground.receiveShadow = true;
   ground.material.color.copy(studioColor);
   ground.scale.setScalar(Math.max(1, maxDim*3/40)); // agranda el piso circular según el tamaño del modelo
 
-  // --- Sombra suave real, con mapa de sombras (no la aproximación plana de antes) ---
-  const wasShadowEnabled = renderer.shadowMap.enabled;
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  const wasKeyCastShadow = key.castShadow;
-  key.castShadow = true;
-  key.shadow.mapSize.set(1024,1024);
-  key.shadow.camera.left = -maxDim*1.2; key.shadow.camera.right = maxDim*1.2;
-  key.shadow.camera.top = maxDim*1.2; key.shadow.camera.bottom = -maxDim*1.2;
-  key.shadow.camera.near = 0.1; key.shadow.camera.far = maxDim*6;
-  key.shadow.bias = -0.0015;
-  key.shadow.camera.updateProjectionMatrix();
-
+  // Sin sombras proyectadas: con modelos vaciados por dentro ("Vaciar interior"),
+  // la sombra dura dejaba el hueco pintado de negro total, sin luz que llegara ahí.
+  // Con solo la iluminación pareja (ambiente + direccionales, sin oclusión) el
+  // plástico sigue viéndose con volumen real, pero sin ese agujero negro feo.
   const oldMat = instMesh.material;
   const realMat = new THREE.MeshPhysicalMaterial({
     roughness: 0.32,        // brillo tipo plástico de juguete, no mate como antes
@@ -1272,8 +1262,6 @@ async function generatePresentationRender(){
     clearcoatRoughness: 0.18,
   });
   instMesh.material = realMat;
-  instMesh.castShadow = true;
-  instMesh.receiveShadow = true;
   const wasEdgeVisible = edgeMesh.visible;
   edgeMesh.visible = false; // el contorno grueso no queda bien en una foto con luces reales
   const wasSeamVisible = seamMesh.visible;
@@ -1285,12 +1273,8 @@ async function generatePresentationRender(){
   // Devolver TODO a como estaba en el visor
   instMesh.material = oldMat;
   realMat.dispose();
-  instMesh.castShadow = false;
-  instMesh.receiveShadow = false;
   edgeMesh.visible = wasEdgeVisible;
   seamMesh.visible = wasSeamVisible;
-  key.castShadow = wasKeyCastShadow;
-  renderer.shadowMap.enabled = wasShadowEnabled;
   ground.visible = wasGroundVisible;
   ground.material.color.copy(wasGroundColor);
   ground.scale.copy(wasGroundScale);
@@ -1373,22 +1357,13 @@ async function generateInstructionsPDF(){
   const wasGroundVisible = ground.visible;
   const wasGroundColor = ground.material.color.clone();
   const wasGroundScale = ground.scale.clone();
-  ground.visible = true; ground.receiveShadow = true;
+  ground.visible = true;
   ground.material.color.copy(studioColor);
   ground.scale.setScalar(Math.max(1, maxDim*3/40));
 
-  const wasShadowEnabled = renderer.shadowMap.enabled;
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  const wasKeyCastShadow = key.castShadow;
-  key.castShadow = true;
-  key.shadow.mapSize.set(1024,1024);
-  key.shadow.camera.left = -maxDim*1.2; key.shadow.camera.right = maxDim*1.2;
-  key.shadow.camera.top = maxDim*1.2; key.shadow.camera.bottom = -maxDim*1.2;
-  key.shadow.camera.near = 0.1; key.shadow.camera.far = maxDim*6;
-  key.shadow.bias = -0.0015;
-  key.shadow.camera.updateProjectionMatrix();
-
+  // Sin sombras proyectadas: en modelos vaciados por dentro ("Vaciar interior")
+  // dejaba el hueco pintado de negro total. Con luz pareja (sin oclusión) el
+  // plástico se sigue viendo con volumen, sin ese agujero negro.
   const realMat = new THREE.MeshPhysicalMaterial({ roughness:0.32, metalness:0.02, clearcoat:0.65, clearcoatRoughness:0.18 });
 
   showFullDesign = false; showBelowLayers = true; // capa actual con su color real, las de abajo atenuadas — así se ve qué es nuevo
@@ -1421,6 +1396,35 @@ async function generateInstructionsPDF(){
     doc.text('Guía de armado por capas — vista en 3D', pageW/2, 136, { align:'center' });
     doc.text(voxels.length + ' bloques · ' + (maxLayer+1) + ' capas', pageW/2, 143, { align:'center' });
 
+    // Recuadro con el total de piezas de TODO el manual, por color.
+    const totalCounts = new Map();
+    voxels.forEach(v => totalCounts.set(v.color, (totalCounts.get(v.color)||0)+1));
+    const entries = Array.from(totalCounts.entries());
+    const boxX = 20, boxW = pageW-40, colW = 30, padX = 8;
+    const perRow = Math.max(1, Math.floor((boxW - padX*2) / colW));
+    const rows = Math.ceil(entries.length / perRow);
+    const boxY = 158, titleH = 14, rowH = 9;
+    const boxH = titleH + rows*rowH + 8;
+    doc.setDrawColor(242,177,52);
+    doc.setLineWidth(0.5);
+    doc.rect(boxX, boxY, boxW, boxH, 'S');
+    doc.setFontSize(12);
+    doc.setTextColor(242,177,52);
+    doc.text('Total de piezas del modelo (' + modelName + ')', pageW/2, boxY+9, { align:'center' });
+    doc.setFontSize(10);
+    let cx = boxX+padX, cy = boxY+titleH+7;
+    entries.forEach(([color,count])=>{
+      const [r,g,b] = hexToRgbArr(color);
+      doc.setFillColor(r,g,b);
+      doc.rect(cx, cy-4, 5, 5, 'F');
+      doc.setDrawColor(150,150,150);
+      doc.rect(cx, cy-4, 5, 5);
+      doc.setTextColor(230,230,230);
+      doc.text('x'+count, cx+7, cy);
+      cx += colW;
+      if (cx > boxX+boxW-colW+padX){ cx = boxX+padX; cy += rowH; }
+    });
+
     const margin = 8;
     const imgSize = pageW - margin*2;
 
@@ -1428,11 +1432,10 @@ async function generateInstructionsPDF(){
       currentLayer = layer;
       rebuildMesh3D(); // con showFullDesign=false y showBelowLayers=true: esta capa a color, las de abajo gris
       instMesh.material = realMat;
-      instMesh.castShadow = true; instMesh.receiveShadow = true;
       edgeMesh.visible = true; seamMesh.visible = false; // "malla": el contorno de cada bloque ayuda a distinguirlos en la hoja
       const visibleNow = voxels.filter(v => Math.round(v.y) <= layer);
       const stepBox = worldBoxFromVoxelList(visibleNow); // encuadre ajustado a lo que se ve EN ESTE PASO, no al modelo entero
-      positionCameraFixedAngle(stepBox, 30, 128, 1.85); // 30° de ángulo, girado 90° respecto a antes para que se vea de frente
+      positionCameraFixedAngle(stepBox, 35, 128, 1.85); // 35° de ángulo, como pediste
       renderer.render(scene, camera);
       const imgData = renderer.domElement.toDataURL('image/png');
 
@@ -1477,8 +1480,6 @@ async function generateInstructionsPDF(){
     // Devolver TODO a como estaba
     instMesh.material.dispose && null; // (el material viejo lo recrea rebuildMesh3D de nuevo)
     realMat.dispose();
-    key.castShadow = wasKeyCastShadow;
-    renderer.shadowMap.enabled = wasShadowEnabled;
     ground.visible = wasGroundVisible;
     ground.material.color.copy(wasGroundColor);
     ground.scale.copy(wasGroundScale);
