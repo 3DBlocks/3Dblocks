@@ -126,23 +126,26 @@
   }
   #editBar:has(.tool-btn.active) #paletteRow{ margin-top:2px; }
   #paletteRow{ display:flex; flex-wrap:wrap; gap:4px; max-width:200px; align-content:flex-start; }
-  #usedColorsPanel{
+  #rightPanelsStack{
     position:absolute; top:12px; right:12px; z-index:6;
+    display:flex; flex-direction:column; align-items:flex-end; gap:8px;
+    max-width:172px;
+  }
+  #usedColorsPanel{
     display:flex; flex-direction:column; align-items:flex-end; gap:5px;
     background:rgba(15,21,36,.88); backdrop-filter:blur(6px);
     border:1px solid var(--border-soft); border-radius:10px; padding:8px;
-    max-width:150px;
+    width:100%;
   }
   #usedColorsPanel .label-sm{ align-self:flex-start; margin-bottom:2px; }
   #usedColorsGrid{ display:flex; flex-wrap:wrap; gap:4px; justify-content:flex-end; }
   #usedColorsGrid .palette-swatch{ width:22px; height:22px; }
   #selectionPanel{
-    position:absolute; top:78px; right:12px; z-index:6;
     display:flex; flex-direction:column; align-items:stretch; gap:6px;
     background:rgba(15,21,36,.9); backdrop-filter:blur(6px);
-    border:1px solid #39ff6a; border-radius:10px; padding:8px 10px; max-width:172px;
+    border:1px solid #22d3ee; border-radius:10px; padding:8px 10px; width:100%;
   }
-  #selectionCount{ font-size:11.5px; font-weight:700; color:#39ff6a; }
+  #selectionCount{ font-size:11.5px; font-weight:700; color:#22d3ee; }
   #selectionBtns{ display:flex; flex-direction:column; gap:5px; }
   #selectionBtns .btn{ font-size:11px; text-align:left; }
   #editBar .tool-btn, #editBar #paintModeBtn{
@@ -446,14 +449,16 @@
       </div>
       <div id="contextLabel">Contexto 3D</div>
       <div id="viewIndicator">🧱 <span id="viewIndicatorLabel">Libre</span></div>
-      <div id="usedColorsPanel" class="admin-only" style="display:none;"></div>
-      <div id="selectionPanel" class="admin-only" style="display:none;">
-        <div id="selectionCount">0 bloques</div>
-        <div id="selectionBtns">
-          <button class="btn sm" id="selCopyBtn" title="Copiar (Ctrl+C)">📋 Copiar</button>
-          <button class="btn sm" id="selPasteBtn" title="Pegar (Ctrl+V)">📥 Pegar</button>
-          <button class="btn sm" id="selMirrorBtn" title="Copia la selección y la espeja en el eje X, pegada al lado — para completar mitades simétricas">🪞 Copiar y Espejo</button>
-          <button class="btn sm" id="selClearBtn" title="Cancelar selección (Esc)">✖</button>
+      <div id="rightPanelsStack" class="admin-only">
+        <div id="usedColorsPanel" style="display:none;"></div>
+        <div id="selectionPanel" style="display:none;">
+          <div id="selectionCount">0 bloques</div>
+          <div id="selectionBtns">
+            <button class="btn sm" id="selCopyBtn" title="Copiar (Ctrl+C)">📋 Copiar</button>
+            <button class="btn sm" id="selPasteBtn" title="Pegar (Ctrl+V)">📥 Pegar</button>
+            <button class="btn sm" id="selMirrorBtn" title="Copia la selección y la espeja en el eje X, pegada al lado — para completar mitades simétricas">🪞 Copiar y Espejo</button>
+            <button class="btn sm" id="selClearBtn" title="Cancelar selección (Esc)">✖</button>
+          </div>
         </div>
       </div>
       <div id="axesLegend">
@@ -1425,7 +1430,9 @@ async function generateInstructionsPDF(){
       instMesh.material = realMat;
       instMesh.castShadow = true; instMesh.receiveShadow = true;
       edgeMesh.visible = true; seamMesh.visible = false; // "malla": el contorno de cada bloque ayuda a distinguirlos en la hoja
-      positionCameraFixedAngle(fullBox, 30, 38, 2.1); // ángulo fijo a 30°, igual en todas las páginas
+      const visibleNow = voxels.filter(v => Math.round(v.y) <= layer);
+      const stepBox = worldBoxFromVoxelList(visibleNow); // encuadre ajustado a lo que se ve EN ESTE PASO, no al modelo entero
+      positionCameraFixedAngle(stepBox, 30, 128, 1.85); // 30° de ángulo, girado 90° respecto a antes para que se vea de frente
       renderer.render(scene, camera);
       const imgData = renderer.domElement.toDataURL('image/png');
 
@@ -1660,6 +1667,18 @@ function centeredBounds(){
   return new THREE.Box3(
     new THREE.Vector3(-halfX, 0, -halfZ),
     new THREE.Vector3(halfX, dims.y*voxelSize, halfZ)
+  );
+}
+// Caja (en coordenadas del mundo, centrada como el visor) que rodea justo una
+// lista de bloques puntual — para encuadrar la cámara ajustada a lo que se ve en
+// CADA paso de las instrucciones, en vez de siempre el tamaño del modelo entero.
+function worldBoxFromVoxelList(list){
+  if (!list.length) return centeredBounds();
+  const idxBox = boundsOf(list);
+  const offsetX = (dims.x*voxelSize)/2, offsetZ = (dims.z*voxelSize)/2;
+  return new THREE.Box3(
+    new THREE.Vector3(idxBox.min.x*voxelSize - offsetX - voxelSize*0.5, idxBox.min.y*voxelSize, idxBox.min.z*voxelSize - offsetZ - voxelSize*0.5),
+    new THREE.Vector3(idxBox.max.x*voxelSize - offsetX + voxelSize*0.5, (idxBox.max.y+1)*voxelSize, idxBox.max.z*voxelSize - offsetZ + voxelSize*0.5)
   );
 }
 
