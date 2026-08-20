@@ -823,72 +823,36 @@ function mergeGeometries(geoms){
   return merged;
 }
 
-// Prisma "acanalado": una franja lateral cuyo radio sube y baja en cada gajo (no un
-// polígono liso aproximando un círculo) — se ve como flor/engranaje desde cualquier
-// ángulo, incluso sin luces (el material del visor es plano, sin sombreado).
-function makeFlutedBody(baseRadius, ridgeDepth, flutes, height){
-  const segsPerFlute = 6;
-  const segments = flutes*segsPerFlute;
-  const halfH = height/2;
-  const positions=[], normals=[], uvs=[], indices=[];
-
-  const profile = [];
-  for (let i=0;i<=segments;i++){
-    const theta = (i/segments)*Math.PI*2;
-    const r = baseRadius + Math.sin(theta*flutes)*ridgeDepth;
-    profile.push({ x:r*Math.cos(theta), z:r*Math.sin(theta), theta });
+// Cuerpo "engranaje cuadrado" (la pieza real de Magic Bloks/bloques chinos, según
+// las fotos): un núcleo central sólido + "dedos" que sobresalen hacia los 4 lados,
+// con muescas entre ellos, en vez de un perfil redondo. Se arma uniendo cajas
+// simples (mucho más fiel a la foto que un cilindro con ondas).
+function makeGearSquareBody(coreHalf, outerHalf, teeth, height){
+  const parts = [];
+  function box(cx,cz, sx,sz){
+    const b = new THREE.BoxGeometry(sx, height, sz);
+    b.translate(cx, 0, cz);
+    parts.push(b);
   }
-
-  // paredes laterales, una franja de 2 triángulos por segmento (normales sin
-  // compartir entre caras vecinas, para que cada gajo se vea como una faceta propia)
-  let vBase = 0;
-  for (let i=0;i<segments;i++){
-    const p0=profile[i], p1=profile[i+1];
-    const nx0=Math.cos(p0.theta), nz0=Math.sin(p0.theta);
-    const nx1=Math.cos(p1.theta), nz1=Math.sin(p1.theta);
-    positions.push(p0.x,halfH,p0.z,  p0.x,-halfH,p0.z,  p1.x,halfH,p1.z,  p1.x,-halfH,p1.z);
-    normals.push(nx0,0,nz0, nx0,0,nz0, nx1,0,nz1, nx1,0,nz1);
-    uvs.push(i/segments,1, i/segments,0, (i+1)/segments,1, (i+1)/segments,0);
-    const a=vBase,b=vBase+1,c=vBase+2,d=vBase+3;
-    indices.push(a,b,c, b,d,c);
-    vBase += 4;
+  box(0, 0, coreHalf*2, coreHalf*2); // núcleo central
+  const span = outerHalf*2, segLen = span/(teeth*2-1), depth = outerHalf-coreHalf;
+  for (let i=0; i<teeth*2-1; i+=2){ // solo los tramos "afuera" (dedos); los impares son muescas
+    const along = -outerHalf + segLen*(i+0.5);
+    box(along, -(coreHalf+depth/2), segLen, depth); // dedo lado -Z
+    box(along,  (coreHalf+depth/2), segLen, depth); // dedo lado +Z
+    box(-(coreHalf+depth/2), along, depth, segLen); // dedo lado -X
+    box( (coreHalf+depth/2), along, depth, segLen); // dedo lado +X
   }
-  // tapas (arriba y abajo), en abanico desde el centro
-  function addCap(y, flip){
-    const center = vBase;
-    positions.push(0,y,0); normals.push(0,flip?1:-1,0); uvs.push(0.5,0.5);
-    vBase++;
-    const ringStart = vBase;
-    for (let i=0;i<=segments;i++){
-      positions.push(profile[i].x, y, profile[i].z);
-      normals.push(0, flip?1:-1, 0);
-      uvs.push(0.5+profile[i].x/(baseRadius*2), 0.5+profile[i].z/(baseRadius*2));
-      vBase++;
-    }
-    for (let i=0;i<segments;i++){
-      if (flip) indices.push(center, ringStart+i, ringStart+i+1);
-      else indices.push(center, ringStart+i+1, ringStart+i);
-    }
-  }
-  addCap(halfH, true);
-  addCap(-halfH, false);
-
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions,3));
-  geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals,3));
-  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs,2));
-  geo.setIndex(indices);
-  return geo;
+  return mergeGeometries(parts);
 }
 
 function buildBrickGeometry(size){
-  // Pieza tipo "clavija acanalada" (Magic Bloks / bloques chinos): cuerpo con gajos
-  // marcados de verdad (no solo un cilindro con pocas caras) + una protuberancia
-  // redondeada arriba. Cuerpo y protuberancia juntos ocupan exactamente el alto de
-  // la celda, así las capas siguen encastrando sin huecos ni superposición.
-  const flutes = 8;
+  // Pieza real de Magic Bloks / bloques chinos (calculada a partir de fotos): cuerpo
+  // con dedos y muescas cuadradas en los 4 lados + protuberancia redonda arriba.
+  // Cuerpo y protuberancia ocupan exactamente el alto de la celda, así las capas
+  // siguen encastrando sin huecos ni superposición.
   const bodyH = size*0.82, studH = size*0.18;
-  const body = makeFlutedBody(size*0.44, size*0.075, flutes, bodyH);
+  const body = makeGearSquareBody(size*0.30, size*0.47, 3, bodyH);
   body.translate(0, -size/2 + bodyH/2, 0);
   const stud = new THREE.CylinderGeometry(size*0.23, size*0.26, studH, 16, 1, false);
   stud.translate(0, size/2 - studH/2, 0);
