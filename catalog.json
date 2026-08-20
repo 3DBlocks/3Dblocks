@@ -53,6 +53,15 @@
       "price": 0,
       "thumb": "thumbs/naruto.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/naruto.json"
+    },
+    {
+      "slug": "sasuke-uchiha",
+      "name": "sasuke uchiha",
+      "description": "sasuke amigo de naruto",
+      "category": "naruto",
+      "price": 0,
+      "thumb": "thumbs/sasuke-uchiha.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/sasuke-uchiha.json"
     }
   ]
 }
