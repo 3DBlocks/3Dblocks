@@ -795,27 +795,6 @@ function clearModelMeshes(){
   if (edgeMesh){ scene.remove(edgeMesh); edgeMesh.geometry.dispose(); edgeMesh.material.dispose(); edgeMesh = null; }
 }
 
-/* Combina varias BufferGeometry en una sola (sin depender del addon BufferGeometryUtils) */
-function mergeGeometries(geoms){
-  const posArr = [], normArr = [], idxArr = [];
-  let vOffset = 0;
-  geoms.forEach(g=>{
-    const pos = g.attributes.position, norm = g.attributes.normal;
-    for (let i=0;i<pos.count;i++){
-      posArr.push(pos.getX(i), pos.getY(i), pos.getZ(i));
-      normArr.push(norm.getX(i), norm.getY(i), norm.getZ(i));
-    }
-    if (g.index){ for (let i=0;i<g.index.count;i++) idxArr.push(g.index.getX(i)+vOffset); }
-    else { for (let i=0;i<pos.count;i++) idxArr.push(i+vOffset); }
-    vOffset += pos.count;
-  });
-  const merged = new THREE.BufferGeometry();
-  merged.setAttribute('position', new THREE.Float32BufferAttribute(posArr,3));
-  merged.setAttribute('normal', new THREE.Float32BufferAttribute(normArr,3));
-  merged.setIndex(idxArr);
-  return merged;
-}
-
 /* Geometría de "bloque tipo pieza": cuerpo + stud redondo arriba + tubo de encaje abajo,
    como en la referencia de Studio 2.0 — un solo dibujo, reutilizado por todas las instancias. */
 // Combina varias BufferGeometry en una sola (necesario para que InstancedMesh reciba
