@@ -1953,8 +1953,20 @@ function voxelizeTriangles(tris, resolution){
   const size = new THREE.Vector3(); box.getSize(size);
   const maxExtent = Math.max(size.x,size.y,size.z,1e-6);
   const cell = maxExtent/resolution;
-  const occ = new Map();
   const gradA = new THREE.Color('#d9a86c'), gradB = new THREE.Color('#7ec9bd'); // tonos suaves, no neón
+
+  // Votación por color: cada celda de la rejilla puede recibir triángulos de
+  // colores distintos (normal en archivos .3mf pintados con muchos colores). En
+  // vez de quedarnos con el primero que llega (que perdía detalles al azar), se
+  // guardan todos los votos y al final se elige el color MÁS FRECUENTE de cada
+  // celda — mucho más fiel al pintado real.
+  const votes = new Map(); // "gx,gy,gz" -> Map(color -> cantidad de votos)
+  function addVote(gx,gy,gz,color){
+    const key = gx+','+gy+','+gz;
+    let m = votes.get(key);
+    if (!m){ m = new Map(); votes.set(key, m); }
+    m.set(color, (m.get(color)||0)+1);
+  }
 
   // Cobertura determinista: para cada triángulo, marcamos TODAS las celdas de la
   // rejilla que toca su caja delimitadora. A esta resolución cada pieza suele caber
@@ -1977,16 +1989,20 @@ function voxelizeTriangles(tris, resolution){
     if (spanCells > 3375){ // 15^3 — triángulo enorme/degenerado: solo marcamos su centro
       const cx=(a.x+b.x+c.x)/3, cy=(a.y+b.y+c.y)/3, cz=(a.z+b.z+c.z)/3;
       const gx=Math.floor((cx-box.min.x)/cell), gy=Math.floor((cy-box.min.y)/cell), gz=Math.floor((cz-box.min.z)/cell);
-      const key = gx+','+gy+','+gz;
-      if (!occ.has(key)) occ.set(key,{x:gx,y:gy,z:gz,color:colorFor(gy)});
+      addVote(gx,gy,gz,colorFor(gy));
       return;
     }
     for (let gx=gx0; gx<=gx1; gx++) for (let gy=gy0; gy<=gy1; gy++) for (let gz=gz0; gz<=gz1; gz++){
-      const key = gx+','+gy+','+gz;
-      if (!occ.has(key)) occ.set(key,{x:gx,y:gy,z:gz,color:colorFor(gy)});
+      addVote(gx,gy,gz,colorFor(gy));
     }
   });
-  const list = Array.from(occ.values());
+  const list = [];
+  votes.forEach((colorMap, key)=>{
+    const [gx,gy,gz] = key.split(',').map(Number);
+    let bestColor=null, bestCount=-1;
+    colorMap.forEach((count,color)=>{ if (count>bestCount){ bestCount=count; bestColor=color; } });
+    list.push({x:gx, y:gy, z:gz, color:bestColor});
+  });
   if (!list.length) throw new Error('La voxelización no produjo bloques; prueba con más resolución');
   return {list: normalize(list), cell};
 }
