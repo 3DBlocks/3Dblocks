@@ -418,7 +418,7 @@
         <button class="btn icon active" id="belowLayersBtn" title="Mostrar/ocultar capas ya construidas (en gris)">▤ Gris</button>
         <button class="btn icon" id="fullViewBtn" title="Ver el diseño completo, con todos los colores">👁 Completo</button>
         <button class="btn icon" id="bgToggleBtn" title="Cambiar fondo del visor">◐ Fondo</button>
-        <button class="btn icon active" id="meshTexBtn" title="Textura de malla sobre cada bloque">▦ Malla</button>
+        <button class="btn icon active" id="meshTexBtn" title="Resaltar el contorno de cada bloque">▦ Contorno</button>
       </div>
       <div id="ctxHint">clic derecho: orbitar<br/>rueda: zoom</div>
     </section>
@@ -894,12 +894,19 @@ function rebuildMesh3D(){
   // huequitos de exportación; renderizando ambas caras, esos huecos muestran la cara
   // de atrás en vez de dejar un hueco negro feo.
   const mat = new THREE.MeshBasicMaterial({ toneMapped:false, side: THREE.DoubleSide });
-  if (showMeshTexture) mat.map = getMeshTexture();
   instMesh = new THREE.InstancedMesh(geo, mat, visible.length);
   instMesh.castShadow = false; instMesh.receiveShadow = false;
 
   const edgeGeo = new THREE.EdgesGeometry(geo);
-  const edgeMat = new THREE.LineBasicMaterial({ color:0x000000, transparent:true, opacity:0.55 });
+  // El botón "▦ Malla" ahora resalta el contorno en vez de aplicar una textura —
+  // con la forma real de la pieza (no un cubo simple), una textura por UV quedaba
+  // mal proyectada y quedaba una "mancha negra" fea. Esto es más simple y funciona
+  // siempre bien: remarca el borde de cada bloque, sin depender del mapeo UV.
+  const edgeMat = new THREE.LineBasicMaterial({
+    color: 0x000000,
+    transparent: true,
+    opacity: showMeshTexture ? 0.85 : 0.55
+  });
   edgeMesh = new THREE.InstancedMesh(edgeGeo, edgeMat, visible.length);
   edgeMesh.visible = wireOn.v;
 
