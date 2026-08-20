@@ -1,15 +1,6 @@
 {
   "designs": [
     {
-      "slug": "greeninja",
-      "name": "Greninja",
-      "price": 4,
-      "category": "",
-      "description": "",
-      "thumb": "",
-      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/greeninja.json"
-    },
-    {
       "slug": "squirtle",
       "name": "squirtle",
       "description": "pokemon",
