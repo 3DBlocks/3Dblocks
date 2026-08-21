@@ -93,6 +93,7 @@
   #viewSwitch button + button{ border-left:1px solid var(--border); }
   #viewSwitch button.active{ background:var(--accent); color:#1a1305; }
   #orientRow{ display:flex; gap:6px; flex-wrap:wrap; justify-content:center; }
+  #moveRow{ display:flex; gap:6px; flex-wrap:wrap; justify-content:center; margin-top:6px; }
   #orientRow .btn{ padding:8px 10px; font-size:12px; }
 
   #strataTrack{ display:flex; gap:2px; margin-top:7px; max-width:640px; margin-left:auto; margin-right:auto; }
@@ -331,6 +332,7 @@
     #viewSwitchRow{ margin-top:7px !important; gap:7px !important; }
     #viewSwitch button{ padding:5px 11px; font-size:11px; }
     #orientRow .btn{ padding:5px 8px; font-size:10.5px; }
+    #moveRow .btn{ padding:5px 8px; font-size:10.5px; }
 
     #strataTrack{ margin-top:7px; }
     .strataSeg{ height:5px; }
@@ -410,6 +412,14 @@
         <button class="btn sm" id="rotateYBtn" title="Rotar 90° sobre el eje Y">↻ Y</button>
         <button class="btn sm" id="rotateZBtn" title="Rotar 90° sobre el eje Z">↻ Z</button>
         <button class="btn sm" id="flipYBtn" title="Invertir vertical">↕ Invertir</button>
+      </div>
+      <div id="moveRow" title="Mover el modelo completo de lugar">
+        <button class="btn sm" id="moveXNegBtn" title="Mover hacia -X">← X</button>
+        <button class="btn sm" id="moveXPosBtn" title="Mover hacia +X">X →</button>
+        <button class="btn sm" id="moveZNegBtn" title="Mover hacia -Z">← Z</button>
+        <button class="btn sm" id="moveZPosBtn" title="Mover hacia +Z">Z →</button>
+        <button class="btn sm" id="moveYNegBtn" title="Bajar (−Y)">↓ Y</button>
+        <button class="btn sm" id="moveYPosBtn" title="Subir (+Y)">↑ Y</button>
       </div>
     </div>
     <div id="strataTrack"></div>
@@ -2689,6 +2699,37 @@ document.getElementById('rotateXBtn').addEventListener('click', ()=> transformVo
 document.getElementById('rotateYBtn').addEventListener('click', ()=> transformVoxels(v=>({x:v.z, y:v.y, z:-v.x})));
 document.getElementById('rotateZBtn').addEventListener('click', ()=> transformVoxels(v=>({x:-v.y, y:v.x, z:v.z})));
 document.getElementById('flipYBtn').addEventListener('click', ()=> transformVoxels(v=>({x:v.x, y:-v.y, z:v.z})));
+
+// Mueve TODO el modelo de una — útil para reacomodar antes de "Colocar" piezas
+// nuevas, o simplemente para reubicarlo. Como el visor centra el modelo solo en
+// X/Z, un movimiento horizontal puede notarse más chico de lo esperado (el
+// centrado automático "absorbe" parte del corrimiento) — en vertical (Y) sí se
+// nota siempre completo.
+function shiftVoxels(dx, dy, dz){
+  if (!voxels.length){ setStatus('No hay ningún modelo cargado.', 'err'); return; }
+  pushUndoSnapshot();
+  voxels.forEach(v=>{ v.x+=dx; v.y+=dy; v.z+=dz; });
+  const minX = Math.min(0, ...voxels.map(v=>v.x));
+  const minY = Math.min(0, ...voxels.map(v=>v.y));
+  const minZ = Math.min(0, ...voxels.map(v=>v.z));
+  if (minX<0 || minY<0 || minZ<0){
+    voxels.forEach(v=>{ v.x-=minX; v.y-=minY; v.z-=minZ; });
+  }
+  dims.x = Math.max(...voxels.map(v=>v.x))+1;
+  dims.y = Math.max(...voxels.map(v=>v.y))+1;
+  dims.z = Math.max(...voxels.map(v=>v.z))+1;
+  maxLayer = Math.max(0, dims.y-1);
+  currentLayer = Math.min(currentLayer, maxLayer);
+  drawLayerDiagram(); rebuildMesh3D(); refreshLayerUI();
+  document.getElementById('statDims').textContent = `${dims.x}×${dims.y}×${dims.z}`;
+  document.getElementById('statCount').textContent = `${voxels.length}`;
+}
+document.getElementById('moveXNegBtn').addEventListener('click', ()=> shiftVoxels(-1,0,0));
+document.getElementById('moveXPosBtn').addEventListener('click', ()=> shiftVoxels(1,0,0));
+document.getElementById('moveZNegBtn').addEventListener('click', ()=> shiftVoxels(0,0,-1));
+document.getElementById('moveZPosBtn').addEventListener('click', ()=> shiftVoxels(0,0,1));
+document.getElementById('moveYNegBtn').addEventListener('click', ()=> shiftVoxels(0,-1,0));
+document.getElementById('moveYPosBtn').addEventListener('click', ()=> shiftVoxels(0,1,0));
 
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
