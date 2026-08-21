@@ -517,6 +517,7 @@
         <div class="stat-box"><div class="k">Bloques totales</div><div class="v" id="statCount">—</div></div>
       </div>
       <button class="btn wide admin-only" id="hollowBtn" style="width:100%; margin-top:10px;" title="Saca los bloques que quedan tapados por dentro (no se ven) — las piezas encastran por los bordes, no hace falta rellenar el centro de cada capa">🕳️ Vaciar interior (ahorrar piezas)</button>
+      <button class="btn wide admin-only" id="flatBlockBtn" style="width:100%; margin-top:8px;" title="Prueba cómo se ve el modelo con un bloque totalmente liso, sin el botón de arriba — para comparar cuál se lee mejor en el manual">◻️ Probar bloque sin muesca</button>
     </div>
 
     <div class="section">
@@ -945,9 +946,11 @@ function mergeGeometries(geoms){
   return merged;
 }
 
+let flatBlockMode = false; // true = bloque totalmente liso, sin el botón/muesca de arriba
 function buildBrickGeometry(size){
   // Cuerpo: llena el 100% de la celda (sin achicarse), así encastra sin huecos.
   const body = new THREE.BoxGeometry(size*0.97, size, size*0.97);
+  if (flatBlockMode) return body; // sin botón: bloque liso, para comparar cómo se ve
   // Botón: sobresale apenas por encima del límite de la celda.
   const studH = size*0.16;
   const stud = new THREE.CylinderGeometry(size*0.24, size*0.27, studH, 16, 1, false);
@@ -1121,6 +1124,13 @@ function hollowInteriorBlocks(){
   setStatus('Interior vaciado: se sacaron ' + removedCount + ' bloques que no se veían (quedan ' + voxels.length + '). Nada quedó flotando.', 'ok');
 }
 document.getElementById('hollowBtn').addEventListener('click', hollowInteriorBlocks);
+document.getElementById('flatBlockBtn').addEventListener('click', e=>{
+  flatBlockMode = !flatBlockMode;
+  e.currentTarget.classList.toggle('active', flatBlockMode);
+  e.currentTarget.textContent = flatBlockMode ? '◻️ Volver al bloque con muesca' : '◻️ Probar bloque sin muesca';
+  rebuildMesh3D();
+  setStatus(flatBlockMode ? 'Probando el bloque liso, sin muesca.' : 'Volviste al bloque con muesca (botón arriba).', 'ok');
+});
 
 function refreshUsedColorsPanel(){
   const panel = document.getElementById('usedColorsPanel');
