@@ -1026,9 +1026,14 @@ function rebuildMesh3D(){
   // Línea fina de separación entre piezas apiladas: una franjita delgada y oscura
   // justo en el borde de arriba de cada bloque — así se nota dónde termina una
   // pieza y empieza la siguiente, aunque estén bien pegadas sin hueco entre ellas.
+  // APAGADA por defecto: quedaba encendida siempre (nunca la apagábamos en el
+  // visor normal, solo en las capturas de instrucciones/render) — vista en 3D en
+  // ángulo, esta franjita oscura es probablemente la "sombra triangular" que se
+  // venía viendo desde el principio.
   const seamGeo = new THREE.BoxGeometry(voxelSize*0.60, voxelSize*0.02, voxelSize*0.60);
   const seamMat = new THREE.MeshBasicMaterial({ color:0x000000, transparent:true, opacity:0.6, toneMapped:false });
   seamMesh = new THREE.InstancedMesh(seamGeo, seamMat, visible.length);
+  seamMesh.visible = false;
 
   // Centra el diseño horizontalmente en la intersección de los ejes (X y Z);
   // la base se mantiene apoyada en el piso (Y=0) para que tenga sentido con la cuadrícula.
