@@ -470,7 +470,7 @@
       <div id="canvasHost"></div>
       <div id="ctxToolbar">
         <button class="btn icon" id="resetViewBtn" title="Buscar y centrar el diseño en la pantalla">🔍 Buscar</button>
-        <button class="btn icon" id="flatBlockBtn" title="Probar el modelo con un bloque totalmente liso, sin el botón de arriba — para comparar cuál se lee mejor en el manual">◻️ Sin muesca</button>
+        <button class="btn icon active" id="flatBlockBtn" title="El bloque simple (una sola caja) está activo por defecto — tocá para probar el bloque con muesca (botón arriba), armado combinando dos geometrías">◻️ Sin muesca</button>
         <button class="btn icon active" id="belowLayersBtn" title="Mostrar/ocultar capas ya construidas (en gris)">▤ Gris</button>
         <button class="btn icon" id="fullViewBtn" title="Ver el diseño completo, con todos los colores">👁 Completo</button>
         <button class="btn icon" id="bgToggleBtn" title="Cambiar fondo del visor">◐ Fondo</button>
@@ -946,7 +946,7 @@ function mergeGeometries(geoms){
   return merged;
 }
 
-let flatBlockMode = false; // true = bloque totalmente liso, sin el botón/muesca de arriba
+let flatBlockMode = true; // POR DEFECTO: bloque simple (una sola caja), sin combinar geometrías — la parte del código que armaba el botón/muesca a mano (mergeGeometries) era la única no estándar, y quedó descartada como sospechosa de la sombra que no se iba
 function buildBrickGeometry(size){
   // Cuerpo: llena el 100% de la celda (sin achicarse), así encastra sin huecos.
   const body = new THREE.BoxGeometry(size*0.97, size, size*0.97);
@@ -1127,9 +1127,9 @@ document.getElementById('hollowBtn').addEventListener('click', hollowInteriorBlo
 document.getElementById('flatBlockBtn').addEventListener('click', e=>{
   flatBlockMode = !flatBlockMode;
   e.currentTarget.classList.toggle('active', flatBlockMode);
-  e.currentTarget.textContent = flatBlockMode ? '◻️ Con muesca' : '◻️ Sin muesca';
+  e.currentTarget.textContent = flatBlockMode ? '◻️ Sin muesca' : '◻️ Con muesca';
   rebuildMesh3D();
-  setStatus(flatBlockMode ? 'Probando el bloque liso, sin muesca.' : 'Volviste al bloque con muesca (botón arriba).', 'ok');
+  setStatus(flatBlockMode ? 'Bloque simple (sin muesca) activo.' : 'Probando el bloque con muesca (botón arriba, combina dos geometrías).', 'ok');
 });
 
 function refreshUsedColorsPanel(){
