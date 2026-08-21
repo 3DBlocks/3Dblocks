@@ -388,7 +388,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v27</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v28</small></div>
     </div>
     <div id="modelNameText">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -460,6 +460,7 @@
         <button class="tool-btn" id="toolReplaceBtn" data-tool="replace" title="Tocá un bloque de cualquier color: se resaltan TODOS los bloques de ese color en el modelo entero. Después elegí el color nuevo en la paleta para cambiarlos a todos juntos.">🔁</button>
         <button class="tool-btn" id="toolSelectBtn" data-tool="select" title="Selección: arrastrá un rectángulo (en el plano 2D o en el visor 3D, desde cualquier ángulo) para elegir varios bloques a la vez, y copiarlos o espejarlos">▭</button>
         <button class="tool-btn" id="undoBtn" title="Deshacer (Ctrl+Z)">↩️</button>
+        <button class="tool-btn" id="hollowLayerBtn3d" title="Vaciar el interior de la capa que estás viendo (usa el grosor de pared del panel lateral)">🕳️</button>
         <button class="tool-btn" id="renderBtnFloating" title="Generar una foto de presentación con luces e iluminación real">🖼️</button>
         <div id="paletteRow" style="display:none;"></div>
       </div>
@@ -535,7 +536,12 @@
         <div class="stat-box"><div class="k">Dimensiones</div><div class="v" id="statDims">—</div></div>
         <div class="stat-box"><div class="k">Bloques totales</div><div class="v" id="statCount">—</div></div>
       </div>
-      <button class="btn wide admin-only" id="hollowBtn" style="width:100%; margin-top:10px;" title="Saca los bloques que quedan tapados por dentro (no se ven) — las piezas encastran por los bordes, no hace falta rellenar el centro de cada capa">🕳️ Vaciar interior (ahorrar piezas)</button>
+      <p class="section-title admin-only" style="margin-top:14px;">Vaciar interior (ahorrar piezas)</p>
+      <p class="admin-only" style="font-size:10.5px; color:var(--text-faint); margin:0 0 9px; line-height:1.5;">Saca los bloques de adentro que no se ven. Cuanto más gruesa la pared, más sólida queda la figura (pero ahorra menos piezas).</p>
+      <div class="row admin-only"><span class="label-sm">Grosor de pared</span><span class="value-mono" id="hollowWallVal">1</span></div>
+      <input class="admin-only" type="range" id="hollowWallSlider" min="1" max="6" step="1" value="1" />
+      <button class="btn wide admin-only" id="hollowBtn" style="width:100%; margin-top:8px;" title="Vacía el interior de TODO el modelo, dejando la pared del grosor elegido">🕳️ Vaciar todo el modelo</button>
+      <button class="btn wide admin-only" id="hollowLayerBtn" style="width:100%; margin-top:6px;" title="Vacía solo la capa que estás viendo ahora, dejando la pared del grosor elegido">🕳️ Vaciar solo esta capa</button>
     </div>
 
     <div class="section">
@@ -1140,9 +1146,14 @@ function rebuildMesh3D(){
 // solo gasta piezas. Recorre de arriba hacia abajo, capa por capa: un bloque solo
 // se saca si el de arriba (en la misma posición) también se sacó o no existe —
 // así nunca puede quedar un bloque flotando sin apoyo debajo.
-function hollowInteriorBlocks(){
+/* Vacía el interior dejando una "pared" del grosor que elijas.
+   - wallThickness: 1 = solo el borde exterior queda (máximo ahorro de piezas),
+     2 = deja dos bloques de pared, 3 = tres, etc. Cuanto más gruesa la pared,
+     más piezas usa pero más sólida queda la figura.
+   - onlyCurrentLayer: si es true, vacía únicamente la capa que estás viendo. */
+function hollowInteriorBlocks(wallThickness, onlyCurrentLayer){
   if (!voxels.length){ setStatus('No hay ningún modelo cargado.', 'err'); return; }
-  if (!confirm('Esto saca los bloques de adentro para ahorrar piezas — pero deja un hueco real en el modelo. Si desde algún ángulo se llega a ver entre los dientes de la superficie, se nota ese hueco como una mancha oscura. Solo conviene en modelos grandes donde el ahorro de piezas vale la pena. Podés deshacerlo con Ctrl+Z si no te convence. ¿Seguimos?')) return;
+  wallThickness = Math.max(1, parseInt(wallThickness,10) || 1);
   pushUndoSnapshot();
 
   const byLayer = new Map(); // y -> Set("x,z")
@@ -1156,33 +1167,72 @@ function hollowInteriorBlocks(){
     byPos.set(v.x+','+y+','+v.z, v);
   });
 
-  let openColumns = new Set(); // posiciones "x,z" que se vienen vaciando desde la capa de arriba
+  // Para cada capa, calcula a qué distancia del borde está cada celda (1 = borde,
+  // 2 = pegada al borde, etc.). Se quitan las que estén más adentro que la pared.
+  function depthMapForLayer(set){
+    const depth = new Map();
+    const queue = [];
+    set.forEach(key=>{
+      const [x,z] = key.split(',').map(Number);
+      const isEdge = [[x+1,z],[x-1,z],[x,z+1],[x,z-1]].some(([nx,nz]) => !set.has(nx+','+nz));
+      if (isEdge){ depth.set(key, 1); queue.push(key); }
+    });
+    for (let qi=0; qi<queue.length; qi++){
+      const key = queue[qi];
+      const d = depth.get(key);
+      const [x,z] = key.split(',').map(Number);
+      [[x+1,z],[x-1,z],[x,z+1],[x,z-1]].forEach(([nx,nz])=>{
+        const nk = nx+','+nz;
+        if (set.has(nk) && !depth.has(nk)){ depth.set(nk, d+1); queue.push(nk); }
+      });
+    }
+    return depth;
+  }
+
+  const layersToProcess = onlyCurrentLayer ? [currentLayer] : Array.from({length:maxY+1}, (_,i)=>maxY-i);
+  let openColumns = new Set(); // celdas que se vienen vaciando desde la capa de arriba
   const removeSet = new Set();
 
-  for (let y = maxY; y >= 0; y--){
+  layersToProcess.forEach(y=>{
     const set = byLayer.get(y);
-    if (!set){ openColumns = new Set(); continue; }
+    if (!set){ openColumns = new Set(); return; }
+    const depth = depthMapForLayer(set);
     const stillOpen = new Set();
     set.forEach(key=>{
       const [x,z] = key.split(',').map(Number);
-      const isInterior = [[x+1,z],[x-1,z],[x,z+1],[x,z-1]].every(([nx,nz]) => set.has(nx+','+nz));
+      const isDeepEnough = (depth.get(key) || 1) > wallThickness;
       const hasAbove = byPos.has(x+','+(y+1)+','+z);
-      if (isInterior && (!hasAbove || openColumns.has(key))){
+      // Solo se saca si no hay nada apoyado encima (o si lo de arriba también se
+      // sacó) — así nunca queda un bloque flotando en el aire.
+      const safeToRemove = onlyCurrentLayer ? !hasAbove : (!hasAbove || openColumns.has(key));
+      if (isDeepEnough && safeToRemove){
         removeSet.add(byPos.get(x+','+y+','+z));
         stillOpen.add(key);
       }
     });
     openColumns = stillOpen;
-  }
+  });
 
   const before = voxels.length;
   const kept = voxels.filter(v=>!removeSet.has(v));
   voxels.length = 0; voxels.push(...kept);
   drawLayerDiagram(); rebuildMesh3D(); refreshLayerUI();
+  document.getElementById('statCount').textContent = `${voxels.length}`;
   const removedCount = before - voxels.length;
-  setStatus('Interior vaciado: se sacaron ' + removedCount + ' bloques que no se veían (quedan ' + voxels.length + '). Nada quedó flotando.', 'ok');
+  setStatus('Se sacaron ' + removedCount + ' bloques del interior' + (onlyCurrentLayer ? ' (solo esta capa)' : '') +
+    ', dejando pared de ' + wallThickness + '. Quedan ' + voxels.length + '. Nada quedó flotando — Ctrl+Z para deshacer.', 'ok');
 }
-document.getElementById('hollowBtn').addEventListener('click', hollowInteriorBlocks);
+function currentWallThickness(){
+  const el = document.getElementById('hollowWallSlider');
+  return el ? parseInt(el.value,10) : 1;
+}
+document.getElementById('hollowWallSlider').addEventListener('input', e=>{
+  document.getElementById('hollowWallVal').textContent = e.target.value;
+});
+document.getElementById('hollowBtn').addEventListener('click', ()=> hollowInteriorBlocks(currentWallThickness(), false));
+document.getElementById('hollowLayerBtn').addEventListener('click', ()=> hollowInteriorBlocks(currentWallThickness(), true));
+document.getElementById('hollowLayerBtn3d').addEventListener('click', ()=> hollowInteriorBlocks(currentWallThickness(), true));
+
 document.getElementById('flatBlockBtn').addEventListener('click', e=>{
   flatBlockMode = !flatBlockMode;
   e.currentTarget.classList.toggle('active', flatBlockMode);
