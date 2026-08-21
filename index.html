@@ -1353,24 +1353,37 @@ async function generatePresentationRender(){
 document.getElementById('renderBtn').addEventListener('click', generatePresentationRender);
 document.getElementById('renderBtnFloating').addEventListener('click', generatePresentationRender);
 
-// Ubica la cámara en un ángulo fijo tipo isométrico (como pediste, ~40°), mirando
-// al centro de una caja dada — para que todas las páginas del manual usen el
-// mismo encuadre y ángulo, y se entienda bien cómo se va armando en 3D.
-function positionCameraFixedAngle(box, elevationDeg, azimuthDeg, marginMult){
+// Ubica la cámara en un ángulo fijo tipo isométrico, mirando a un punto dado.
+// `focusPoint` (opcional) permite apuntar a la ALTURA DE LA CAPA ACTUAL en vez
+// del centro del modelo: en modelos altos, la capa nueva queda muy por encima del
+// centro y se veía casi de canto ("horizontal", aplanada) — con esto la cámara
+// sube junto con las capas y la capa nueva siempre se ve de frente.
+function positionCameraFixedAngle(box, elevationDeg, azimuthDeg, marginMult, focusPoint){
   const size = new THREE.Vector3(); box.getSize(size);
   const center = new THREE.Vector3(); box.getCenter(center);
+  const target = focusPoint || center;
   const maxDim = Math.max(size.x, size.y, size.z, 1);
   const dist = maxDim * (marginMult||2.1);
   const elevRad = elevationDeg*Math.PI/180, azimRad = azimuthDeg*Math.PI/180;
   camera.position.set(
-    center.x + dist*Math.cos(elevRad)*Math.sin(azimRad),
-    center.y + dist*Math.sin(elevRad),
-    center.z + dist*Math.cos(elevRad)*Math.cos(azimRad)
+    target.x + dist*Math.cos(elevRad)*Math.sin(azimRad),
+    target.y + dist*Math.sin(elevRad),
+    target.z + dist*Math.cos(elevRad)*Math.cos(azimRad)
   );
   camera.near = Math.max(0.01, maxDim*0.001);
   camera.far = Math.max(2500, dist*3);
-  camera.lookAt(center);
+  camera.lookAt(target);
   camera.updateProjectionMatrix();
+}
+
+// Punto al que debe apuntar la cámara en un paso del manual: la altura de la capa
+// que se está armando, pero mezclada con el centro para que no quede demasiado
+// arriba (60% capa nueva, 40% centro — así se ve bien la capa nueva sin perder de
+// vista lo ya armado abajo).
+function focusPointForLayer(stepBox, layerNum){
+  const center = new THREE.Vector3(); stepBox.getCenter(center);
+  const layerY = (layerNum + 0.5) * voxelSize;
+  return new THREE.Vector3(center.x, center.y*0.4 + layerY*0.6, center.z);
 }
 
 /* ---------------------------- Vista previa rápida del ángulo (una sola foto) ----------------------------
@@ -1450,7 +1463,9 @@ async function quickAnglePreview(previewLayer){
   const visibleNow = useFullDesign ? voxels : voxels.filter(v => Math.round(v.y) <= layerNum);
   const stepBox = worldBoxFromVoxelList(visibleNow);
   const ang = customInstructionAngle || { elevation: 35, azimuth: 45 };
-  positionCameraFixedAngle(stepBox, ang.elevation, ang.azimuth, 1.85);
+  // En "modelo completo" apunta al centro; en un paso puntual, apunta a la altura
+  // de esa capa (para que no se vea de canto en modelos altos).
+  positionCameraFixedAngle(stepBox, ang.elevation, ang.azimuth, 1.85, useFullDesign ? null : focusPointForLayer(stepBox, layerNum));
   renderer.render(scene, camera);
   const dataUrl = renderer.domElement.toDataURL('image/png');
 
@@ -1598,7 +1613,9 @@ async function generateInstructionsPDF(){
       const visibleNow = voxels.filter(v => Math.round(v.y) <= layer);
       const stepBox = worldBoxFromVoxelList(visibleNow); // encuadre ajustado a lo que se ve EN ESTE PASO, no al modelo entero
       const instrAngle = customInstructionAngle || { elevation: 35, azimuth: 45 };
-      positionCameraFixedAngle(stepBox, instrAngle.elevation, instrAngle.azimuth, 1.85); // usa el ángulo guardado a mano si existe
+      // La cámara apunta a la altura de la capa actual (no al centro del modelo):
+      // en modelos altos, la capa nueva quedaba muy arriba y se veía de canto.
+      positionCameraFixedAngle(stepBox, instrAngle.elevation, instrAngle.azimuth, 1.85, focusPointForLayer(stepBox, layer));
       renderer.render(scene, camera);
       const imgData = renderer.domElement.toDataURL('image/png');
 
@@ -1728,7 +1745,7 @@ async function generateInstructionsPNGZip(){
       const visibleNow = voxels.filter(v => Math.round(v.y) <= layer);
       const stepBox = worldBoxFromVoxelList(visibleNow);
       const instrAngle2 = customInstructionAngle || { elevation: 35, azimuth: 45 };
-      positionCameraFixedAngle(stepBox, instrAngle2.elevation, instrAngle2.azimuth, 1.85);
+      positionCameraFixedAngle(stepBox, instrAngle2.elevation, instrAngle2.azimuth, 1.85, focusPointForLayer(stepBox, layer));
       renderer.render(scene, camera);
       const dataUrl = renderer.domElement.toDataURL('image/png');
       const base64 = dataUrl.split(',')[1];
