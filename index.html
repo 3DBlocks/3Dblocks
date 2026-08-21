@@ -475,7 +475,8 @@
         <button class="btn icon" id="fullViewBtn" title="Ver el diseño completo, con todos los colores">👁 Completo</button>
         <button class="btn icon" id="bgToggleBtn" title="Cambiar fondo del visor">◐ Fondo</button>
         <button class="btn icon active" id="meshTexBtn" title="Resaltar el contorno de cada bloque">▦ Contorno</button>
-        <button class="btn icon" id="previewInstrAngleBtn" title="Pone la cámara en el MISMO ángulo exacto que usan las instrucciones (35°), con el diseño completo — para comparar directo, sin generar el PDF">📐 Ver ángulo del manual</button>
+        <button class="btn icon" id="previewInstrAngleBtn" title="Pone la cámara en el MISMO ángulo exacto que usan las instrucciones, con el diseño completo — para comparar directo, sin generar el PDF">📐 Ver ángulo del manual</button>
+        <button class="btn icon" id="useThisAngleBtn" title="Guarda el ángulo EXACTO en el que está la cámara ahora mismo (girá con el mouse hasta que se vea bien) para que el manual use ese, en vez de uno fijo">📌 Usar este ángulo</button>
       </div>
       <div id="ctxHint">clic derecho: orbitar<br/>rueda: zoom</div>
     </section>
@@ -1454,7 +1455,8 @@ async function generateInstructionsPDF(){
       // viéndose como una sola mancha oscura ("sombra triangular").
       const visibleNow = voxels.filter(v => Math.round(v.y) <= layer);
       const stepBox = worldBoxFromVoxelList(visibleNow); // encuadre ajustado a lo que se ve EN ESTE PASO, no al modelo entero
-      positionCameraFixedAngle(stepBox, 35, 45, 1.85); // cambiado de 128° a 45° — el ángulo anterior quedaba mirando casi de canto a una parte del modelo
+      const instrAngle = customInstructionAngle || { elevation: 35, azimuth: 45 };
+      positionCameraFixedAngle(stepBox, instrAngle.elevation, instrAngle.azimuth, 1.85); // usa el ángulo guardado a mano si existe
       renderer.render(scene, camera);
       const imgData = renderer.domElement.toDataURL('image/png');
 
@@ -1568,7 +1570,8 @@ async function generateInstructionsPNGZip(){
       // Contorno adaptable (blanco en oscuros, negro en claros), igual que el visor normal.
       const visibleNow = voxels.filter(v => Math.round(v.y) <= layer);
       const stepBox = worldBoxFromVoxelList(visibleNow);
-      positionCameraFixedAngle(stepBox, 35, 45, 1.85);
+      const instrAngle2 = customInstructionAngle || { elevation: 35, azimuth: 45 };
+      positionCameraFixedAngle(stepBox, instrAngle2.elevation, instrAngle2.azimuth, 1.85);
       renderer.render(scene, camera);
       const dataUrl = renderer.domElement.toDataURL('image/png');
       const base64 = dataUrl.split(',')[1];
@@ -3934,13 +3937,15 @@ function buscarDiseno(){
   controls.focus(box, true);
 }
 document.getElementById('resetViewBtn').addEventListener('click', buscarDiseno);
+let customInstructionAngle = null; // {elevation, azimuth} en grados — si el usuario guarda un ángulo a mano, se usa ese en vez del fijo (35°/45°)
 document.getElementById('previewInstrAngleBtn').addEventListener('click', ()=>{
   if (!voxels.length){ setStatus('No hay ningún diseño cargado.', 'err'); return; }
   showFullDesign = true;
   const fvb = document.getElementById('fullViewBtn'); if (fvb) fvb.classList.add('active');
   rebuildMesh3D();
   const box = centeredBounds();
-  positionCameraFixedAngle(box, 35, 45, 1.85); // MISMO ángulo que usan las instrucciones
+  const ang = customInstructionAngle || { elevation: 35, azimuth: 45 };
+  positionCameraFixedAngle(box, ang.elevation, ang.azimuth, 1.85);
   // Sincroniza los controles de órbita con esta posición, para que si seguís
   // girando con el mouse desde acá no salte de golpe a otro lado.
   const center = new THREE.Vector3(); box.getCenter(center);
@@ -3952,7 +3957,14 @@ document.getElementById('previewInstrAngleBtn').addEventListener('click', ()=>{
   controls.radius = controls._ra = radius;
   controls.polar = controls._po = polar;
   controls.azimuth = controls._az = azimuth;
-  setStatus('Cámara puesta en el mismo ángulo que usan las instrucciones (35°) — girá desde acá y comparalo con el manual generado.', 'ok');
+  setStatus((customInstructionAngle ? 'Cámara puesta en TU ángulo guardado' : 'Cámara puesta en el ángulo por defecto del manual') + ' — girá desde acá y comparalo.', 'ok');
+});
+document.getElementById('useThisAngleBtn').addEventListener('click', ()=>{
+  if (!voxels.length){ setStatus('No hay ningún diseño cargado.', 'err'); return; }
+  const elevationDeg = 90 - (controls.polar*180/Math.PI);
+  const azimuthDeg = controls.azimuth*180/Math.PI;
+  customInstructionAngle = { elevation: elevationDeg, azimuth: azimuthDeg };
+  setStatus('Listo — el manual ahora va a usar este ángulo exacto (elevación ' + elevationDeg.toFixed(0) + '°). Generá las instrucciones cuando quieras.', 'ok');
 });
 document.getElementById('belowLayersBtn').addEventListener('click', e=>{
   showBelowLayers = !showBelowLayers;
