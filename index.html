@@ -388,7 +388,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v28</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v29</small></div>
     </div>
     <div id="modelNameText">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -537,9 +537,9 @@
         <div class="stat-box"><div class="k">Bloques totales</div><div class="v" id="statCount">—</div></div>
       </div>
       <p class="section-title admin-only" style="margin-top:14px;">Vaciar interior (ahorrar piezas)</p>
-      <p class="admin-only" style="font-size:10.5px; color:var(--text-faint); margin:0 0 9px; line-height:1.5;">Saca los bloques de adentro que no se ven. Cuanto más gruesa la pared, más sólida queda la figura (pero ahorra menos piezas).</p>
-      <div class="row admin-only"><span class="label-sm">Grosor de pared</span><span class="value-mono" id="hollowWallVal">1</span></div>
-      <input class="admin-only" type="range" id="hollowWallSlider" min="1" max="6" step="1" value="1" />
+      <p class="admin-only" style="font-size:10.5px; color:var(--text-faint); margin:0 0 9px; line-height:1.5;">Saca los bloques de adentro que no se ven. Empezá en 4 (conservador, saca poco) e í bajando: en 1 queda solo el marco exterior. Ojo: en 0 vacía la capa entera. Aplicalo varias veces bajando el valor hasta que te guste — Ctrl+Z deshace.</p>
+      <div class="row admin-only"><span class="label-sm">Grosor de pared</span><span class="value-mono" id="hollowWallVal">4</span></div>
+      <input class="admin-only" type="range" id="hollowWallSlider" min="0" max="6" step="1" value="4" />
       <button class="btn wide admin-only" id="hollowBtn" style="width:100%; margin-top:8px;" title="Vacía el interior de TODO el modelo, dejando la pared del grosor elegido">🕳️ Vaciar todo el modelo</button>
       <button class="btn wide admin-only" id="hollowLayerBtn" style="width:100%; margin-top:6px;" title="Vacía solo la capa que estás viendo ahora, dejando la pared del grosor elegido">🕳️ Vaciar solo esta capa</button>
     </div>
@@ -1153,7 +1153,10 @@ function rebuildMesh3D(){
    - onlyCurrentLayer: si es true, vacía únicamente la capa que estás viendo. */
 function hollowInteriorBlocks(wallThickness, onlyCurrentLayer){
   if (!voxels.length){ setStatus('No hay ningún modelo cargado.', 'err'); return; }
-  wallThickness = Math.max(1, parseInt(wallThickness,10) || 1);
+  // 0 = vaciado máximo (se saca todo lo que no esté justo en el borde exterior).
+  // Valores más altos dejan una pared más gruesa, o sea más sólida y menos ahorro.
+  const wt = parseInt(wallThickness, 10);
+  wallThickness = Number.isNaN(wt) ? 4 : Math.max(0, wt);
   pushUndoSnapshot();
 
   const byLayer = new Map(); // y -> Set("x,z")
@@ -1224,7 +1227,7 @@ function hollowInteriorBlocks(wallThickness, onlyCurrentLayer){
 }
 function currentWallThickness(){
   const el = document.getElementById('hollowWallSlider');
-  return el ? parseInt(el.value,10) : 1;
+  return el ? parseInt(el.value,10) : 4;
 }
 document.getElementById('hollowWallSlider').addEventListener('input', e=>{
   document.getElementById('hollowWallVal').textContent = e.target.value;
