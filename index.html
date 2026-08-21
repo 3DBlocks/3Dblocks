@@ -388,7 +388,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v29</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v30</small></div>
     </div>
     <div id="modelNameText">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -2466,14 +2466,27 @@ async function parse3MF(arrayBuffer){
   if (!modelFile) throw new Error('Ese .3mf no tiene el archivo de modelo esperado (3D/3dmodel.model).');
   const xml = await modelFile.async('string');
 
-  // Colores reales de los filamentos usados en el proyecto (si los trae)
+  // Colores reales de los filamentos usados en el proyecto (si los trae).
+  // Bambu Studio a veces los guarda con transparencia incluida ("#DE4343FF",
+  // 8 caracteres en vez de 6). Ese formato rompía la lectura del color y por eso
+  // algunos .3mf se veían sin colores — acá lo normalizamos siempre a #RRGGBB.
+  function normalizeHexColor(str){
+    if (typeof str !== 'string') return null;
+    let s = str.trim().replace(/^#/, '');
+    if (s.length === 8) s = s.slice(0, 6);        // saca la transparencia
+    else if (s.length === 4) s = s.slice(0, 3);   // versión corta con transparencia
+    if (s.length === 3) s = s[0]+s[0]+s[1]+s[1]+s[2]+s[2]; // #abc → #aabbcc
+    if (!/^[0-9a-fA-F]{6}$/.test(s)) return null;
+    return '#' + s.toLowerCase();
+  }
   let filamentColors = ['#f2b134'];
   const settingsFile = zip.file('Metadata/project_settings.config');
   if (settingsFile){
     try{
       const settings = JSON.parse(await settingsFile.async('string'));
       if (Array.isArray(settings.filament_colour) && settings.filament_colour.length){
-        filamentColors = settings.filament_colour;
+        const cleaned = settings.filament_colour.map(normalizeHexColor).filter(Boolean);
+        if (cleaned.length) filamentColors = cleaned;
       }
     } catch(e){ /* seguimos con el color por defecto */ }
   }
