@@ -388,7 +388,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v30</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v31</small></div>
     </div>
     <div id="modelNameText">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -691,6 +691,41 @@ function boundsOf(vlist){
   vlist.forEach(v => box.expandByPoint(new THREE.Vector3(v.x, v.y, v.z)));
   return box;
 }
+/* Limpia cualquier color a formato #rrggbb. Acepta:
+   - #DE4343FF (8 dígitos, con transparencia — así los guarda a veces Bambu Studio)
+   - #abc / #abcd (formato corto, con o sin transparencia)
+   - de4343 (sin el #)
+   - nombres CSS ("red", "white") y rgb(...) — se resuelven con el navegador
+   Si de verdad no se entiende, devuelve un color por defecto en vez de romper. */
+const FALLBACK_COLOR = '#f2b134';
+function cleanColor(str, fallback){
+  fallback = fallback || FALLBACK_COLOR;
+  if (typeof str !== 'string') return fallback;
+  let s = str.trim();
+  if (!s) return fallback;
+  const hex = s.replace(/^#/, '');
+  if (/^[0-9a-fA-F]+$/.test(hex)){
+    let h = hex;
+    if (h.length === 8) h = h.slice(0,6);          // saca la transparencia
+    else if (h.length === 4) h = h.slice(0,3);     // corto + transparencia
+    if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+    if (h.length === 6) return '#' + h.toLowerCase();
+  }
+  // Otros formatos (nombres CSS, rgb(...)): que los resuelva el navegador
+  try{
+    const probe = document.createElement('canvas').getContext('2d');
+    probe.fillStyle = '#000000';
+    probe.fillStyle = s;
+    const resolved = probe.fillStyle;
+    if (typeof resolved === 'string' && resolved.startsWith('#') && resolved.length === 7) return resolved.toLowerCase();
+    const m = /^rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(resolved);
+    if (m){
+      return '#' + [1,2,3].map(i=>parseInt(m[i],10).toString(16).padStart(2,'0')).join('');
+    }
+  } catch(e){ /* si falla, usamos el color por defecto */ }
+  return fallback;
+}
+
 function normalize(list){
   const box = boundsOf(list);
   return list.map(v => ({
@@ -1098,7 +1133,10 @@ function rebuildMesh3D(){
     dummy.updateMatrix();
     seamMesh.setMatrixAt(i, dummy.matrix);
     const isCurrentLayer = showFullDesign || Math.round(v.y) === currentLayer;
-    if (isCurrentLayer){ tmpColor.set(v.color); } else { tmpColor.copy(belowLayerColor); }
+    // cleanColor() como red de seguridad: si un color viniera en un formato raro
+    // (con transparencia, nombre CSS, etc.), acá se normaliza en vez de romper el
+    // dibujado o quedar en negro.
+    if (isCurrentLayer){ tmpColor.set(cleanColor(v.color)); } else { tmpColor.copy(belowLayerColor); }
     instMesh.setColorAt(i, tmpColor);
     // Resaltado de selección: SOLO el contorno cambia de color — el relleno del
     // bloque se queda siempre con su color real, nunca lo tapa. La selección
@@ -2468,24 +2506,14 @@ async function parse3MF(arrayBuffer){
 
   // Colores reales de los filamentos usados en el proyecto (si los trae).
   // Bambu Studio a veces los guarda con transparencia incluida ("#DE4343FF",
-  // 8 caracteres en vez de 6). Ese formato rompía la lectura del color y por eso
-  // algunos .3mf se veían sin colores — acá lo normalizamos siempre a #RRGGBB.
-  function normalizeHexColor(str){
-    if (typeof str !== 'string') return null;
-    let s = str.trim().replace(/^#/, '');
-    if (s.length === 8) s = s.slice(0, 6);        // saca la transparencia
-    else if (s.length === 4) s = s.slice(0, 3);   // versión corta con transparencia
-    if (s.length === 3) s = s[0]+s[0]+s[1]+s[1]+s[2]+s[2]; // #abc → #aabbcc
-    if (!/^[0-9a-fA-F]{6}$/.test(s)) return null;
-    return '#' + s.toLowerCase();
-  }
+  // 8 caracteres en vez de 6). cleanColor() acepta ese y cualquier otro formato.
   let filamentColors = ['#f2b134'];
   const settingsFile = zip.file('Metadata/project_settings.config');
   if (settingsFile){
     try{
       const settings = JSON.parse(await settingsFile.async('string'));
       if (Array.isArray(settings.filament_colour) && settings.filament_colour.length){
-        const cleaned = settings.filament_colour.map(normalizeHexColor).filter(Boolean);
+        const cleaned = settings.filament_colour.map(c=>cleanColor(c, null)).filter(Boolean);
         if (cleaned.length) filamentColors = cleaned;
       }
     } catch(e){ /* seguimos con el color por defecto */ }
@@ -2791,7 +2819,8 @@ function parseDaeTriangles(xmlTextRaw){
     const instMat = igEl.getElementsByTagName('instance_material')[0];
     if (!instMat) return null;
     const target = (instMat.getAttribute('target')||'').replace(/^#/,'');
-    return materialColor[target] || null;
+    const c = materialColor[target];
+    return c ? cleanColor(c, null) : null;
   }
 
   /* --- 3) Grafo de escena: aplicar transformaciones de <node> a cada instancia --- */
@@ -3020,10 +3049,10 @@ function parseJsonModel(obj){
   // Formato liviano nuevo: { pal:["#hex",...], v:[[x,y,z,índiceDeColor],...] } — el
   // color no se repite en cada bloque, así el archivo pesa mucho menos.
   if (Array.isArray(obj.pal) && Array.isArray(obj.v)){
-    return normalize(obj.v.map(v=>({x:v[0], y:v[1], z:v[2], color: obj.pal[v[3]] || '#f2b134'})));
+    return normalize(obj.v.map(v=>({x:v[0], y:v[1], z:v[2], color: cleanColor(obj.pal[v[3]])})));
   }
   if (Array.isArray(obj.voxels)){
-    return normalize(obj.voxels.map(v=>({x:v[0],y:v[1],z:v[2],color:v[3]||'#f2b134'})));
+    return normalize(obj.voxels.map(v=>({x:v[0],y:v[1],z:v[2],color:cleanColor(v[3])})));
   }
   throw new Error('El .json debe tener la forma { voxels: [[x,y,z,"#hex"], ...] }');
 }
