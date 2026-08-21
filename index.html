@@ -1082,7 +1082,7 @@ function rebuildMesh3D(){
 // así nunca puede quedar un bloque flotando sin apoyo debajo.
 function hollowInteriorBlocks(){
   if (!voxels.length){ setStatus('No hay ningún modelo cargado.', 'err'); return; }
-  if (!confirm('Esto va a sacar los bloques que quedan tapados por dentro de cada capa (no se ven desde afuera). Podés deshacerlo después con Ctrl+Z si no te convence. ¿Seguimos?')) return;
+  if (!confirm('Esto saca los bloques de adentro para ahorrar piezas — pero deja un hueco real en el modelo. Si desde algún ángulo se llega a ver entre los dientes de la superficie, se nota ese hueco como una mancha oscura. Solo conviene en modelos grandes donde el ahorro de piezas vale la pena. Podés deshacerlo con Ctrl+Z si no te convence. ¿Seguimos?')) return;
   pushUndoSnapshot();
 
   const byLayer = new Map(); // y -> Set("x,z")
