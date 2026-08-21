@@ -1366,7 +1366,7 @@ async function generateInstructionsPDF(){
   const wasGroundVisible = ground.visible;
   ground.visible = false; // sin piso ni sombra — bloque liso, como el visor normal
   const wasMeshTexture = showMeshTexture;
-  showMeshTexture = true; // fuerza el contorno bien marcado, para que se lea claro la separación entre bloques
+  showMeshTexture = false; // SIN textura de rejilla en las caras — cuadrados 100% lisos, como pediste
 
   showFullDesign = false; showBelowLayers = true; // capa actual con su color real, las de abajo atenuadas — así se ve qué es nuevo
 
@@ -1434,6 +1434,7 @@ async function generateInstructionsPDF(){
       currentLayer = layer;
       rebuildMesh3D(); // con showFullDesign=false y showBelowLayers=true: esta capa a color, las de abajo gris — con el material plano de siempre, sin luces ni sombras
       edgeMesh.visible = true; seamMesh.visible = false; // contorno bien visible: se distingue la separación entre bloques
+      edgeMesh.material.opacity = 1; // al máximo, sin depender de la textura (que ahora está apagada)
       const visibleNow = voxels.filter(v => Math.round(v.y) <= layer);
       const stepBox = worldBoxFromVoxelList(visibleNow); // encuadre ajustado a lo que se ve EN ESTE PASO, no al modelo entero
       positionCameraFixedAngle(stepBox, 35, 128, 1.85); // 35° de ángulo, como pediste
