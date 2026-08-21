@@ -1003,7 +1003,12 @@ function rebuildMesh3D(){
   // huequitos de exportación; renderizando ambas caras, esos huecos muestran la cara
   // de atrás en vez de dejar un hueco negro feo.
   const mat = new THREE.MeshBasicMaterial({ toneMapped:false, side: THREE.DoubleSide });
-  if (showMeshTexture) mat.map = getMeshTexture();
+  // SIN textura de rejilla en la cara: esa textura tenía un borde negro dibujado
+  // adentro, y en bloques chicos/lejanos la tarjeta gráfica mezcla ("mipmapea") ese
+  // borde con el resto de la cara, oscureciéndola entera — eso era la "sombra
+  // triangular" que aparecía en TODOS los modelos, hasta en el árbol de ejemplo.
+  // El contorno real (edgeMesh, líneas geométricas de verdad) ya cumple esa función
+  // sin ese riesgo, así que no hace falta ninguna textura de por medio.
   instMesh = new THREE.InstancedMesh(geo, mat, visible.length);
   instMesh.castShadow = false; instMesh.receiveShadow = false;
 
