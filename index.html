@@ -384,7 +384,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v25</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v26</small></div>
     </div>
     <div id="modelNameText">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -1601,19 +1601,40 @@ async function generateInstructionsPDF(){
     const pageW = 210, pageH = 297;
     const modelName = (document.getElementById('modelNameText').textContent || 'Diseño 3DBlock').trim();
 
-    // Portada
+    // ---- Portada ----
     doc.setFillColor(8,11,19);
     doc.rect(0,0,pageW,pageH,'F');
     doc.setTextColor(242,177,52);
-    doc.setFontSize(30);
-    doc.text('3DBLOCK', pageW/2, 110, { align:'center' });
+    doc.setFontSize(28);
+    doc.text('3DBLOCK', pageW/2, 24, { align:'center' });
     doc.setTextColor(255,255,255);
-    doc.setFontSize(18);
-    doc.text(modelName, pageW/2, 125, { align:'center' });
-    doc.setFontSize(11);
+    doc.setFontSize(17);
+    doc.text(modelName, pageW/2, 36, { align:'center' });
+    doc.setFontSize(10.5);
     doc.setTextColor(180,186,204);
-    doc.text('Guía de armado por capas — vista en 3D', pageW/2, 136, { align:'center' });
-    doc.text(voxels.length + ' bloques · ' + (maxLayer+1) + ' capas', pageW/2, 143, { align:'center' });
+    doc.text(voxels.length + ' bloques · ' + (maxLayer+1) + ' capas', pageW/2, 44, { align:'center' });
+
+    // Dos fotos del modelo terminado, desde ángulos distintos: el punto medio
+    // entre las vistas 1 y 2 (frente/atrás), y el punto medio entre 3 y 1
+    // (derecha/frente) — así se aprecia bien la pieza terminada.
+    const coverAngles = [
+      { elevation: 28, azimuth: 90 },   // entre "Frente" (0°) y "Atrás" (180°)
+      { elevation: 28, azimuth: -45 },  // entre "Derecha" (-90°) y "Frente" (0°)
+    ];
+    const wasFullForCover = showFullDesign;
+    showFullDesign = true;
+    rebuildMesh3D();
+    instMesh.material = realMat;
+    edgeMesh.visible = false; seamMesh.visible = false;
+    const coverBox = centeredBounds();
+    const coverW = 88, coverY = 52;
+    coverAngles.forEach((ca, idx)=>{
+      positionCameraFixedAngle(coverBox, ca.elevation, ca.azimuth, instructionMargin());
+      renderer.render(scene, camera);
+      const img = renderer.domElement.toDataURL('image/png');
+      doc.addImage(img, 'PNG', idx===0 ? 12 : 110, coverY, coverW, coverW);
+    });
+    showFullDesign = wasFullForCover;
 
     // Recuadro con el total de piezas de TODO el manual, por color.
     const totalCounts = new Map();
@@ -1622,7 +1643,7 @@ async function generateInstructionsPDF(){
     const boxX = 20, boxW = pageW-40, colW = 30, padX = 8;
     const perRow = Math.max(1, Math.floor((boxW - padX*2) / colW));
     const rows = Math.ceil(entries.length / perRow);
-    const boxY = 158, titleH = 14, rowH = 9;
+    const boxY = coverY + coverW + 10, titleH = 14, rowH = 9;
     const boxH = titleH + rows*rowH + 8;
     doc.setDrawColor(242,177,52);
     doc.setLineWidth(0.5);
@@ -1643,6 +1664,21 @@ async function generateInstructionsPDF(){
       cx += colW;
       if (cx > boxX+boxW-colW+padX){ cx = boxX+padX; cy += rowH; }
     });
+
+    // Código QR que lleva al catálogo, para que quien tenga el manual en papel
+    // pueda entrar a ver más diseños.
+    try{
+      const catalogUrl = pageBaseUrl().replace(/index\.html?$/i, '') + 'catalogo.html';
+      const qr = qrcode(0, 'M');
+      qr.addData(catalogUrl);
+      qr.make();
+      const qrImg = qr.createDataURL(8, 0);
+      const qrSize = 34, qrY = boxY + boxH + 12;
+      doc.addImage(qrImg, 'GIF', pageW/2 - qrSize/2, qrY, qrSize, qrSize);
+      doc.setFontSize(9.5);
+      doc.setTextColor(180,186,204);
+      doc.text('Escaneá para ver más diseños en nuestro catálogo', pageW/2, qrY + qrSize + 6, { align:'center' });
+    } catch(e){ /* si falla el QR, la portada igual queda bien */ }
 
     const margin = 8;
     const imgSize = pageW - margin*2;
@@ -1671,6 +1707,18 @@ async function generateInstructionsPDF(){
       doc.setTextColor(20,20,20);
       doc.text(modelName + ' — Paso ' + (layer+1) + ' de ' + (maxLayer+1), pageW/2, 12, { align:'center' });
       doc.addImage(imgData, 'PNG', margin, 18, imgSize, imgSize);
+
+      // Marca de agua "3DBlock" cruzada sobre la imagen, en gris muy suave para
+      // que no moleste al leer el manual pero identifique el origen.
+      if (doc.saveGraphicsState && doc.GState){
+        doc.saveGraphicsState();
+        doc.setGState(new doc.GState({ opacity: 0.12 }));
+      }
+      doc.setTextColor(0,0,0);
+      doc.setFontSize(52);
+      doc.text('3DBlock', pageW/2, 18 + imgSize/2, { align:'center', angle: 30 });
+      if (doc.restoreGraphicsState) doc.restoreGraphicsState();
+
       doc.setFontSize(8.5);
       doc.setTextColor(120,130,150);
       doc.text('En color: los bloques NUEVOS de este paso. En gris: lo que ya tenías armado.', pageW/2, 18+imgSize+6, { align:'center' });
