@@ -71,6 +71,15 @@
       "price": 10,
       "thumb": "thumbs/mewtwo.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/mewtwo.json"
+    },
+    {
+      "slug": "rosa-bulbasour",
+      "name": "rosa bulbasour",
+      "description": "pokemon",
+      "category": "pokemon",
+      "price": 5,
+      "thumb": "thumbs/rosa-bulbasour.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/rosa-bulbasour.json"
     }
   ]
 }
