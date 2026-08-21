@@ -1376,8 +1376,9 @@ async function generateInstructionsPDF(){
   // SIN material con brillo esta vez: mismo material plano y sin luces que ya usa
   // el visor normal (MeshBasicMaterial no responde para nada a la iluminación, así
   // que es matemáticamente imposible que aparezca un brillo o sombra rara, venga
-  // del ángulo que venga) — solo cambiamos el contorno a negro parejo para que se
-  // note bien la separación entre bloques ("estilo malla").
+  // del ángulo que venga) — el contorno usa el mismo blanco/negro adaptable de siempre.
+  const wasFlatBlockMode = flatBlockMode;
+  flatBlockMode = true; // fuerza el bloque simple SIEMPRE acá, sin importar qué hayas probado en el visor
   showFullDesign = false; showBelowLayers = true; // capa actual con su color real, las de abajo atenuadas — así se ve qué es nuevo
 
   // Resolución alta SOLO para la captura (no cambia el tamaño visible del panel en
@@ -1500,6 +1501,7 @@ async function generateInstructionsPDF(){
     axesHelper.visible = wasAxesVisible;
     grid.visible = wasGridVisible;
     currentLayer = wasCurrentLayer; showFullDesign = wasFullDesign; showBelowLayers = wasShowBelow;
+    flatBlockMode = wasFlatBlockMode;
     renderer.setSize(origSize.x, origSize.y, false);
     camera.aspect = origAspect;
     rebuildMesh3D();
@@ -1539,6 +1541,8 @@ async function generateInstructionsPNGZip(){
   ground.visible = false;
 
   // SIN material con brillo: el mismo material plano y sin luces del visor normal.
+  const wasFlatBlockMode = flatBlockMode;
+  flatBlockMode = true; // fuerza el bloque simple SIEMPRE acá, sin importar qué hayas probado en el visor
   showFullDesign = false; showBelowLayers = true;
 
   const origSize = new THREE.Vector2();
@@ -1586,6 +1590,7 @@ async function generateInstructionsPNGZip(){
     axesHelper.visible = wasAxesVisible;
     grid.visible = wasGridVisible;
     currentLayer = wasCurrentLayer; showFullDesign = wasFullDesign; showBelowLayers = wasShowBelow;
+    flatBlockMode = wasFlatBlockMode;
     renderer.setSize(origSize.x, origSize.y, false);
     camera.aspect = origAspect;
     rebuildMesh3D();
