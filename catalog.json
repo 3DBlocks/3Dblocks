@@ -98,6 +98,15 @@
       "price": 10,
       "thumb": "thumbs/raykuaza.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/raykuaza.json"
+    },
+    {
+      "slug": "croconaw",
+      "name": "croconaw",
+      "description": "pokemon",
+      "category": "pokemon",
+      "price": 10,
+      "thumb": "thumbs/croconaw.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/croconaw.json"
     }
   ]
 }
