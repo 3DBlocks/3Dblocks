@@ -62,6 +62,15 @@
       "price": 7,
       "thumb": "thumbs/lucario.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/lucario.json"
+    },
+    {
+      "slug": "mewtwo",
+      "name": "MEWTWO",
+      "description": "POKEMON",
+      "category": "pokemon",
+      "price": 10,
+      "thumb": "thumbs/mewtwo.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/mewtwo.json"
     }
   ]
 }
