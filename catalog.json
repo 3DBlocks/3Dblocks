@@ -89,6 +89,15 @@
       "price": 5,
       "thumb": "thumbs/bayleef.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/bayleef.json"
+    },
+    {
+      "slug": "raykuaza",
+      "name": "raykuaza",
+      "description": "pokemon",
+      "category": "pokemon",
+      "price": 10,
+      "thumb": "thumbs/raykuaza.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/raykuaza.json"
     }
   ]
 }
