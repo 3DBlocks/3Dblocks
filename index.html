@@ -384,7 +384,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v22</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v23</small></div>
     </div>
     <div id="modelNameText">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -438,6 +438,7 @@
           <button class="btn sm" id="renderBtn" title="Genera una foto de presentación con luces e iluminación real, según cómo esté orientado el modelo ahora mismo">🖼️ Render</button>
           <button class="btn sm" id="printInstructionsBtn" title="Descargar un PDF con todas las capas, listo para imprimir">🖨️ Imprimir instrucciones</button>
           <button class="btn sm" id="printInstructionsPngBtn" title="Descargar las instrucciones como imágenes PNG (un archivo .zip) — mucho más liviano que el PDF, sin perder nitidez">🖼️ Instrucciones en PNG (.zip)</button>
+          <button class="btn sm" id="videoInstructionsBtn" title="Genera un video del armado: el modelo se va construyendo capa por capa, girando lentamente">🎬 Video de armado</button>
         </div>
         <div id="diagramSub">Coloca <b id="diagramCount">0</b> bloques nuevos en esta capa. Los bloques atenuados ya están colocados debajo.</div>
       </div>
@@ -1479,7 +1480,7 @@ async function quickAnglePreview(previewLayer){
   ground.scale.setScalar(Math.max(1, maxDim*3/40));
 
   const wasFlatBlockMode = flatBlockMode;
-  flatBlockMode = true;
+  flatBlockMode = false; // CON muesca (botón arriba): se ve más real en el manual
   const useFullDesign = (previewLayer === 'full');
   const layerNum = useFullDesign ? maxLayer : parseInt(previewLayer, 10);
   showBelowLayers = true;
@@ -1583,7 +1584,7 @@ async function generateInstructionsPDF(){
   });
 
   const wasFlatBlockMode = flatBlockMode;
-  flatBlockMode = true; // fuerza el bloque simple SIEMPRE acá, sin importar qué hayas probado en el visor
+  flatBlockMode = false; // CON muesca (botón arriba): se ve más real en el manual, sin importar qué esté puesto en el visor
   showFullDesign = false; showBelowLayers = true; // capa actual con su color real, las de abajo atenuadas — así se ve qué es nuevo
 
   // Resolución alta SOLO para la captura (no cambia el tamaño visible del panel en
@@ -1730,6 +1731,139 @@ async function generateInstructionsPDF(){
    Mismo render por capa (material con brillo + contorno negro parejo) que el PDF,
    pero cada página se guarda como un .png suelto dentro de un .zip — evita el peso
    extra del formato PDF, sin bajarle la resolución a las imágenes. */
+/* ---------------------------- Video de armado (.webm) ----------------------------
+   Graba el visor mientras el modelo se va construyendo capa por capa y gira
+   lentamente. Usa MediaRecorder sobre el canvas 3D — todo dentro del navegador,
+   sin depender de ningún servicio externo. */
+async function generateAssemblyVideo(){
+  if (!voxels.length){ setStatus('No hay ningún diseño cargado.', 'err'); return; }
+  if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream){
+    setStatus('Tu navegador no permite grabar video. Probá con Chrome o Edge.', 'err');
+    return;
+  }
+  const SECONDS_PER_LAYER = 0.9;
+  const FPS = 30;
+  const framesPerLayer = Math.round(SECONDS_PER_LAYER * FPS);
+
+  setLoading(true, 'Grabando el video de armado… (no cierres esta pestaña)');
+  await new Promise(r=>setTimeout(r, 30));
+
+  const wasShow2D = mainSplit.classList.contains('show-2d');
+  if (wasShow2D) setView('3d');
+  await new Promise(r=>setTimeout(r, wasShow2D ? 120 : 30));
+
+  const wasCurrentLayer = currentLayer, wasFullDesign = showFullDesign, wasShowBelow = showBelowLayers;
+  const wasCamPos = camera.position.clone();
+  const wasAxesVisible = axesHelper.visible; axesHelper.visible = false;
+  const wasGridVisible = grid.visible; grid.visible = false;
+  const wasBg = scene.background;
+  const studioColor = new THREE.Color('#c9cdd6');
+  scene.background = studioColor;
+  const wasFog = scene.fog; scene.fog = null;
+
+  const fullBox = centeredBounds();
+  const fullSize = new THREE.Vector3(); fullBox.getSize(fullSize);
+  const maxDim = Math.max(fullSize.x, fullSize.y, fullSize.z, 1);
+  const wasGroundVisible = ground.visible;
+  const wasGroundColor = ground.material.color.clone();
+  const wasGroundScale = ground.scale.clone();
+  ground.visible = true;
+  ground.material.color.copy(studioColor);
+  ground.scale.setScalar(Math.max(1, maxDim*3/40));
+
+  const wasFlatBlockMode = flatBlockMode;
+  flatBlockMode = false; // con muesca, se ve más real
+  showFullDesign = false; showBelowLayers = true;
+
+  const realMat = new THREE.MeshPhysicalMaterial({
+    roughness: 0.32, metalness: 0.02, clearcoat: 0.65, clearcoatRoughness: 0.18,
+  });
+
+  const origSize = new THREE.Vector2();
+  renderer.getSize(origSize);
+  const origAspect = camera.aspect;
+  renderer.setSize(960, 960, false); // tamaño de video parejo y liviano
+  camera.aspect = 1;
+
+  let recorder = null, chunks = [];
+  try{
+    const stream = renderer.domElement.captureStream(FPS);
+    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+    recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8000000 });
+    recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+    recorder.start();
+
+    const ang = customInstructionAngle || { elevation: 35, azimuth: 45 };
+    const totalFrames = (maxLayer+1) * framesPerLayer;
+    let frame = 0;
+
+    for (let layer=0; layer<=maxLayer; layer++){
+      currentLayer = layer;
+      rebuildMesh3D();
+      instMesh.material = realMat;
+      edgeMesh.visible = false; seamMesh.visible = false;
+      const visibleNow = voxels.filter(v => Math.round(v.y) <= layer);
+      const stepBox = worldBoxFromVoxelList(visibleNow);
+      for (let f=0; f<framesPerLayer; f++){
+        // Gira una vuelta completa a lo largo de todo el video
+        const spin = (frame/Math.max(1,totalFrames)) * 360;
+        positionCameraFixedAngle(stepBox, ang.elevation, ang.azimuth + spin, instructionMargin(), focusPointForLayer(stepBox, layer));
+        renderer.render(scene, camera);
+        frame++;
+        await new Promise(r=>setTimeout(r, 1000/FPS));
+      }
+      setLoading(true, 'Grabando video… capa ' + (layer+1) + ' de ' + (maxLayer+1));
+    }
+
+    // Unos segundos finales con el modelo completo, girando
+    showFullDesign = true;
+    rebuildMesh3D();
+    instMesh.material = realMat;
+    edgeMesh.visible = false; seamMesh.visible = false;
+    for (let f=0; f<FPS*3; f++){
+      const spin = (f/(FPS*3)) * 360;
+      positionCameraFixedAngle(fullBox, ang.elevation, ang.azimuth + spin, instructionMargin());
+      renderer.render(scene, camera);
+      await new Promise(r=>setTimeout(r, 1000/FPS));
+    }
+
+    await new Promise(resolve=>{ recorder.onstop = resolve; recorder.stop(); });
+    const blob = new Blob(chunks, { type: 'video/webm' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const modelName = (document.getElementById('modelNameText').textContent || 'diseno').trim();
+    const baseName = modelName.replace(/[^\w\-]+/g,'_') || 'diseno';
+    a.href = url; a.download = baseName + '_armado.webm';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setStatus('Video descargado: ' + baseName + '_armado.webm', 'ok');
+  } catch(err){
+    console.error(err);
+    if (recorder && recorder.state !== 'inactive'){ try{ recorder.stop(); }catch(e){} }
+    setStatus('No se pudo grabar el video: ' + err.message, 'err');
+  } finally {
+    realMat.dispose();
+    ground.visible = wasGroundVisible;
+    ground.material.color.copy(wasGroundColor);
+    ground.scale.copy(wasGroundScale);
+    scene.background = wasBg;
+    scene.fog = wasFog;
+    axesHelper.visible = wasAxesVisible;
+    grid.visible = wasGridVisible;
+    currentLayer = wasCurrentLayer; showFullDesign = wasFullDesign; showBelowLayers = wasShowBelow;
+    flatBlockMode = wasFlatBlockMode;
+    renderer.setSize(origSize.x, origSize.y, false);
+    camera.aspect = origAspect;
+    rebuildMesh3D();
+    camera.position.copy(wasCamPos);
+    if (wasShow2D) setView('2d'); else buscarDiseno();
+    refreshLayerUI();
+    renderer.render(scene, camera);
+    setLoading(false);
+  }
+}
+document.getElementById('videoInstructionsBtn').addEventListener('click', generateAssemblyVideo);
+
 async function generateInstructionsPNGZip(){
   if (!voxels.length){ setStatus('No hay ningún diseño cargado para generar instrucciones.', 'err'); return; }
   if (!window.JSZip){ setStatus('No se pudo cargar el generador de .zip. Revisá tu conexión y probá de nuevo.', 'err'); return; }
@@ -1766,7 +1900,7 @@ async function generateInstructionsPNGZip(){
   });
 
   const wasFlatBlockMode = flatBlockMode;
-  flatBlockMode = true; // fuerza el bloque simple SIEMPRE acá, sin importar qué hayas probado en el visor
+  flatBlockMode = false; // CON muesca (botón arriba): se ve más real en el manual, sin importar qué esté puesto en el visor
   showFullDesign = false; showBelowLayers = true;
 
   const origSize = new THREE.Vector2();
