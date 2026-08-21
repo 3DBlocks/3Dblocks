@@ -1378,8 +1378,6 @@ async function generateInstructionsPDF(){
   // que es matemáticamente imposible que aparezca un brillo o sombra rara, venga
   // del ángulo que venga) — solo cambiamos el contorno a negro parejo para que se
   // note bien la separación entre bloques ("estilo malla").
-  const blackEdge = new THREE.Color('#000000');
-
   showFullDesign = false; showBelowLayers = true; // capa actual con su color real, las de abajo atenuadas — así se ve qué es nuevo
 
   // Resolución alta SOLO para la captura (no cambia el tamaño visible del panel en
@@ -1447,10 +1445,10 @@ async function generateInstructionsPDF(){
       rebuildMesh3D(); // con showFullDesign=false y showBelowLayers=true: esta capa a color, las de abajo gris — material plano de siempre, SIN luces
       edgeMesh.visible = true; seamMesh.visible = false;
       edgeMesh.material.opacity = 1;
-      // Fuerza el contorno NEGRO parejo en todos los bloques (no el blanco/negro
-      // adaptable del visor normal) — como pediste, tipo malla de manual impreso.
-      for (let i=0; i<edgeMesh.count; i++) edgeMesh.setColorAt(i, blackEdge);
-      if (edgeMesh.instanceColor) edgeMesh.instanceColor.needsUpdate = true;
+      // El contorno ya sale blanco en bloques oscuros y negro en los claros (mismo
+      // sistema que ya funciona bien en el visor normal) — antes lo forzábamos a
+      // negro parejo, y eso volvía invisible el borde en bloques oscuros/negros,
+      // viéndose como una sola mancha oscura ("sombra triangular").
       const visibleNow = voxels.filter(v => Math.round(v.y) <= layer);
       const stepBox = worldBoxFromVoxelList(visibleNow); // encuadre ajustado a lo que se ve EN ESTE PASO, no al modelo entero
       positionCameraFixedAngle(stepBox, 35, 128, 1.85); // 35° de ángulo, como pediste
@@ -1541,8 +1539,6 @@ async function generateInstructionsPNGZip(){
   ground.visible = false;
 
   // SIN material con brillo: el mismo material plano y sin luces del visor normal.
-  const blackEdge = new THREE.Color('#000000');
-
   showFullDesign = false; showBelowLayers = true;
 
   const origSize = new THREE.Vector2();
@@ -1562,8 +1558,7 @@ async function generateInstructionsPNGZip(){
       rebuildMesh3D();
       edgeMesh.visible = true; seamMesh.visible = false;
       edgeMesh.material.opacity = 1;
-      for (let i=0; i<edgeMesh.count; i++) edgeMesh.setColorAt(i, blackEdge);
-      if (edgeMesh.instanceColor) edgeMesh.instanceColor.needsUpdate = true;
+      // Contorno adaptable (blanco en oscuros, negro en claros), igual que el visor normal.
       const visibleNow = voxels.filter(v => Math.round(v.y) <= layer);
       const stepBox = worldBoxFromVoxelList(visibleNow);
       positionCameraFixedAngle(stepBox, 35, 128, 1.85);
