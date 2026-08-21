@@ -469,7 +469,7 @@
       <div id="canvasHost"></div>
       <div id="ctxToolbar">
         <button class="btn icon" id="resetViewBtn" title="Buscar y centrar el diseño en la pantalla">🔍 Buscar</button>
-        <button class="btn icon" id="rotateBtn" title="Rotación automática">↻</button>
+        <button class="btn icon" id="flatBlockBtn" title="Probar el modelo con un bloque totalmente liso, sin el botón de arriba — para comparar cuál se lee mejor en el manual">◻️ Sin muesca</button>
         <button class="btn icon active" id="belowLayersBtn" title="Mostrar/ocultar capas ya construidas (en gris)">▤ Gris</button>
         <button class="btn icon" id="fullViewBtn" title="Ver el diseño completo, con todos los colores">👁 Completo</button>
         <button class="btn icon" id="bgToggleBtn" title="Cambiar fondo del visor">◐ Fondo</button>
@@ -517,7 +517,6 @@
         <div class="stat-box"><div class="k">Bloques totales</div><div class="v" id="statCount">—</div></div>
       </div>
       <button class="btn wide admin-only" id="hollowBtn" style="width:100%; margin-top:10px;" title="Saca los bloques que quedan tapados por dentro (no se ven) — las piezas encastran por los bordes, no hace falta rellenar el centro de cada capa">🕳️ Vaciar interior (ahorrar piezas)</button>
-      <button class="btn wide admin-only" id="flatBlockBtn" style="width:100%; margin-top:8px;" title="Prueba cómo se ve el modelo con un bloque totalmente liso, sin el botón de arriba — para comparar cuál se lee mejor en el manual">◻️ Probar bloque sin muesca</button>
     </div>
 
     <div class="section">
@@ -1127,7 +1126,7 @@ document.getElementById('hollowBtn').addEventListener('click', hollowInteriorBlo
 document.getElementById('flatBlockBtn').addEventListener('click', e=>{
   flatBlockMode = !flatBlockMode;
   e.currentTarget.classList.toggle('active', flatBlockMode);
-  e.currentTarget.textContent = flatBlockMode ? '◻️ Volver al bloque con muesca' : '◻️ Probar bloque sin muesca';
+  e.currentTarget.textContent = flatBlockMode ? '◻️ Con muesca' : '◻️ Sin muesca';
   rebuildMesh3D();
   setStatus(flatBlockMode ? 'Probando el bloque liso, sin muesca.' : 'Volviste al bloque con muesca (botón arriba).', 'ok');
 });
@@ -3808,10 +3807,6 @@ function buscarDiseno(){
   controls.focus(box, true);
 }
 document.getElementById('resetViewBtn').addEventListener('click', buscarDiseno);
-document.getElementById('rotateBtn').addEventListener('click', e=>{
-  controls.autoRotate = !controls.autoRotate;
-  e.currentTarget.classList.toggle('active', controls.autoRotate);
-});
 document.getElementById('belowLayersBtn').addEventListener('click', e=>{
   showBelowLayers = !showBelowLayers;
   e.currentTarget.classList.toggle('active', showBelowLayers);
