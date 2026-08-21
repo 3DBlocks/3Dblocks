@@ -1399,7 +1399,11 @@ async function generateInstructionsPDF(){
     scene.add(l);
     return l;
   });
-  const flatMat = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide }); // mate, sin brillo puntual
+  // Plástico real (mismo material que "🖼️ Render"), con la luz pareja de 6 lados
+  // de recién — así el brillo del plástico no se concentra de un solo lado.
+  const flatMat = new THREE.MeshPhysicalMaterial({
+    roughness: 0.32, metalness: 0.02, clearcoat: 0.65, clearcoatRoughness: 0.18, side: THREE.DoubleSide,
+  });
 
   // Resolución alta SOLO para la captura (no cambia el tamaño visible del panel en
   // pantalla) — así la figura sale nítida aunque la agrandemos en la hoja.
@@ -1586,7 +1590,9 @@ async function generateInstructionsPNGZip(){
     scene.add(l);
     return l;
   });
-  const flatMat = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide });
+  const flatMat = new THREE.MeshPhysicalMaterial({
+    roughness: 0.32, metalness: 0.02, clearcoat: 0.65, clearcoatRoughness: 0.18, side: THREE.DoubleSide,
+  });
 
   const origSize = new THREE.Vector2();
   renderer.getSize(origSize);
@@ -2039,9 +2045,27 @@ async function parse3MF(arrayBuffer){
       const idx = codeToExtruderIndex.get(code);
       if (idx < filamentColors.length) return filamentColors[idx];
     }
-    // Códigos compuestos (bordes entre colores pintados, poco frecuentes): usamos
-    // el primer filamento como base — se puede corregir a mano después con "Pintar".
-    return filamentColors[0];
+    // Código compuesto (borde entre dos colores pintados, en zonas curvas o
+    // diagonales — por eso se veía como una "mancha triangular"): antes esto
+    // SIEMPRE se pintaba del primer filamento (negro en la mayoría de tus
+    // modelos), sin importar qué colores hubiera ahí en realidad. Ahora busca los
+    // códigos simples escondidos adentro del texto y usa el que más se repite —
+    // mucho más fiel que asumir siempre el mismo color fijo.
+    const matches = code.match(/[0-9A-F]C/g) || (code==='4'||code==='8' ? [code] : []);
+    if (matches.length){
+      const counts = new Map();
+      matches.forEach(m=>{ counts.set(m, (counts.get(m)||0)+1); });
+      let best=null, bestCount=-1;
+      counts.forEach((c,m)=>{ if (c>bestCount){ bestCount=c; best=m; } });
+      if (best && codeToExtruderIndex.has(best)){
+        const idx = codeToExtruderIndex.get(best);
+        if (idx < filamentColors.length) return filamentColors[idx];
+      }
+    }
+    // Si de verdad no se pudo reconocer nada: no inventamos un color — dejamos
+    // que la votación por mayoría de esa celda (con los triángulos vecinos que sí
+    // se reconocieron bien) decida el color, en vez de imponer siempre negro.
+    return null;
   }
 
   // Vértices
