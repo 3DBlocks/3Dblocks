@@ -1362,25 +1362,17 @@ async function generateInstructionsPDF(){
   const wasAxesVisible = axesHelper.visible; axesHelper.visible = false;
   const wasGridVisible = grid.visible; grid.visible = false;
   const wasBg = scene.background;
-  const studioColor = new THREE.Color('#c9cdd6');
-  scene.background = studioColor;
+  const flatBg = new THREE.Color('#e9ecf3'); // fondo neutro, sin piso ni luces — no puede generar ningún brillo ni sombra
+  scene.background = flatBg;
   const wasFog = scene.fog; scene.fog = null;
-
-  const fullBox = centeredBounds();
-  const fullSize = new THREE.Vector3(); fullBox.getSize(fullSize);
-  const maxDimFull = Math.max(fullSize.x, fullSize.y, fullSize.z, 1);
   const wasGroundVisible = ground.visible;
-  const wasGroundColor = ground.material.color.clone();
-  const wasGroundScale = ground.scale.clone();
-  ground.visible = true;
-  ground.material.color.copy(studioColor);
-  ground.scale.setScalar(Math.max(1, maxDimFull*3/40));
+  ground.visible = false; // sin piso: no hace falta, ya que no hay luces que reboten en él
 
-  // Mismo material con brillo que usa el botón "🖼️ Render" (ya con el arreglo de
-  // side:DoubleSide, así que no debería dejar huecos negros esta vez).
-  const realMat = new THREE.MeshPhysicalMaterial({
-    roughness: 0.32, metalness: 0.02, clearcoat: 0.65, clearcoatRoughness: 0.18, side: THREE.DoubleSide,
-  });
+  // SIN material con brillo esta vez: mismo material plano y sin luces que ya usa
+  // el visor normal (MeshBasicMaterial no responde para nada a la iluminación, así
+  // que es matemáticamente imposible que aparezca un brillo o sombra rara, venga
+  // del ángulo que venga) — solo cambiamos el contorno a negro parejo para que se
+  // note bien la separación entre bloques ("estilo malla").
   const blackEdge = new THREE.Color('#000000');
 
   showFullDesign = false; showBelowLayers = true; // capa actual con su color real, las de abajo atenuadas — así se ve qué es nuevo
@@ -1447,8 +1439,7 @@ async function generateInstructionsPDF(){
 
     for (let layer=0; layer<=maxLayer; layer++){
       currentLayer = layer;
-      rebuildMesh3D(); // con showFullDesign=false y showBelowLayers=true: esta capa a color, las de abajo gris
-      instMesh.material = realMat;
+      rebuildMesh3D(); // con showFullDesign=false y showBelowLayers=true: esta capa a color, las de abajo gris — material plano de siempre, SIN luces
       edgeMesh.visible = true; seamMesh.visible = false;
       edgeMesh.material.opacity = 1;
       // Fuerza el contorno NEGRO parejo en todos los bloques (no el blanco/negro
@@ -1500,10 +1491,7 @@ async function generateInstructionsPDF(){
     setStatus('No se pudo generar el PDF: ' + err.message, 'err');
   } finally {
     // Devolver TODO a como estaba
-    realMat.dispose();
     ground.visible = wasGroundVisible;
-    ground.material.color.copy(wasGroundColor);
-    ground.scale.copy(wasGroundScale);
     scene.background = wasBg;
     scene.fog = wasFog;
     axesHelper.visible = wasAxesVisible;
@@ -1541,23 +1529,13 @@ async function generateInstructionsPNGZip(){
   const wasAxesVisible = axesHelper.visible; axesHelper.visible = false;
   const wasGridVisible = grid.visible; grid.visible = false;
   const wasBg = scene.background;
-  const studioColor = new THREE.Color('#c9cdd6');
-  scene.background = studioColor;
+  const flatBg = new THREE.Color('#e9ecf3'); // fondo neutro, sin piso ni luces
+  scene.background = flatBg;
   const wasFog = scene.fog; scene.fog = null;
-
-  const fullBox = centeredBounds();
-  const fullSize = new THREE.Vector3(); fullBox.getSize(fullSize);
-  const maxDimFull = Math.max(fullSize.x, fullSize.y, fullSize.z, 1);
   const wasGroundVisible = ground.visible;
-  const wasGroundColor = ground.material.color.clone();
-  const wasGroundScale = ground.scale.clone();
-  ground.visible = true;
-  ground.material.color.copy(studioColor);
-  ground.scale.setScalar(Math.max(1, maxDimFull*3/40));
+  ground.visible = false;
 
-  const realMat = new THREE.MeshPhysicalMaterial({
-    roughness: 0.32, metalness: 0.02, clearcoat: 0.65, clearcoatRoughness: 0.18, side: THREE.DoubleSide,
-  });
+  // SIN material con brillo: el mismo material plano y sin luces del visor normal.
   const blackEdge = new THREE.Color('#000000');
 
   showFullDesign = false; showBelowLayers = true;
@@ -1577,7 +1555,6 @@ async function generateInstructionsPNGZip(){
     for (let layer=0; layer<=maxLayer; layer++){
       currentLayer = layer;
       rebuildMesh3D();
-      instMesh.material = realMat;
       edgeMesh.visible = true; seamMesh.visible = false;
       edgeMesh.material.opacity = 1;
       for (let i=0; i<edgeMesh.count; i++) edgeMesh.setColorAt(i, blackEdge);
@@ -1603,10 +1580,7 @@ async function generateInstructionsPNGZip(){
     console.error(err);
     setStatus('No se pudo generar el .zip: ' + err.message, 'err');
   } finally {
-    realMat.dispose();
     ground.visible = wasGroundVisible;
-    ground.material.color.copy(wasGroundColor);
-    ground.scale.copy(wasGroundScale);
     scene.background = wasBg;
     scene.fog = wasFog;
     axesHelper.visible = wasAxesVisible;
