@@ -475,6 +475,7 @@
         <button class="btn icon" id="fullViewBtn" title="Ver el diseño completo, con todos los colores">👁 Completo</button>
         <button class="btn icon" id="bgToggleBtn" title="Cambiar fondo del visor">◐ Fondo</button>
         <button class="btn icon active" id="meshTexBtn" title="Resaltar el contorno de cada bloque">▦ Contorno</button>
+        <button class="btn icon" id="previewInstrAngleBtn" title="Pone la cámara en el MISMO ángulo exacto que usan las instrucciones (35°), con el diseño completo — para comparar directo, sin generar el PDF">📐 Ver ángulo del manual</button>
       </div>
       <div id="ctxHint">clic derecho: orbitar<br/>rueda: zoom</div>
     </section>
@@ -1003,12 +1004,7 @@ function rebuildMesh3D(){
   // huequitos de exportación; renderizando ambas caras, esos huecos muestran la cara
   // de atrás en vez de dejar un hueco negro feo.
   const mat = new THREE.MeshBasicMaterial({ toneMapped:false, side: THREE.DoubleSide });
-  // SIN textura de rejilla en la cara: esa textura tenía un borde negro dibujado
-  // adentro, y en bloques chicos/lejanos la tarjeta gráfica mezcla ("mipmapea") ese
-  // borde con el resto de la cara, oscureciéndola entera — eso era la "sombra
-  // triangular" que aparecía en TODOS los modelos, hasta en el árbol de ejemplo.
-  // El contorno real (edgeMesh, líneas geométricas de verdad) ya cumple esa función
-  // sin ese riesgo, así que no hace falta ninguna textura de por medio.
+  if (showMeshTexture) mat.map = getMeshTexture();
   instMesh = new THREE.InstancedMesh(geo, mat, visible.length);
   instMesh.castShadow = false; instMesh.receiveShadow = false;
 
@@ -3938,6 +3934,26 @@ function buscarDiseno(){
   controls.focus(box, true);
 }
 document.getElementById('resetViewBtn').addEventListener('click', buscarDiseno);
+document.getElementById('previewInstrAngleBtn').addEventListener('click', ()=>{
+  if (!voxels.length){ setStatus('No hay ningún diseño cargado.', 'err'); return; }
+  showFullDesign = true;
+  const fvb = document.getElementById('fullViewBtn'); if (fvb) fvb.classList.add('active');
+  rebuildMesh3D();
+  const box = centeredBounds();
+  positionCameraFixedAngle(box, 35, 128, 1.85); // MISMO ángulo que usan las instrucciones
+  // Sincroniza los controles de órbita con esta posición, para que si seguís
+  // girando con el mouse desde acá no salte de golpe a otro lado.
+  const center = new THREE.Vector3(); box.getCenter(center);
+  const offset = new THREE.Vector3().subVectors(camera.position, center);
+  const radius = offset.length() || 1;
+  const polar = Math.acos(Math.max(-1, Math.min(1, offset.y/radius)));
+  const azimuth = Math.atan2(offset.x, offset.z);
+  controls.target.copy(center); controls._ta.copy(center);
+  controls.radius = controls._ra = radius;
+  controls.polar = controls._po = polar;
+  controls.azimuth = controls._az = azimuth;
+  setStatus('Cámara puesta en el mismo ángulo que usan las instrucciones (35°) — girá desde acá y comparalo con el manual generado.', 'ok');
+});
 document.getElementById('belowLayersBtn').addEventListener('click', e=>{
   showBelowLayers = !showBelowLayers;
   e.currentTarget.classList.toggle('active', showBelowLayers);
