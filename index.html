@@ -1381,6 +1381,26 @@ async function generateInstructionsPDF(){
   flatBlockMode = true; // fuerza el bloque simple SIEMPRE acá, sin importar qué hayas probado en el visor
   showFullDesign = false; showBelowLayers = true; // capa actual con su color real, las de abajo atenuadas — así se ve qué es nuevo
 
+  // Luz pareja desde los 6 lados (arriba, abajo, y los 4 costados) — apagamos las
+  // luces direccionales normales de la escena (que le dan más luz de un lado que
+  // de otro) y ponemos 6 luces iguales apuntando desde todas direcciones, más
+  // ambiente. Con un material mate (sin brillo/reflejo), ninguna cara del bloque
+  // debería quedar más oscura que las demás, mires desde donde mires.
+  const fullBoxForLights = centeredBounds();
+  const fullSizeForLights = new THREE.Vector3(); fullBoxForLights.getSize(fullSizeForLights);
+  const maxDimForLights = Math.max(fullSizeForLights.x, fullSizeForLights.y, fullSizeForLights.z, 1);
+  const wasHemiVisible = hemi.visible, wasKeyVisible = key.visible, wasRimVisible = rim.visible, wasFillPtVisible = fillPt.visible;
+  hemi.visible = false; key.visible = false; rim.visible = false; fillPt.visible = false;
+  const lightDist = maxDimForLights * 2.2;
+  const sixDirs = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+  const sixLights = sixDirs.map(([dx,dy,dz])=>{
+    const l = new THREE.DirectionalLight(0xffffff, 0.4);
+    l.position.set(dx*lightDist, dy*lightDist, dz*lightDist);
+    scene.add(l);
+    return l;
+  });
+  const flatMat = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide }); // mate, sin brillo puntual
+
   // Resolución alta SOLO para la captura (no cambia el tamaño visible del panel en
   // pantalla) — así la figura sale nítida aunque la agrandemos en la hoja.
   const origSize = new THREE.Vector2();
@@ -1443,7 +1463,8 @@ async function generateInstructionsPDF(){
 
     for (let layer=0; layer<=maxLayer; layer++){
       currentLayer = layer;
-      rebuildMesh3D(); // con showFullDesign=false y showBelowLayers=true: esta capa a color, las de abajo gris — material plano de siempre, SIN luces
+      rebuildMesh3D(); // con showFullDesign=false y showBelowLayers=true: esta capa a color, las de abajo gris
+      instMesh.material = flatMat; // mate + luz pareja de 6 lados
       edgeMesh.visible = true; seamMesh.visible = false;
       edgeMesh.material.opacity = 1;
       // El contorno ya sale blanco en bloques oscuros y negro en los claros (mismo
@@ -1495,6 +1516,9 @@ async function generateInstructionsPDF(){
     setStatus('No se pudo generar el PDF: ' + err.message, 'err');
   } finally {
     // Devolver TODO a como estaba
+    sixLights.forEach(l=>{ scene.remove(l); l.dispose && l.dispose(); });
+    flatMat.dispose();
+    hemi.visible = wasHemiVisible; key.visible = wasKeyVisible; rim.visible = wasRimVisible; fillPt.visible = wasFillPtVisible;
     ground.visible = wasGroundVisible;
     scene.background = wasBg;
     scene.fog = wasFog;
@@ -1545,6 +1569,25 @@ async function generateInstructionsPNGZip(){
   flatBlockMode = true; // fuerza el bloque simple SIEMPRE acá, sin importar qué hayas probado en el visor
   showFullDesign = false; showBelowLayers = true;
 
+  // Luz pareja desde los 6 lados, igual que en el PDF — apaga las luces
+  // direccionales normales (que dan más luz de un lado que de otro) y usa 6 luces
+  // iguales desde todas direcciones + material mate, para que ninguna cara del
+  // bloque quede más oscura que otra.
+  const fullBoxForLights = centeredBounds();
+  const fullSizeForLights = new THREE.Vector3(); fullBoxForLights.getSize(fullSizeForLights);
+  const maxDimForLights = Math.max(fullSizeForLights.x, fullSizeForLights.y, fullSizeForLights.z, 1);
+  const wasHemiVisible = hemi.visible, wasKeyVisible = key.visible, wasRimVisible = rim.visible, wasFillPtVisible = fillPt.visible;
+  hemi.visible = false; key.visible = false; rim.visible = false; fillPt.visible = false;
+  const lightDist = maxDimForLights * 2.2;
+  const sixDirs = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+  const sixLights = sixDirs.map(([dx,dy,dz])=>{
+    const l = new THREE.DirectionalLight(0xffffff, 0.4);
+    l.position.set(dx*lightDist, dy*lightDist, dz*lightDist);
+    scene.add(l);
+    return l;
+  });
+  const flatMat = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide });
+
   const origSize = new THREE.Vector2();
   renderer.getSize(origSize);
   const origAspect = camera.aspect;
@@ -1560,6 +1603,7 @@ async function generateInstructionsPNGZip(){
     for (let layer=0; layer<=maxLayer; layer++){
       currentLayer = layer;
       rebuildMesh3D();
+      instMesh.material = flatMat;
       edgeMesh.visible = true; seamMesh.visible = false;
       edgeMesh.material.opacity = 1;
       // Contorno adaptable (blanco en oscuros, negro en claros), igual que el visor normal.
@@ -1584,6 +1628,9 @@ async function generateInstructionsPNGZip(){
     console.error(err);
     setStatus('No se pudo generar el .zip: ' + err.message, 'err');
   } finally {
+    sixLights.forEach(l=>{ scene.remove(l); l.dispose && l.dispose(); });
+    flatMat.dispose();
+    hemi.visible = wasHemiVisible; key.visible = wasKeyVisible; rim.visible = wasRimVisible; fillPt.visible = wasFillPtVisible;
     ground.visible = wasGroundVisible;
     scene.background = wasBg;
     scene.fog = wasFog;
