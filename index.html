@@ -1379,17 +1379,27 @@ async function generateInstructionsPDF(){
   const wasAxesVisible = axesHelper.visible; axesHelper.visible = false;
   const wasGridVisible = grid.visible; grid.visible = false;
   const wasBg = scene.background;
-  const flatBg = new THREE.Color('#e9ecf3'); // fondo neutro, sin piso ni luces — no puede generar ningún brillo ni sombra
-  scene.background = flatBg;
+  const studioColor = new THREE.Color('#c9cdd6');
+  scene.background = studioColor;
   const wasFog = scene.fog; scene.fog = null;
-  const wasGroundVisible = ground.visible;
-  ground.visible = false; // sin piso: no hace falta, ya que no hay luces que reboten en él
 
-  // NINGÚN material ni luz propios esta vez: las instrucciones usan EXACTAMENTE
-  // lo mismo que ya confirmamos limpio en el visor normal (rebuildMesh3D arma su
-  // propio material plano, sin textura, con DoubleSide) — nada de material con
-  // brillo, nada de luces de 6 lados: eso era justo lo que seguía generando la
-  // mancha, porque era una rama de código aparte que no compartía el arreglo.
+  // Plástico real (mismo material y luces que "🖼️ Render") — ya sabemos que la
+  // mancha era un tema de ÁNGULO, no del material, así que ahora que podés
+  // guardar tu propio ángulo bueno, se puede usar tranquilo para que quede más
+  // presentable, como pediste.
+  const fullBoxForGround = centeredBounds();
+  const fullSizeForGround = new THREE.Vector3(); fullBoxForGround.getSize(fullSizeForGround);
+  const maxDimForGround = Math.max(fullSizeForGround.x, fullSizeForGround.y, fullSizeForGround.z, 1);
+  const wasGroundVisible = ground.visible;
+  const wasGroundColor = ground.material.color.clone();
+  const wasGroundScale = ground.scale.clone();
+  ground.visible = true;
+  ground.material.color.copy(studioColor);
+  ground.scale.setScalar(Math.max(1, maxDimForGround*3/40));
+  const realMat = new THREE.MeshPhysicalMaterial({
+    roughness: 0.32, metalness: 0.02, clearcoat: 0.65, clearcoatRoughness: 0.18, side: THREE.DoubleSide,
+  });
+
   const wasFlatBlockMode = flatBlockMode;
   flatBlockMode = true; // fuerza el bloque simple SIEMPRE acá, sin importar qué hayas probado en el visor
   showFullDesign = false; showBelowLayers = true; // capa actual con su color real, las de abajo atenuadas — así se ve qué es nuevo
@@ -1456,7 +1466,8 @@ async function generateInstructionsPDF(){
 
     for (let layer=0; layer<=maxLayer; layer++){
       currentLayer = layer;
-      rebuildMesh3D(); // con showFullDesign=false y showBelowLayers=true: esta capa a color, las de abajo gris — material propio de rebuildMesh3D, sin tocarlo
+      rebuildMesh3D(); // con showFullDesign=false y showBelowLayers=true: esta capa a color, las de abajo gris
+      instMesh.material = realMat;
       edgeMesh.visible = true; seamMesh.visible = false;
       edgeMesh.material.opacity = 1;
       // El contorno ya sale blanco en bloques oscuros y negro en los claros (mismo
@@ -1509,7 +1520,10 @@ async function generateInstructionsPDF(){
     setStatus('No se pudo generar el PDF: ' + err.message, 'err');
   } finally {
     // Devolver TODO a como estaba
+    realMat.dispose();
     ground.visible = wasGroundVisible;
+    ground.material.color.copy(wasGroundColor);
+    ground.scale.copy(wasGroundScale);
     scene.background = wasBg;
     scene.fog = wasFog;
     axesHelper.visible = wasAxesVisible;
@@ -1548,14 +1562,25 @@ async function generateInstructionsPNGZip(){
   const wasAxesVisible = axesHelper.visible; axesHelper.visible = false;
   const wasGridVisible = grid.visible; grid.visible = false;
   const wasBg = scene.background;
-  const flatBg = new THREE.Color('#e9ecf3'); // fondo neutro, sin piso ni luces
-  scene.background = flatBg;
+  const studioColor = new THREE.Color('#c9cdd6');
+  scene.background = studioColor;
   const wasFog = scene.fog; scene.fog = null;
-  const wasGroundVisible = ground.visible;
-  ground.visible = false;
 
-  // NINGÚN material ni luz propios: exactamente lo mismo que ya confirmamos
-  // limpio en el visor normal.
+  // Plástico real (mismo material y luces que "🖼️ Render") — ya sabemos que la
+  // mancha era un tema de ÁNGULO, no del material.
+  const fullBoxForGround = centeredBounds();
+  const fullSizeForGround = new THREE.Vector3(); fullBoxForGround.getSize(fullSizeForGround);
+  const maxDimForGround = Math.max(fullSizeForGround.x, fullSizeForGround.y, fullSizeForGround.z, 1);
+  const wasGroundVisible = ground.visible;
+  const wasGroundColor = ground.material.color.clone();
+  const wasGroundScale = ground.scale.clone();
+  ground.visible = true;
+  ground.material.color.copy(studioColor);
+  ground.scale.setScalar(Math.max(1, maxDimForGround*3/40));
+  const realMat = new THREE.MeshPhysicalMaterial({
+    roughness: 0.32, metalness: 0.02, clearcoat: 0.65, clearcoatRoughness: 0.18, side: THREE.DoubleSide,
+  });
+
   const wasFlatBlockMode = flatBlockMode;
   flatBlockMode = true; // fuerza el bloque simple SIEMPRE acá, sin importar qué hayas probado en el visor
   showFullDesign = false; showBelowLayers = true;
@@ -1575,6 +1600,7 @@ async function generateInstructionsPNGZip(){
     for (let layer=0; layer<=maxLayer; layer++){
       currentLayer = layer;
       rebuildMesh3D();
+      instMesh.material = realMat;
       edgeMesh.visible = true; seamMesh.visible = false;
       edgeMesh.material.opacity = 1;
       // Contorno adaptable (blanco en oscuros, negro en claros), igual que el visor normal.
@@ -1600,7 +1626,10 @@ async function generateInstructionsPNGZip(){
     console.error(err);
     setStatus('No se pudo generar el .zip: ' + err.message, 'err');
   } finally {
+    realMat.dispose();
     ground.visible = wasGroundVisible;
+    ground.material.color.copy(wasGroundColor);
+    ground.scale.copy(wasGroundScale);
     scene.background = wasBg;
     scene.fog = wasFog;
     axesHelper.visible = wasAxesVisible;
