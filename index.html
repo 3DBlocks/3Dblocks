@@ -1038,20 +1038,27 @@ function rebuildMesh3D(){
   instMesh = new THREE.InstancedMesh(geo, mat, visible.length);
   instMesh.castShadow = false; instMesh.receiveShadow = false;
 
-  // Umbral de ángulo alto (25°): así el contorno solo marca los bordes REALES de la
-  // pieza (dedos, muescas, silueta), y no cada triangulito interno de la malla real
-  // (que son casi planos entre sí) — eso era lo que se veía como "mancha" sucia.
-  const edgeGeo = new THREE.EdgesGeometry(geo, 25);
-  // vertexColors:true + instanceColor nos deja poner un color de contorno DISTINTO
-  // por bloque (negro normal, o verde neón cuando está resaltado/seleccionado) sin
-  // tocar el color de relleno real del bloque.
+  // ¡BUG HISTÓRICO ARREGLADO ACÁ! Antes esto era un `InstancedMesh`, que dibuja
+  // TRIÁNGULOS — pero la geometría que le pasábamos (EdgesGeometry) son puntos de
+  // LÍNEAS. Al interpretar puntos de líneas como triángulos, se generaban
+  // triángulos negros basura por todo el modelo: esa era la famosa "sombra/mancha
+  // triangular" que perseguimos tanto tiempo. Ahora se arma un único LineSegments
+  // de verdad, replicando el contorno del bloque en cada posición.
+  const edgeTemplate = new THREE.EdgesGeometry(geo, 25);
+  const tmplPos = edgeTemplate.attributes.position.array;
+  const vertsPerBlock = tmplPos.length / 3;
+  const edgePositions = new Float32Array(visible.length * tmplPos.length);
+  const edgeColors = new Float32Array(visible.length * tmplPos.length);
+  edgeTemplate.dispose();
   const edgeMat = new THREE.LineBasicMaterial({
-    color: 0xffffff,
     vertexColors: true,
     transparent: true,
     opacity: showMeshTexture ? 0.75 : 0.45
   });
-  edgeMesh = new THREE.InstancedMesh(edgeGeo, edgeMat, visible.length);
+  const edgeGeometry = new THREE.BufferGeometry();
+  edgeGeometry.setAttribute('position', new THREE.BufferAttribute(edgePositions, 3));
+  edgeGeometry.setAttribute('color', new THREE.BufferAttribute(edgeColors, 3));
+  edgeMesh = new THREE.LineSegments(edgeGeometry, edgeMat);
   edgeMesh.visible = wireOn.v;
 
   // Línea fina de separación entre piezas apiladas: una franjita delgada y oscura
@@ -1072,10 +1079,10 @@ function rebuildMesh3D(){
   const offsetZ = (dims.z*voxelSize)/2;
 
   visible.forEach((v,i)=>{
-    dummy.position.set(v.x*voxelSize - offsetX, v.y*voxelSize + voxelSize/2, v.z*voxelSize - offsetZ);
+    const px = v.x*voxelSize - offsetX, py = v.y*voxelSize + voxelSize/2, pz = v.z*voxelSize - offsetZ;
+    dummy.position.set(px, py, pz);
     dummy.updateMatrix();
     instMesh.setMatrixAt(i, dummy.matrix);
-    edgeMesh.setMatrixAt(i, dummy.matrix);
     dummy.position.y = (v.y+1)*voxelSize - voxelSize*0.01; // justo en el borde de arriba del bloque
     dummy.updateMatrix();
     seamMesh.setMatrixAt(i, dummy.matrix);
@@ -1096,13 +1103,24 @@ function rebuildMesh3D(){
     const lum = tmpColor.r*0.299 + tmpColor.g*0.587 + tmpColor.b*0.114;
     const defaultEdgeColor = lum < 0.35 ? '#ffffff' : '#000000';
     edgeColor.set(isBoxSelected ? '#22d3ee' : (isHighlighted ? '#39ff6a' : defaultEdgeColor));
-    edgeMesh.setColorAt(i, edgeColor);
+    // Copia el contorno del bloque (líneas de verdad) desplazado a esta posición
+    const base = i * vertsPerBlock * 3;
+    for (let k=0; k<vertsPerBlock; k++){
+      const o = base + k*3;
+      edgePositions[o]   = tmplPos[k*3]   + px;
+      edgePositions[o+1] = tmplPos[k*3+1] + py;
+      edgePositions[o+2] = tmplPos[k*3+2] + pz;
+      edgeColors[o]   = edgeColor.r;
+      edgeColors[o+1] = edgeColor.g;
+      edgeColors[o+2] = edgeColor.b;
+    }
   });
   instMesh.instanceMatrix.needsUpdate = true;
-  edgeMesh.instanceMatrix.needsUpdate = true;
   seamMesh.instanceMatrix.needsUpdate = true;
   if (instMesh.instanceColor) instMesh.instanceColor.needsUpdate = true;
-  if (edgeMesh.instanceColor) edgeMesh.instanceColor.needsUpdate = true;
+  edgeGeometry.attributes.position.needsUpdate = true;
+  edgeGeometry.attributes.color.needsUpdate = true;
+  edgeGeometry.computeBoundingSphere();
   scene.add(instMesh); scene.add(edgeMesh); scene.add(seamMesh);
 
   layerPlane.position.y = currentLayer*voxelSize + voxelSize*1.001;
