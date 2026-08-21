@@ -80,6 +80,15 @@
       "price": 5,
       "thumb": "thumbs/rosa-bulbasour.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/rosa-bulbasour.json"
+    },
+    {
+      "slug": "bayleef",
+      "name": "Bayleef",
+      "description": "pokemon  planta",
+      "category": "pokemon",
+      "price": 5,
+      "thumb": "thumbs/bayleef.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/bayleef.json"
     }
   ]
 }
