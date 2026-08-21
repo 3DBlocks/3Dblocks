@@ -1454,7 +1454,7 @@ async function generateInstructionsPDF(){
       // viéndose como una sola mancha oscura ("sombra triangular").
       const visibleNow = voxels.filter(v => Math.round(v.y) <= layer);
       const stepBox = worldBoxFromVoxelList(visibleNow); // encuadre ajustado a lo que se ve EN ESTE PASO, no al modelo entero
-      positionCameraFixedAngle(stepBox, 35, 128, 1.85); // 35° de ángulo, como pediste
+      positionCameraFixedAngle(stepBox, 35, 45, 1.85); // cambiado de 128° a 45° — el ángulo anterior quedaba mirando casi de canto a una parte del modelo
       renderer.render(scene, camera);
       const imgData = renderer.domElement.toDataURL('image/png');
 
@@ -1568,7 +1568,7 @@ async function generateInstructionsPNGZip(){
       // Contorno adaptable (blanco en oscuros, negro en claros), igual que el visor normal.
       const visibleNow = voxels.filter(v => Math.round(v.y) <= layer);
       const stepBox = worldBoxFromVoxelList(visibleNow);
-      positionCameraFixedAngle(stepBox, 35, 128, 1.85);
+      positionCameraFixedAngle(stepBox, 35, 45, 1.85);
       renderer.render(scene, camera);
       const dataUrl = renderer.domElement.toDataURL('image/png');
       const base64 = dataUrl.split(',')[1];
@@ -3940,7 +3940,7 @@ document.getElementById('previewInstrAngleBtn').addEventListener('click', ()=>{
   const fvb = document.getElementById('fullViewBtn'); if (fvb) fvb.classList.add('active');
   rebuildMesh3D();
   const box = centeredBounds();
-  positionCameraFixedAngle(box, 35, 128, 1.85); // MISMO ángulo que usan las instrucciones
+  positionCameraFixedAngle(box, 35, 45, 1.85); // MISMO ángulo que usan las instrucciones
   // Sincroniza los controles de órbita con esta posición, para que si seguís
   // girando con el mouse desde acá no salte de golpe a otro lado.
   const center = new THREE.Vector3(); box.getCenter(center);
