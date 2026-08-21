@@ -599,6 +599,9 @@
     <span style="color:var(--text-dim); font-size:12.5px;">Previsualizando:</span>
     <select id="previewLayerSelect" style="background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:7px; padding:5px 8px; font-size:12.5px;"></select>
     <button class="btn sm" id="previewRefreshBtn">🔄 Actualizar</button>
+    <span style="color:var(--text-dim); font-size:12.5px; margin-left:6px;">Zoom:</span>
+    <input type="range" id="previewZoomSlider" min="1" max="3.5" step="0.1" value="1.8" style="width:130px;" />
+    <span id="previewZoomVal" style="color:var(--accent); font-size:12px; font-family:var(--mono); min-width:30px;">1.8x</span>
     <button class="btn primary" id="anglePreviewCloseBtn">Cerrar</button>
   </div>
 </div>
@@ -1376,6 +1379,13 @@ function positionCameraFixedAngle(box, elevationDeg, azimuthDeg, marginMult, foc
   camera.updateProjectionMatrix();
 }
 
+// Qué tan cerca encuadra la cámara en el manual. 1.0 = como estaba antes (el
+// modelo quedaba chico, con mucho fondo gris vacío alrededor); más alto = más
+// cerca. Ajustable con el control de la vista previa.
+let instructionZoom = 1.8;
+const BASE_MARGIN = 1.85; // distancia base; se divide por el zoom
+function instructionMargin(){ return BASE_MARGIN / instructionZoom; }
+
 // Punto al que debe apuntar la cámara en un paso del manual: la altura de la capa
 // que se está armando, pero mezclada con el centro para que no quede demasiado
 // arriba (60% capa nueva, 40% centro — así se ve bien la capa nueva sin perder de
@@ -1465,7 +1475,7 @@ async function quickAnglePreview(previewLayer){
   const ang = customInstructionAngle || { elevation: 35, azimuth: 45 };
   // En "modelo completo" apunta al centro; en un paso puntual, apunta a la altura
   // de esa capa (para que no se vea de canto en modelos altos).
-  positionCameraFixedAngle(stepBox, ang.elevation, ang.azimuth, 1.85, useFullDesign ? null : focusPointForLayer(stepBox, layerNum));
+  positionCameraFixedAngle(stepBox, ang.elevation, ang.azimuth, instructionMargin(), useFullDesign ? null : focusPointForLayer(stepBox, layerNum));
   renderer.render(scene, camera);
   const dataUrl = renderer.domElement.toDataURL('image/png');
 
@@ -1494,6 +1504,13 @@ async function quickAnglePreview(previewLayer){
 document.getElementById('quickPreviewBtn').addEventListener('click', ()=>quickAnglePreview());
 document.getElementById('previewLayerSelect').addEventListener('change', e=>quickAnglePreview(e.target.value));
 document.getElementById('previewRefreshBtn').addEventListener('click', ()=>quickAnglePreview(document.getElementById('previewLayerSelect').value));
+document.getElementById('previewZoomSlider').addEventListener('input', e=>{
+  instructionZoom = parseFloat(e.target.value);
+  document.getElementById('previewZoomVal').textContent = instructionZoom.toFixed(1) + 'x';
+});
+document.getElementById('previewZoomSlider').addEventListener('change', ()=>{
+  quickAnglePreview(document.getElementById('previewLayerSelect').value); // re-renderiza al soltar el control
+});
 document.getElementById('anglePreviewCloseBtn').addEventListener('click', ()=>{
   document.getElementById('anglePreviewModal').style.display = 'none';
 });
@@ -1615,7 +1632,7 @@ async function generateInstructionsPDF(){
       const instrAngle = customInstructionAngle || { elevation: 35, azimuth: 45 };
       // La cámara apunta a la altura de la capa actual (no al centro del modelo):
       // en modelos altos, la capa nueva quedaba muy arriba y se veía de canto.
-      positionCameraFixedAngle(stepBox, instrAngle.elevation, instrAngle.azimuth, 1.85, focusPointForLayer(stepBox, layer));
+      positionCameraFixedAngle(stepBox, instrAngle.elevation, instrAngle.azimuth, instructionMargin(), focusPointForLayer(stepBox, layer));
       renderer.render(scene, camera);
       const imgData = renderer.domElement.toDataURL('image/png');
 
@@ -1745,7 +1762,7 @@ async function generateInstructionsPNGZip(){
       const visibleNow = voxels.filter(v => Math.round(v.y) <= layer);
       const stepBox = worldBoxFromVoxelList(visibleNow);
       const instrAngle2 = customInstructionAngle || { elevation: 35, azimuth: 45 };
-      positionCameraFixedAngle(stepBox, instrAngle2.elevation, instrAngle2.azimuth, 1.85, focusPointForLayer(stepBox, layer));
+      positionCameraFixedAngle(stepBox, instrAngle2.elevation, instrAngle2.azimuth, instructionMargin(), focusPointForLayer(stepBox, layer));
       renderer.render(scene, camera);
       const dataUrl = renderer.domElement.toDataURL('image/png');
       const base64 = dataUrl.split(',')[1];
@@ -4153,7 +4170,7 @@ document.getElementById('previewInstrAngleBtn').addEventListener('click', ()=>{
   rebuildMesh3D();
   const box = centeredBounds();
   const ang = customInstructionAngle || { elevation: 35, azimuth: 45 };
-  positionCameraFixedAngle(box, ang.elevation, ang.azimuth, 1.85);
+  positionCameraFixedAngle(box, ang.elevation, ang.azimuth, instructionMargin());
   // Sincroniza los controles de órbita con esta posición, para que si seguís
   // girando con el mouse desde acá no salte de golpe a otro lado.
   const center = new THREE.Vector3(); box.getCenter(center);
