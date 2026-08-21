@@ -1001,7 +1001,7 @@ function rebuildMesh3D(){
   // side:DoubleSide — el modelo real (importado de un .obj de SketchUp) tiene algunos
   // huequitos de exportación; renderizando ambas caras, esos huecos muestran la cara
   // de atrás en vez de dejar un hueco negro feo.
-  const mat = new THREE.MeshBasicMaterial({ toneMapped:false });
+  const mat = new THREE.MeshBasicMaterial({ toneMapped:false, side: THREE.DoubleSide });
   if (showMeshTexture) mat.map = getMeshTexture();
   instMesh = new THREE.InstancedMesh(geo, mat, visible.length);
   instMesh.castShadow = false; instMesh.receiveShadow = false;
@@ -1274,6 +1274,7 @@ async function generatePresentationRender(){
     metalness: 0.02,
     clearcoat: 0.65,        // capa brillante fina por encima, como una pieza inyectada de verdad
     clearcoatRoughness: 0.18,
+    side: THREE.DoubleSide, // evita huecos negros por triángulos "al revés" en la malla
   });
   instMesh.material = realMat;
   const wasEdgeVisible = edgeMesh.visible;
