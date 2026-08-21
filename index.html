@@ -975,7 +975,10 @@ function mergeGeometries(geoms){
 let flatBlockMode = true; // POR DEFECTO: bloque simple (una sola caja), sin combinar geometrías — la parte del código que armaba el botón/muesca a mano (mergeGeometries) era la única no estándar, y quedó descartada como sospechosa de la sombra que no se iba
 function buildBrickGeometry(size){
   // Cuerpo: llena el 100% de la celda (sin achicarse), así encastra sin huecos.
-  const body = new THREE.BoxGeometry(size*0.97, size, size*0.97);
+  // Altura 0.995 en vez de 1: deja una separación mínima entre bloques apilados,
+  // para que la cara de arriba de uno y la de abajo del siguiente NUNCA queden en
+  // el mismo plano exacto (segundo seguro contra el bug de los triángulos negros).
+  const body = new THREE.BoxGeometry(size*0.97, size*0.995, size*0.97);
   if (flatBlockMode) return body; // sin botón: bloque liso, para comparar cómo se ve
   // Botón: sobresale apenas por encima del límite de la celda.
   const studH = size*0.16;
@@ -1025,10 +1028,12 @@ function rebuildMesh3D(){
   // MeshBasicMaterial ignora por completo la luz de la escena: color plano y parejo
   // en toda la cara, sin gradientes ni sombreado direccional — así no puede aparecer
   // ningún tipo de "sombra triangular" en los bloques.
-  // side:DoubleSide — el modelo real (importado de un .obj de SketchUp) tiene algunos
-  // huequitos de exportación; renderizando ambas caras, esos huecos muestran la cara
-  // de atrás en vez de dejar un hueco negro feo.
-  const mat = new THREE.MeshBasicMaterial({ toneMapped:false, side: THREE.DoubleSide });
+  // SIN DoubleSide: la geometría del bloque es una caja CERRADA, así que dibujar
+  // también las caras de atrás no aporta nada — y encima causaba el bug de los
+  // triángulos negros: al apilar bloques, la cara de abajo de uno queda en el mismo
+  // plano exacto que la cara de arriba del de abajo, y las dos peleaban por
+  // dibujarse (z-fighting), mostrando la cara interna en negro.
+  const mat = new THREE.MeshBasicMaterial({ toneMapped:false });
   if (showMeshTexture) mat.map = getMeshTexture();
   instMesh = new THREE.InstancedMesh(geo, mat, visible.length);
   instMesh.castShadow = false; instMesh.receiveShadow = false;
@@ -1306,7 +1311,6 @@ async function generatePresentationRender(){
     metalness: 0.02,
     clearcoat: 0.65,        // capa brillante fina por encima, como una pieza inyectada de verdad
     clearcoatRoughness: 0.18,
-    side: THREE.DoubleSide, // evita huecos negros por triángulos "al revés" en la malla
   });
   instMesh.material = realMat;
   const wasEdgeVisible = edgeMesh.visible;
@@ -1459,7 +1463,7 @@ async function quickAnglePreview(previewLayer){
   if (useFullDesign){ showFullDesign = true; } else { showFullDesign = false; currentLayer = layerNum; }
   rebuildMesh3D();
   const realMat = new THREE.MeshPhysicalMaterial({
-    roughness: 0.32, metalness: 0.02, clearcoat: 0.65, clearcoatRoughness: 0.18, side: THREE.DoubleSide,
+    roughness: 0.32, metalness: 0.02, clearcoat: 0.65, clearcoatRoughness: 0.18,
   });
   instMesh.material = realMat;
   edgeMesh.visible = true; seamMesh.visible = false; edgeMesh.material.opacity = 1;
@@ -1550,7 +1554,7 @@ async function generateInstructionsPDF(){
   ground.material.color.copy(studioColor);
   ground.scale.setScalar(Math.max(1, maxDimForGround*3/40));
   const realMat = new THREE.MeshPhysicalMaterial({
-    roughness: 0.32, metalness: 0.02, clearcoat: 0.65, clearcoatRoughness: 0.18, side: THREE.DoubleSide,
+    roughness: 0.32, metalness: 0.02, clearcoat: 0.65, clearcoatRoughness: 0.18,
   });
 
   const wasFlatBlockMode = flatBlockMode;
@@ -1733,7 +1737,7 @@ async function generateInstructionsPNGZip(){
   ground.material.color.copy(studioColor);
   ground.scale.setScalar(Math.max(1, maxDimForGround*3/40));
   const realMat = new THREE.MeshPhysicalMaterial({
-    roughness: 0.32, metalness: 0.02, clearcoat: 0.65, clearcoatRoughness: 0.18, side: THREE.DoubleSide,
+    roughness: 0.32, metalness: 0.02, clearcoat: 0.65, clearcoatRoughness: 0.18,
   });
 
   const wasFlatBlockMode = flatBlockMode;
