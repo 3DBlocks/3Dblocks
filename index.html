@@ -594,9 +594,11 @@
 <script src="https://www.paypal.com/sdk/js?client-id=BAAFIIacFoi0N0oyF5bnWz_JdmGmeOtysRuW2LLN_reSSRzZXV0lY7qIupbZnxrOlYqARywDNtFPbRePS0&currency=USD"></script>
 
 <div id="anglePreviewModal" style="display:none; position:fixed; inset:0; z-index:200; background:rgba(8,11,19,.92); align-items:center; justify-content:center; flex-direction:column; gap:14px; backdrop-filter:blur(3px);">
-  <img id="anglePreviewImg" style="max-width:88vw; max-height:76vh; border-radius:12px; border:2px solid var(--accent); box-shadow:0 10px 40px rgba(0,0,0,.5);" />
-  <div style="display:flex; gap:10px; align-items:center;">
-    <span style="color:var(--text-dim); font-size:12.5px;">Así saldría el modelo completo en el manual, con tu ángulo guardado.</span>
+  <img id="anglePreviewImg" style="max-width:88vw; max-height:70vh; border-radius:12px; border:2px solid var(--accent); box-shadow:0 10px 40px rgba(0,0,0,.5);" />
+  <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:center;">
+    <span style="color:var(--text-dim); font-size:12.5px;">Previsualizando:</span>
+    <select id="previewLayerSelect" style="background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:7px; padding:5px 8px; font-size:12.5px;"></select>
+    <button class="btn sm" id="previewRefreshBtn">🔄 Actualizar</button>
     <button class="btn primary" id="anglePreviewCloseBtn">Cerrar</button>
   </div>
 </div>
@@ -1375,8 +1377,31 @@ function positionCameraFixedAngle(box, elevationDeg, azimuthDeg, marginMult){
    En vez de tener que generar el manual completo (todas las capas) solo para ver
    si el ángulo quedó bien, esto saca UNA foto del modelo COMPLETO con el mismo
    material/piso/ángulo que va a usar el manual, y la muestra al toque. */
-async function quickAnglePreview(){
+/* ---------------------------- Vista previa rápida del ángulo (una sola foto) ----------------------------
+   En vez de tener que generar el manual completo (todas las capas) solo para ver
+   si el ángulo quedó bien, esto saca UNA foto — de cualquier paso puntual que
+   elijas, o del modelo completo — con el mismo material/piso/ángulo que va a usar
+   el manual real, y la muestra al toque, sin descargar nada. */
+async function quickAnglePreview(previewLayer){
   if (!voxels.length){ setStatus('No hay ningún diseño cargado.', 'err'); return; }
+
+  const sel = document.getElementById('previewLayerSelect');
+  let justPopulated = false;
+  if (sel.options.length !== maxLayer+2){
+    sel.innerHTML = '';
+    for (let l=0; l<=maxLayer; l++){
+      const opt = document.createElement('option');
+      opt.value = l; opt.textContent = 'Paso ' + (l+1) + ' de ' + (maxLayer+1);
+      sel.appendChild(opt);
+    }
+    const optFull = document.createElement('option');
+    optFull.value = 'full'; optFull.textContent = 'Modelo completo (última página)';
+    sel.appendChild(optFull);
+    justPopulated = true;
+  }
+  if (previewLayer === undefined) previewLayer = justPopulated ? 'full' : (sel.value || 'full');
+  sel.value = previewLayer;
+
   setLoading(true, 'Generando vista previa…');
   await new Promise(r=>setTimeout(r, 20));
 
@@ -1384,7 +1409,7 @@ async function quickAnglePreview(){
   if (wasShow2D) setView('3d');
   await new Promise(r=>setTimeout(r, wasShow2D ? 90 : 20));
 
-  const wasCurrentLayer = currentLayer, wasFullDesign = showFullDesign;
+  const wasCurrentLayer = currentLayer, wasFullDesign = showFullDesign, wasShowBelow = showBelowLayers;
   const wasCamPos = camera.position.clone();
   const wasAxesVisible = axesHelper.visible; axesHelper.visible = false;
   const wasGridVisible = grid.visible; grid.visible = false;
@@ -1393,9 +1418,9 @@ async function quickAnglePreview(){
   scene.background = studioColor;
   const wasFog = scene.fog; scene.fog = null;
 
-  const box = centeredBounds();
-  const sizeV = new THREE.Vector3(); box.getSize(sizeV);
-  const maxDim = Math.max(sizeV.x, sizeV.y, sizeV.z, 1);
+  const fullBox = centeredBounds();
+  const fullSize = new THREE.Vector3(); fullBox.getSize(fullSize);
+  const maxDim = Math.max(fullSize.x, fullSize.y, fullSize.z, 1);
   const wasGroundVisible = ground.visible;
   const wasGroundColor = ground.material.color.clone();
   const wasGroundScale = ground.scale.clone();
@@ -1405,7 +1430,10 @@ async function quickAnglePreview(){
 
   const wasFlatBlockMode = flatBlockMode;
   flatBlockMode = true;
-  showFullDesign = true; // vista completa, como el último paso del manual
+  const useFullDesign = (previewLayer === 'full');
+  const layerNum = useFullDesign ? maxLayer : parseInt(previewLayer, 10);
+  showBelowLayers = true;
+  if (useFullDesign){ showFullDesign = true; } else { showFullDesign = false; currentLayer = layerNum; }
   rebuildMesh3D();
   const realMat = new THREE.MeshPhysicalMaterial({
     roughness: 0.32, metalness: 0.02, clearcoat: 0.65, clearcoatRoughness: 0.18, side: THREE.DoubleSide,
@@ -1419,8 +1447,10 @@ async function quickAnglePreview(){
   renderer.setSize(900, 900, false); // más chico que el manual final (900 en vez de 1500) — más rápido, ya que es solo para previsualizar
   camera.aspect = 1;
 
+  const visibleNow = useFullDesign ? voxels : voxels.filter(v => Math.round(v.y) <= layerNum);
+  const stepBox = worldBoxFromVoxelList(visibleNow);
   const ang = customInstructionAngle || { elevation: 35, azimuth: 45 };
-  positionCameraFixedAngle(box, ang.elevation, ang.azimuth, 1.85);
+  positionCameraFixedAngle(stepBox, ang.elevation, ang.azimuth, 1.85);
   renderer.render(scene, camera);
   const dataUrl = renderer.domElement.toDataURL('image/png');
 
@@ -1433,7 +1463,7 @@ async function quickAnglePreview(){
   scene.fog = wasFog;
   axesHelper.visible = wasAxesVisible;
   grid.visible = wasGridVisible;
-  showFullDesign = wasFullDesign; currentLayer = wasCurrentLayer; flatBlockMode = wasFlatBlockMode;
+  showFullDesign = wasFullDesign; showBelowLayers = wasShowBelow; currentLayer = wasCurrentLayer; flatBlockMode = wasFlatBlockMode;
   renderer.setSize(origSize.x, origSize.y, false);
   camera.aspect = origAspect;
   rebuildMesh3D();
@@ -1446,7 +1476,9 @@ async function quickAnglePreview(){
   document.getElementById('anglePreviewModal').style.display = 'flex';
   setLoading(false);
 }
-document.getElementById('quickPreviewBtn').addEventListener('click', quickAnglePreview);
+document.getElementById('quickPreviewBtn').addEventListener('click', ()=>quickAnglePreview());
+document.getElementById('previewLayerSelect').addEventListener('change', e=>quickAnglePreview(e.target.value));
+document.getElementById('previewRefreshBtn').addEventListener('click', ()=>quickAnglePreview(document.getElementById('previewLayerSelect').value));
 document.getElementById('anglePreviewCloseBtn').addEventListener('click', ()=>{
   document.getElementById('anglePreviewModal').style.display = 'none';
 });
