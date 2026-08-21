@@ -384,7 +384,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado por capas</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v22</small></div>
     </div>
     <div id="modelNameText">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -1489,7 +1489,9 @@ async function quickAnglePreview(previewLayer){
     roughness: 0.32, metalness: 0.02, clearcoat: 0.65, clearcoatRoughness: 0.18,
   });
   instMesh.material = realMat;
-  edgeMesh.visible = true; seamMesh.visible = false; edgeMesh.material.opacity = 1;
+  // Contorno APAGADO, exactamente igual que en el visor 3D (que se ve bien).
+  // Forzarlo encendido acá era la única diferencia real entre el visor y el manual.
+  edgeMesh.visible = false; seamMesh.visible = false;
 
   const origSize = new THREE.Vector2();
   renderer.getSize(origSize);
@@ -1648,8 +1650,8 @@ async function generateInstructionsPDF(){
       currentLayer = layer;
       rebuildMesh3D(); // con showFullDesign=false y showBelowLayers=true: esta capa a color, las de abajo gris
       instMesh.material = realMat;
-      edgeMesh.visible = true; seamMesh.visible = false;
-      edgeMesh.material.opacity = 1;
+      // Contorno APAGADO, igual que en el visor 3D (que se ve bien).
+      edgeMesh.visible = false; seamMesh.visible = false;
       // El contorno ya sale blanco en bloques oscuros y negro en los claros (mismo
       // sistema que ya funciona bien en el visor normal) — antes lo forzábamos a
       // negro parejo, y eso volvía invisible el borde en bloques oscuros/negros,
@@ -1783,8 +1785,8 @@ async function generateInstructionsPNGZip(){
       currentLayer = layer;
       rebuildMesh3D();
       instMesh.material = realMat;
-      edgeMesh.visible = true; seamMesh.visible = false;
-      edgeMesh.material.opacity = 1;
+      // Contorno APAGADO, igual que en el visor 3D (que se ve bien).
+      edgeMesh.visible = false; seamMesh.visible = false;
       // Contorno adaptable (blanco en oscuros, negro en claros), igual que el visor normal.
       const visibleNow = voxels.filter(v => Math.round(v.y) <= layer);
       const stepBox = worldBoxFromVoxelList(visibleNow);
