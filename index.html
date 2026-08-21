@@ -384,7 +384,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v23</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v24</small></div>
     </div>
     <div id="modelNameText">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -1796,18 +1796,42 @@ async function generateAssemblyVideo(){
     const ang = customInstructionAngle || { elevation: 35, azimuth: 45 };
     const totalFrames = (maxLayer+1) * framesPerLayer;
     let frame = 0;
+    const offX = (dims.x*voxelSize)/2, offZ = (dims.z*voxelSize)/2;
+    const growDummy = new THREE.Object3D();
 
     for (let layer=0; layer<=maxLayer; layer++){
       currentLayer = layer;
       rebuildMesh3D();
       instMesh.material = realMat;
       edgeMesh.visible = false; seamMesh.visible = false;
-      const visibleNow = voxels.filter(v => Math.round(v.y) <= layer);
-      const stepBox = worldBoxFromVoxelList(visibleNow);
+
+      // Índices de los bloques NUEVOS de esta capa, para hacerlos "crecer"
+      const newOnes = [];
+      lastVisibleVoxels.forEach((v,idx)=>{ if (Math.round(v.y) === layer) newOnes.push({idx, v}); });
+
       for (let f=0; f<framesPerLayer; f++){
-        // Gira una vuelta completa a lo largo de todo el video
+        const t = f/framesPerLayer; // 0 → 1 dentro de esta capa
+
+        // Los bloques nuevos crecen durante el primer 45% de la capa, con un
+        // arranque suave — así aparecen en vez de saltar de golpe (eso era el
+        // "pestañeo" que se veía en cada cambio de capa).
+        const growT = Math.min(1, t/0.45);
+        const s = growT<1 ? (0.05 + 0.95*(1-Math.pow(1-growT,3))) : 1;
+        if (growT <= 1){
+          newOnes.forEach(({idx,v})=>{
+            growDummy.position.set(v.x*voxelSize - offX, v.y*voxelSize + voxelSize/2, v.z*voxelSize - offZ);
+            growDummy.scale.setScalar(s);
+            growDummy.updateMatrix();
+            instMesh.setMatrixAt(idx, growDummy.matrix);
+          });
+          instMesh.instanceMatrix.needsUpdate = true;
+        }
+
+        // Encuadre FIJO con el modelo completo (no cambia entre capas) y enfoque
+        // que sube suavemente de una capa a la siguiente — sin saltos de cámara.
+        const focusLayer = layer===0 ? layer : (layer-1) + t;
         const spin = (frame/Math.max(1,totalFrames)) * 360;
-        positionCameraFixedAngle(stepBox, ang.elevation, ang.azimuth + spin, instructionMargin(), focusPointForLayer(stepBox, layer));
+        positionCameraFixedAngle(fullBox, ang.elevation, ang.azimuth + spin, instructionMargin(), focusPointForLayer(fullBox, focusLayer));
         renderer.render(scene, camera);
         frame++;
         await new Promise(r=>setTimeout(r, 1000/FPS));
@@ -1822,7 +1846,7 @@ async function generateAssemblyVideo(){
     edgeMesh.visible = false; seamMesh.visible = false;
     for (let f=0; f<FPS*3; f++){
       const spin = (f/(FPS*3)) * 360;
-      positionCameraFixedAngle(fullBox, ang.elevation, ang.azimuth + spin, instructionMargin());
+      positionCameraFixedAngle(fullBox, ang.elevation, ang.azimuth + spin, instructionMargin(), focusPointForLayer(fullBox, maxLayer));
       renderer.render(scene, camera);
       await new Promise(r=>setTimeout(r, 1000/FPS));
     }
