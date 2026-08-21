@@ -487,6 +487,7 @@
         <button class="btn icon active" id="meshTexBtn" title="Resaltar el contorno de cada bloque">▦ Contorno</button>
         <button class="btn icon" id="previewInstrAngleBtn" title="Pone la cámara en el MISMO ángulo exacto que usan las instrucciones, con el diseño completo — para comparar directo, sin generar el PDF">📐 Ver ángulo del manual</button>
         <button class="btn icon" id="useThisAngleBtn" title="Guarda el ángulo EXACTO en el que está la cámara ahora mismo (girá con el mouse hasta que se vea bien) para que el manual use ese, en vez de uno fijo">📌 Usar este ángulo</button>
+        <button class="btn icon" id="quickPreviewBtn" title="Foto rápida del modelo completo, con el ángulo guardado — para ver el resultado en segundos, sin generar todo el manual">⚡ Vista previa rápida</button>
       </div>
       <div id="ctxHint">clic derecho: orbitar<br/>rueda: zoom</div>
     </section>
@@ -591,6 +592,14 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <!-- Modo PRUEBA (sandbox) — cuando quieras cobrar de verdad, cambiá este client-id por el de "Live" -->
 <script src="https://www.paypal.com/sdk/js?client-id=BAAFIIacFoi0N0oyF5bnWz_JdmGmeOtysRuW2LLN_reSSRzZXV0lY7qIupbZnxrOlYqARywDNtFPbRePS0&currency=USD"></script>
+
+<div id="anglePreviewModal" style="display:none; position:fixed; inset:0; z-index:200; background:rgba(8,11,19,.92); align-items:center; justify-content:center; flex-direction:column; gap:14px; backdrop-filter:blur(3px);">
+  <img id="anglePreviewImg" style="max-width:88vw; max-height:76vh; border-radius:12px; border:2px solid var(--accent); box-shadow:0 10px 40px rgba(0,0,0,.5);" />
+  <div style="display:flex; gap:10px; align-items:center;">
+    <span style="color:var(--text-dim); font-size:12.5px;">Así saldría el modelo completo en el manual, con tu ángulo guardado.</span>
+    <button class="btn primary" id="anglePreviewCloseBtn">Cerrar</button>
+  </div>
+</div>
 <script type="module">
 import * as THREE from "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.js";
 
@@ -1361,6 +1370,86 @@ function positionCameraFixedAngle(box, elevationDeg, azimuthDeg, marginMult){
   camera.lookAt(center);
   camera.updateProjectionMatrix();
 }
+
+/* ---------------------------- Vista previa rápida del ángulo (una sola foto) ----------------------------
+   En vez de tener que generar el manual completo (todas las capas) solo para ver
+   si el ángulo quedó bien, esto saca UNA foto del modelo COMPLETO con el mismo
+   material/piso/ángulo que va a usar el manual, y la muestra al toque. */
+async function quickAnglePreview(){
+  if (!voxels.length){ setStatus('No hay ningún diseño cargado.', 'err'); return; }
+  setLoading(true, 'Generando vista previa…');
+  await new Promise(r=>setTimeout(r, 20));
+
+  const wasShow2D = mainSplit.classList.contains('show-2d');
+  if (wasShow2D) setView('3d');
+  await new Promise(r=>setTimeout(r, wasShow2D ? 90 : 20));
+
+  const wasCurrentLayer = currentLayer, wasFullDesign = showFullDesign;
+  const wasCamPos = camera.position.clone();
+  const wasAxesVisible = axesHelper.visible; axesHelper.visible = false;
+  const wasGridVisible = grid.visible; grid.visible = false;
+  const wasBg = scene.background;
+  const studioColor = new THREE.Color('#c9cdd6');
+  scene.background = studioColor;
+  const wasFog = scene.fog; scene.fog = null;
+
+  const box = centeredBounds();
+  const sizeV = new THREE.Vector3(); box.getSize(sizeV);
+  const maxDim = Math.max(sizeV.x, sizeV.y, sizeV.z, 1);
+  const wasGroundVisible = ground.visible;
+  const wasGroundColor = ground.material.color.clone();
+  const wasGroundScale = ground.scale.clone();
+  ground.visible = true;
+  ground.material.color.copy(studioColor);
+  ground.scale.setScalar(Math.max(1, maxDim*3/40));
+
+  const wasFlatBlockMode = flatBlockMode;
+  flatBlockMode = true;
+  showFullDesign = true; // vista completa, como el último paso del manual
+  rebuildMesh3D();
+  const realMat = new THREE.MeshPhysicalMaterial({
+    roughness: 0.32, metalness: 0.02, clearcoat: 0.65, clearcoatRoughness: 0.18, side: THREE.DoubleSide,
+  });
+  instMesh.material = realMat;
+  edgeMesh.visible = true; seamMesh.visible = false; edgeMesh.material.opacity = 1;
+
+  const origSize = new THREE.Vector2();
+  renderer.getSize(origSize);
+  const origAspect = camera.aspect;
+  renderer.setSize(900, 900, false); // más chico que el manual final (900 en vez de 1500) — más rápido, ya que es solo para previsualizar
+  camera.aspect = 1;
+
+  const ang = customInstructionAngle || { elevation: 35, azimuth: 45 };
+  positionCameraFixedAngle(box, ang.elevation, ang.azimuth, 1.85);
+  renderer.render(scene, camera);
+  const dataUrl = renderer.domElement.toDataURL('image/png');
+
+  // Devolver TODO a como estaba
+  realMat.dispose();
+  ground.visible = wasGroundVisible;
+  ground.material.color.copy(wasGroundColor);
+  ground.scale.copy(wasGroundScale);
+  scene.background = wasBg;
+  scene.fog = wasFog;
+  axesHelper.visible = wasAxesVisible;
+  grid.visible = wasGridVisible;
+  showFullDesign = wasFullDesign; currentLayer = wasCurrentLayer; flatBlockMode = wasFlatBlockMode;
+  renderer.setSize(origSize.x, origSize.y, false);
+  camera.aspect = origAspect;
+  rebuildMesh3D();
+  camera.position.copy(wasCamPos);
+  if (wasShow2D) setView('2d'); else buscarDiseno();
+  refreshLayerUI();
+  renderer.render(scene, camera);
+
+  document.getElementById('anglePreviewImg').src = dataUrl;
+  document.getElementById('anglePreviewModal').style.display = 'flex';
+  setLoading(false);
+}
+document.getElementById('quickPreviewBtn').addEventListener('click', quickAnglePreview);
+document.getElementById('anglePreviewCloseBtn').addEventListener('click', ()=>{
+  document.getElementById('anglePreviewModal').style.display = 'none';
+});
 
 async function generateInstructionsPDF(){
   if (!voxels.length){ setStatus('No hay ningún diseño cargado para generar instrucciones.', 'err'); return; }
