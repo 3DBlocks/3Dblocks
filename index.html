@@ -427,6 +427,7 @@
           <div id="diagramTitle">Plano de la capa — vista superior</div>
           <button class="btn sm" id="renderBtn" title="Genera una foto de presentación con luces e iluminación real, según cómo esté orientado el modelo ahora mismo">🖼️ Render</button>
           <button class="btn sm" id="printInstructionsBtn" title="Descargar un PDF con todas las capas, listo para imprimir">🖨️ Imprimir instrucciones</button>
+          <button class="btn sm" id="printInstructionsPngBtn" title="Descargar las instrucciones como imágenes PNG (un archivo .zip) — mucho más liviano que el PDF, sin perder nitidez">🖼️ Instrucciones en PNG (.zip)</button>
         </div>
         <div id="diagramSub">Coloca <b id="diagramCount">0</b> bloques nuevos en esta capa. Los bloques atenuados ya están colocados debajo.</div>
       </div>
@@ -1499,6 +1500,109 @@ async function generateInstructionsPDF(){
     setStatus('No se pudo generar el PDF: ' + err.message, 'err');
   } finally {
     // Devolver TODO a como estaba
+    realMat.dispose();
+    ground.visible = wasGroundVisible;
+    ground.material.color.copy(wasGroundColor);
+    ground.scale.copy(wasGroundScale);
+    scene.background = wasBg;
+    scene.fog = wasFog;
+    axesHelper.visible = wasAxesVisible;
+    grid.visible = wasGridVisible;
+    currentLayer = wasCurrentLayer; showFullDesign = wasFullDesign; showBelowLayers = wasShowBelow;
+    renderer.setSize(origSize.x, origSize.y, false);
+    camera.aspect = origAspect;
+    rebuildMesh3D();
+    camera.position.copy(wasCamPos);
+    if (wasShow2D) setView('2d');
+    else buscarDiseno();
+    refreshLayerUI();
+    renderer.render(scene, camera);
+    setLoading(false);
+  }
+}
+
+/* ---------------------------- Instrucciones en PNG (.zip) — más liviano que el PDF ----------------------------
+   Mismo render por capa (material con brillo + contorno negro parejo) que el PDF,
+   pero cada página se guarda como un .png suelto dentro de un .zip — evita el peso
+   extra del formato PDF, sin bajarle la resolución a las imágenes. */
+async function generateInstructionsPNGZip(){
+  if (!voxels.length){ setStatus('No hay ningún diseño cargado para generar instrucciones.', 'err'); return; }
+  if (!window.JSZip){ setStatus('No se pudo cargar el generador de .zip. Revisá tu conexión y probá de nuevo.', 'err'); return; }
+  if (!instMesh){ setStatus('Esperá a que termine de cargar el visor 3D y probá de nuevo.', 'err'); return; }
+  setLoading(true, 'Generando imágenes en 3D (puede tardar, capa por capa)…');
+  await new Promise(r=>setTimeout(r, 30));
+
+  const wasCurrentLayer = currentLayer, wasFullDesign = showFullDesign, wasShowBelow = showBelowLayers;
+  const wasCamPos = camera.position.clone();
+  const wasShow2D = mainSplit.classList.contains('show-2d');
+  if (wasShow2D) setView('3d');
+  await new Promise(r=>setTimeout(r, wasShow2D ? 90 : 20));
+
+  const wasAxesVisible = axesHelper.visible; axesHelper.visible = false;
+  const wasGridVisible = grid.visible; grid.visible = false;
+  const wasBg = scene.background;
+  const studioColor = new THREE.Color('#c9cdd6');
+  scene.background = studioColor;
+  const wasFog = scene.fog; scene.fog = null;
+
+  const fullBox = centeredBounds();
+  const fullSize = new THREE.Vector3(); fullBox.getSize(fullSize);
+  const maxDimFull = Math.max(fullSize.x, fullSize.y, fullSize.z, 1);
+  const wasGroundVisible = ground.visible;
+  const wasGroundColor = ground.material.color.clone();
+  const wasGroundScale = ground.scale.clone();
+  ground.visible = true;
+  ground.material.color.copy(studioColor);
+  ground.scale.setScalar(Math.max(1, maxDimFull*3/40));
+
+  const realMat = new THREE.MeshPhysicalMaterial({
+    roughness: 0.32, metalness: 0.02, clearcoat: 0.65, clearcoatRoughness: 0.18, side: THREE.DoubleSide,
+  });
+  const blackEdge = new THREE.Color('#000000');
+
+  showFullDesign = false; showBelowLayers = true;
+
+  const origSize = new THREE.Vector2();
+  renderer.getSize(origSize);
+  const origAspect = camera.aspect;
+  renderer.setSize(1500, 1500, false);
+  camera.aspect = 1;
+
+  try{
+    const zip = new JSZip();
+    const modelName = (document.getElementById('modelNameText').textContent || 'Diseño 3DBlock').trim();
+    const baseName = modelName.replace(/[^\w\-]+/g,'_') || 'diseno';
+    const pad = String(maxLayer+1).length;
+
+    for (let layer=0; layer<=maxLayer; layer++){
+      currentLayer = layer;
+      rebuildMesh3D();
+      instMesh.material = realMat;
+      edgeMesh.visible = true; seamMesh.visible = false;
+      edgeMesh.material.opacity = 1;
+      for (let i=0; i<edgeMesh.count; i++) edgeMesh.setColorAt(i, blackEdge);
+      if (edgeMesh.instanceColor) edgeMesh.instanceColor.needsUpdate = true;
+      const visibleNow = voxels.filter(v => Math.round(v.y) <= layer);
+      const stepBox = worldBoxFromVoxelList(visibleNow);
+      positionCameraFixedAngle(stepBox, 35, 128, 1.85);
+      renderer.render(scene, camera);
+      const dataUrl = renderer.domElement.toDataURL('image/png');
+      const base64 = dataUrl.split(',')[1];
+      const stepNum = String(layer+1).padStart(pad, '0');
+      zip.file(`paso_${stepNum}_de_${maxLayer+1}.png`, base64, { base64: true });
+    }
+
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = baseName + '_instrucciones_png.zip';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setStatus('Instrucciones descargadas: ' + baseName + '_instrucciones_png.zip (' + (maxLayer+1) + ' imágenes)', 'ok');
+  } catch(err){
+    console.error(err);
+    setStatus('No se pudo generar el .zip: ' + err.message, 'err');
+  } finally {
     realMat.dispose();
     ground.visible = wasGroundVisible;
     ground.material.color.copy(wasGroundColor);
@@ -3518,6 +3622,7 @@ renderer.domElement.addEventListener('pointerup', e=>{
 });
 
 document.getElementById('printInstructionsBtn').addEventListener('click', generateInstructionsPDF);
+document.getElementById('printInstructionsPngBtn').addEventListener('click', generateInstructionsPNGZip);
 
 function buildExportPayload(){
   const price = Math.max(0, parseFloat(document.getElementById('priceInput').value) || 0);
