@@ -384,7 +384,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v24</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v25</small></div>
     </div>
     <div id="modelNameText">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -1741,7 +1741,7 @@ async function generateAssemblyVideo(){
     setStatus('Tu navegador no permite grabar video. Probá con Chrome o Edge.', 'err');
     return;
   }
-  const SECONDS_PER_LAYER = 0.9;
+  const SECONDS_PER_LAYER = 2.0;
   const FPS = 30;
   const framesPerLayer = Math.round(SECONDS_PER_LAYER * FPS);
 
@@ -1815,7 +1815,7 @@ async function generateAssemblyVideo(){
         // Los bloques nuevos crecen durante el primer 45% de la capa, con un
         // arranque suave — así aparecen en vez de saltar de golpe (eso era el
         // "pestañeo" que se veía en cada cambio de capa).
-        const growT = Math.min(1, t/0.45);
+        const growT = Math.min(1, t/0.6);
         const s = growT<1 ? (0.05 + 0.95*(1-Math.pow(1-growT,3))) : 1;
         if (growT <= 1){
           newOnes.forEach(({idx,v})=>{
@@ -1827,11 +1827,11 @@ async function generateAssemblyVideo(){
           instMesh.instanceMatrix.needsUpdate = true;
         }
 
-        // Encuadre FIJO con el modelo completo (no cambia entre capas) y enfoque
-        // que sube suavemente de una capa a la siguiente — sin saltos de cámara.
+        // Encuadre FIJO con el modelo completo y enfoque que sube suavemente de
+        // una capa a la siguiente. La cámara NO gira durante el armado: se queda
+        // quieta para que se vea claro dónde va cada bloque.
         const focusLayer = layer===0 ? layer : (layer-1) + t;
-        const spin = (frame/Math.max(1,totalFrames)) * 360;
-        positionCameraFixedAngle(fullBox, ang.elevation, ang.azimuth + spin, instructionMargin(), focusPointForLayer(fullBox, focusLayer));
+        positionCameraFixedAngle(fullBox, ang.elevation, ang.azimuth, instructionMargin(), focusPointForLayer(fullBox, focusLayer));
         renderer.render(scene, camera);
         frame++;
         await new Promise(r=>setTimeout(r, 1000/FPS));
@@ -1839,13 +1839,14 @@ async function generateAssemblyVideo(){
       setLoading(true, 'Grabando video… capa ' + (layer+1) + ' de ' + (maxLayer+1));
     }
 
-    // Unos segundos finales con el modelo completo, girando
+    // Recién al final, con el modelo ya terminado: vuelta completa de 360°
     showFullDesign = true;
     rebuildMesh3D();
     instMesh.material = realMat;
     edgeMesh.visible = false; seamMesh.visible = false;
-    for (let f=0; f<FPS*3; f++){
-      const spin = (f/(FPS*3)) * 360;
+    const spinFrames = FPS*6; // 6 segundos para dar la vuelta completa, bien pausado
+    for (let f=0; f<spinFrames; f++){
+      const spin = (f/spinFrames) * 360;
       positionCameraFixedAngle(fullBox, ang.elevation, ang.azimuth + spin, instructionMargin(), focusPointForLayer(fullBox, maxLayer));
       renderer.render(scene, camera);
       await new Promise(r=>setTimeout(r, 1000/FPS));
