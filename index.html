@@ -390,7 +390,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v32</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v33</small></div>
     </div>
     <div id="modelNameText">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -4136,8 +4136,18 @@ window.addEventListener('pointerup', e=>{
           });
           drawLayerDiagram(); rebuildMesh3D(); refreshLayerUI();
         } else {
-          magicSelection = sel; // 'paint': queda resaltado, esperando que elijan un color
-          drawLayerDiagram(); drawMagicSelectionOverlay();
+          // 'paint': pinta la zona AL INSTANTE con el color que ya tenés elegido.
+          // Antes quedaba resaltada esperando que fueras a la paleta a elegir un
+          // color cada vez; ahora elegís el color UNA sola vez y vas pintando
+          // todas las zonas que quieras seguidas.
+          maybeSnapshotForGesture();
+          sel.forEach(key=>{
+            const [x,z] = key.split(',').map(Number);
+            const v = voxels.find(v=>v.x===x && Math.round(v.y)===currentLayer && v.z===z);
+            if (v) v.color = paintColor;
+          });
+          clearMagicSelection();
+          drawLayerDiagram(); rebuildMesh3D(); refreshLayerUI();
         }
       } else {
         clearMagicSelection();
@@ -4312,8 +4322,16 @@ renderer.domElement.addEventListener('pointerup', e=>{
               });
               drawLayerDiagram(); rebuildMesh3D(); refreshLayerUI();
             } else {
-              magicSelection = sel;
-              drawLayerDiagram(); rebuildMesh3D();
+              // 'paint': pinta la zona al instante con el color ya elegido
+              // (mismo comportamiento que en el plano 2D).
+              maybeSnapshotForGesture();
+              sel.forEach(key=>{
+                const [x,z] = key.split(',').map(Number);
+                const vv = voxels.find(vv=>vv.x===x && Math.round(vv.y)===currentLayer && vv.z===z);
+                if (vv) vv.color = paintColor;
+              });
+              clearMagicSelection();
+              drawLayerDiagram(); rebuildMesh3D(); refreshLayerUI();
             }
           }
         }
