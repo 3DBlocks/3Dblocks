@@ -390,7 +390,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v43</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v44</small></div>
     </div>
     <div id="modelNameText">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -1066,13 +1066,16 @@ function clearModelMeshes(){
    UV normales de caja, así la textura de rejilla se ve prolija en cada cara. */
 function mergeGeometries(geoms){
   let vertexCount = 0;
-  const positions = [], normals = [], uvs = [], indices = [];
+  const positions = [], normals = [], uvs = [], indices = [], colors = [];
   geoms.forEach(g=>{
     const posAttr = g.attributes.position, normAttr = g.attributes.normal, uvAttr = g.attributes.uv;
+    const colAttr = g.attributes.color; // sombreado horneado (ver buildMagicBlockGeometry)
     for (let i=0;i<posAttr.count;i++){
       positions.push(posAttr.getX(i), posAttr.getY(i), posAttr.getZ(i));
       normals.push(normAttr.getX(i), normAttr.getY(i), normAttr.getZ(i));
       if (uvAttr) uvs.push(uvAttr.getX(i), uvAttr.getY(i)); else uvs.push(0,0);
+      if (colAttr) colors.push(colAttr.getX(i), colAttr.getY(i), colAttr.getZ(i));
+      else colors.push(1,1,1); // blanco = no cambia el color del bloque
     }
     const idx = g.index;
     if (idx){ for (let i=0;i<idx.count;i++) indices.push(idx.getX(i)+vertexCount); }
@@ -1083,6 +1086,7 @@ function mergeGeometries(geoms){
   merged.setAttribute('position', new THREE.Float32BufferAttribute(positions,3));
   merged.setAttribute('normal', new THREE.Float32BufferAttribute(normals,3));
   merged.setAttribute('uv', new THREE.Float32BufferAttribute(uvs,2));
+  merged.setAttribute('color', new THREE.Float32BufferAttribute(colors,3));
   merged.setIndex(indices);
   return merged;
 }
@@ -1133,7 +1137,12 @@ function buildMagicBlockGeometry(size){
     const V = MAGIC_BLOCK_DATA.v, F = MAGIC_BLOCK_DATA.f;
     const pos = new Float32Array(F.length*9);
     const uv  = new Float32Array(F.length*6);
-    let o = 0, uo = 0;
+    const col = new Float32Array(F.length*9); // sombreado horneado, cara por cara
+    let o = 0, uo = 0, co = 0;
+    // Luz fija imaginaria: define cuánto se aclara u oscurece cada cara según hacia
+    // dónde mira. Es lo que le da VOLUMEN al bloque — sin esto todas las caras salen
+    // del mismo color exacto y la pieza se ve como una silueta plana.
+    const LX = 0.45/1.303, LY = 1.0/1.303, LZ = 0.65/1.303;
     F.forEach(tri=>{
       const p0 = V[tri[0]], p1 = V[tri[1]], p2 = V[tri[2]];
       // Normal de la cara, para saber hacia dónde mira y proyectar la textura
@@ -1144,7 +1153,14 @@ function buildMagicBlockGeometry(size){
       const nz = Math.abs(ax*by - ay*bx);
       // Eje dominante: define si la cara mira hacia arriba/abajo, o a los costados
       const axis = (ny >= nx && ny >= nz) ? 'y' : ((nx >= nz) ? 'x' : 'z');
+      // Normal CON signo (las de arriba son en valor absoluto, solo para la textura)
+      let sx = ay*bz - az*by, sy = az*bx - ax*bz, sz = ax*by - ay*bx;
+      const sl = Math.hypot(sx, sy, sz) || 1;
+      sx /= sl; sy /= sl; sz /= sl;
+      const dot = sx*LX + sy*LY + sz*LZ;          // -1 (contra la luz) .. 1 (de frente)
+      const brillo = 0.38 + 0.62 * (0.5 + 0.5*dot); // 0.38 (abajo) .. 1.00 (arriba)
       [p0,p1,p2].forEach(p=>{
+        col[co++] = brillo; col[co++] = brillo; col[co++] = brillo;
         pos[o++] = p[0]; pos[o++] = p[1]; pos[o++] = p[2];
         // COORDENADAS DE TEXTURA: sin esto, la textura de malla se aplicaba mal y
         // pintaba el bloque entero de oscuro (la "gran sombra" en modo malla).
@@ -1159,6 +1175,7 @@ function buildMagicBlockGeometry(size){
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
     g.computeVertexNormals();
     // La malla viene con el cuerpo apoyado en Y=0; nuestros bloques se dibujan
     // centrados en la celda, así que la bajamos media celda.
@@ -1313,7 +1330,7 @@ function buildPieceMeshes(visible){
   // porque la malla está cerrada; en los bloques de caja no se usa, para no
   // reintroducir el problema de los triángulos negros al apilar.
     const mat = new THREE.MeshBasicMaterial({ toneMapped:false });
-    if (blockStyle === 'magic') mat.side = THREE.DoubleSide;
+    if (blockStyle === 'magic'){ mat.side = THREE.DoubleSide; mat.vertexColors = true; }
     // En el Magic Block NO se pega la textura de cuadrado: su contorno se dibuja
     // aparte, con las aristas reales de la pieza.
     if (showMeshTexture && blockStyle !== 'magic') mat.map = getMeshTexture();
@@ -1394,7 +1411,9 @@ function rebuildMesh3D(){
   // porque la malla está cerrada; en los bloques de caja no se usa, para no
   // reintroducir el problema de los triángulos negros al apilar.
   const mat = new THREE.MeshBasicMaterial({ toneMapped:false });
-  if (blockStyle === 'magic') mat.side = THREE.DoubleSide;
+  // vertexColors: el sombreado horneado en la malla se MULTIPLICA por el color del
+  // bloque, así el verde sigue siendo verde pero cada cara con su brillo propio.
+  if (blockStyle === 'magic'){ mat.side = THREE.DoubleSide; mat.vertexColors = true; }
   // En el Magic Block NO se pega la textura de cuadrado: su contorno son las
   // aristas reales de la pieza, que ya se dibujan abajo como líneas (edgeMesh).
   if (showMeshTexture && blockStyle !== 'magic') mat.map = getMeshTexture();
