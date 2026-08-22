@@ -1329,6 +1329,29 @@ function pixelesPorBloque(objetivo){
   if (!(altoMundo > 0)) return 999;
   return (renderer.domElement.height / altoMundo) * voxelSize;
 }
+/* ---- La línea se DESVANECE al alejarse ----
+   Cambiar de contorno detallado a simple no alcanza. Aunque de lejos queden solo
+   12 aristas por bloque, si un bloque mide 10 píxeles esas líneas ocupan una
+   parte enorme de su superficie, y **te cambian el tono de la pieza**: un modelo
+   negro se ve gris. El problema es de proporción, no de cantidad de líneas.
+
+   La cuenta: una línea es SIEMPRE de 1 píxel (WebGL no dibuja menos). En un
+   bloque de 60 px, ese 1 píxel es el 1,7 % del ancho — no se nota. En uno de 10,
+   es el 10 % — y con dos líneas por bloque, el 20 % de la pieza es línea.
+
+   Como el ancho no se puede bajar, se baja la INTENSIDAD en proporción: cuanto
+   más chico el bloque, más transparente la línea, hasta desaparecer. El ojo lo
+   lee como una línea más fina, y el color de la pieza vuelve a ser el real.
+   Esto sí es seguro con el contorno simple porque las aristas de la celda no se
+   superponen entre sí (dos bloques vecinos comparten una, no diez).
+
+   Pedido del cliente del usuario: "que se vea la tonalidad real de la pieza". */
+function rampa(v, desde, hasta, valDesde, valHasta){
+  if (hasta === desde) return valHasta;
+  const t = Math.max(0, Math.min(1, (v - desde) / (hasta - desde)));
+  return valDesde + (valHasta - valDesde) * t;
+}
+const OPACIDAD_CONTORNO_MAX = 0.85;
 let nivelContornoActual = null;
 function actualizarNivelDeContorno(forzar, objetivo){
   if (!edgeMesh) return;
@@ -1342,7 +1365,14 @@ function actualizarNivelDeContorno(forzar, objetivo){
   const holgura = nivelContornoActual === 'real' ? 0.85 : 1;
   const nivel = px >= CONTORNO_PX_DETALLE*holgura ? 'real'
               : (px >= CONTORNO_PX_MINIMO*(nivelContornoActual==='simple'?0.85:1) ? 'simple' : 'nada');
-  if (!forzar && nivel === nivelContornoActual) return;   // no tocar nada si no cambió
+
+  // La opacidad se ajusta SIEMPRE, en cada cuadro: es lo que hace que el
+  // desvanecido sea suave y no un salto. Cambiar `material.opacity` es barato,
+  // no recompila nada.
+  edgeMesh.material.opacity      = rampa(px, CONTORNO_PX_DETALLE, 70, 0.45, OPACIDAD_CONTORNO_MAX);
+  edgeMeshLejos.material.opacity = rampa(px, CONTORNO_PX_MINIMO, CONTORNO_PX_DETALLE, 0.06, OPACIDAD_CONTORNO_MAX);
+
+  if (!forzar && nivel === nivelContornoActual) return;   // el resto solo si cambió
   nivelContornoActual = nivel;
   const encendido = wireOn.v || edgeMeshVisiblePorBoton;
   edgeMesh.visible      = encendido && nivel === 'real';
