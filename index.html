@@ -390,7 +390,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v42</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v43</small></div>
     </div>
     <div id="modelNameText">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -1007,6 +1007,49 @@ const tmpColor = new THREE.Color();
 const edgeColor = new THREE.Color();
 const wireOn = { v:false };
 
+/* ---------------------------- Contorno REAL del bloque ----------------------------
+   La textura de contorno (getMeshTexture) dibuja el borde de un CUADRADO en cada
+   cara: sirve para el bloque de caja, pero sobre el Magic Block cae como una raya
+   negra atravesada, porque la pieza real no es un cubo.
+   Para el Magic Block usamos el contorno de VERDAD: las aristas de su propia malla
+   (dientes, muescas y el círculo del botón), dibujadas como líneas.
+   Cuesta 401 aristas por bloque, así que tiene un tope de seguridad. */
+const MAGIC_EDGE_LIMIT = 3000;
+function usarContornoReal(cantidad){
+  return blockStyle === 'magic' && showMeshTexture && cantidad <= MAGIC_EDGE_LIMIT;
+}
+/* Replica el contorno de `geo` en cada instancia de `mesh`, con su color.
+   colorDe(i) devuelve el color del contorno para la instancia i. */
+function buildEdgesForInstances(geo, mesh, cantidad, colorDe){
+  const tmpl = new THREE.EdgesGeometry(geo, 25);
+  const tp = tmpl.attributes.position.array;
+  const vertsPer = tp.length / 3;
+  tmpl.dispose();
+  const pos = new Float32Array(cantidad * tp.length);
+  const col = new Float32Array(cantidad * tp.length);
+  const m = new THREE.Matrix4();
+  const vtmp = new THREE.Vector3();
+  const c = new THREE.Color();
+  for (let i=0;i<cantidad;i++){
+    mesh.getMatrixAt(i, m);
+    c.set(colorDe(i));
+    const base = i * vertsPer * 3;
+    for (let k=0;k<vertsPer;k++){
+      vtmp.set(tp[k*3], tp[k*3+1], tp[k*3+2]).applyMatrix4(m);
+      const o = base + k*3;
+      pos[o] = vtmp.x; pos[o+1] = vtmp.y; pos[o+2] = vtmp.z;
+      col[o] = c.r; col[o+1] = c.g; col[o+2] = c.b;
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  g.setAttribute('color', new THREE.BufferAttribute(col,3));
+  g.computeBoundingSphere();
+  return new THREE.LineSegments(g, new THREE.LineBasicMaterial({
+    vertexColors:true, transparent:true, opacity:0.85
+  }));
+}
+
 function clearModelMeshes(){
   if (instMesh){ scene.remove(instMesh); instMesh.geometry.dispose(); instMesh.material.dispose(); instMesh = null; }
   if (edgeMesh){ scene.remove(edgeMesh); edgeMesh.geometry.dispose(); edgeMesh.material.dispose(); edgeMesh = null; }
@@ -1269,9 +1312,11 @@ function buildPieceMeshes(visible){
   // ambos lados esas caras dejan de verse como agujeros. Es seguro hacerlo acá
   // porque la malla está cerrada; en los bloques de caja no se usa, para no
   // reintroducir el problema de los triángulos negros al apilar.
-  const mat = new THREE.MeshBasicMaterial({ toneMapped:false });
-  if (blockStyle === 'magic') mat.side = THREE.DoubleSide;
-    if (showMeshTexture) mat.map = getMeshTexture();
+    const mat = new THREE.MeshBasicMaterial({ toneMapped:false });
+    if (blockStyle === 'magic') mat.side = THREE.DoubleSide;
+    // En el Magic Block NO se pega la textura de cuadrado: su contorno se dibuja
+    // aparte, con las aristas reales de la pieza.
+    if (showMeshTexture && blockStyle !== 'magic') mat.map = getMeshTexture();
     const mesh = new THREE.InstancedMesh(geo, mat, list.length);
     list.forEach((cells,i)=>{
       const xs = cells.map(c=>c.x), zs = cells.map(c=>c.z);
@@ -1291,6 +1336,19 @@ function buildPieceMeshes(visible){
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     scene.add(mesh);
     pieceMeshes.push(mesh);
+    // Contorno real de la pieza — también en el manual y el video
+    if (usarContornoReal(visible.length)){
+      try{
+        const tc = new THREE.Color();
+        const lineas = buildEdgesForInstances(geo, mesh, list.length, i=>{
+          tc.set(cleanColor(list[i][0].color));
+          const lum = tc.r*0.299 + tc.g*0.587 + tc.b*0.114;
+          return lum < 0.35 ? '#ffffff' : '#000000';
+        });
+        scene.add(lineas);
+        pieceMeshes.push(lineas);
+      } catch(err){ console.warn('No se pudo dibujar el contorno real de las piezas:', err); }
+    }
   });
 }
 
@@ -1337,7 +1395,10 @@ function rebuildMesh3D(){
   // reintroducir el problema de los triángulos negros al apilar.
   const mat = new THREE.MeshBasicMaterial({ toneMapped:false });
   if (blockStyle === 'magic') mat.side = THREE.DoubleSide;
-  if (showMeshTexture) mat.map = getMeshTexture();
+  // En el Magic Block NO se pega la textura de cuadrado: su contorno son las
+  // aristas reales de la pieza, que ya se dibujan abajo como líneas (edgeMesh).
+  if (showMeshTexture && blockStyle !== 'magic') mat.map = getMeshTexture();
+  const contornoReal = usarContornoReal(visible.length);
   instMesh = new THREE.InstancedMesh(geo, mat, visible.length);
   instMesh.castShadow = false; instMesh.receiveShadow = false;
 
@@ -1362,7 +1423,10 @@ function rebuildMesh3D(){
   edgeGeometry.setAttribute('position', new THREE.BufferAttribute(edgePositions, 3));
   edgeGeometry.setAttribute('color', new THREE.BufferAttribute(edgeColors, 3));
   edgeMesh = new THREE.LineSegments(edgeGeometry, edgeMat);
-  edgeMesh.visible = wireOn.v;
+  // Con el Magic Block, este contorno de líneas ES el diseño real de la pieza
+  // (dientes, muescas y el botón), así que el botón "Contorno" lo enciende.
+  edgeMesh.visible = wireOn.v || contornoReal;
+  if (contornoReal) edgeMat.opacity = 0.85;
 
   // Línea fina de separación entre piezas apiladas: una franjita delgada y oscura
   // justo en el borde de arriba de cada bloque — así se nota dónde termina una
@@ -1434,7 +1498,7 @@ function rebuildMesh3D(){
 
   // Capa con el contorno BLANCO, solo encima de los bloques oscuros — así en los
   // bloques negros también se ve dónde termina uno y empieza el otro.
-  if (showWhiteDarkEdge && showMeshTexture && darkPositions.length){
+  if (showWhiteDarkEdge && showMeshTexture && blockStyle !== 'magic' && darkPositions.length){
     const darkMat = new THREE.MeshBasicMaterial({
       map: getWhiteEdgeTexture(),
       transparent: true,
