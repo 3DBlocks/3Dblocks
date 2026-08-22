@@ -1044,24 +1044,112 @@ let instMesh = null, edgeMesh = null, seamMesh = null, darkEdgeMesh = null;
 const dummy = new THREE.Object3D();
 const tmpColor = new THREE.Color();
 const edgeColor = new THREE.Color();
-/* Color de la línea de contorno.
-   Regla: negro para TODOS los colores. Blanco SOLO para el bloque negro, donde
-   una línea negra sería invisible.
-   Se mira el canal más alto (no la luminancia): un azul marino o un marrón
-   oscuro tienen algún canal por encima de 0.18 y siguen llevando línea negra;
-   solo el negro de verdad (todos los canales casi en cero) lleva blanca. */
-function colorDeContorno(c){
+/* ---------------------------- Color de la línea de contorno ----------------------------
+   Hay DOS reglas distintas a propósito, según dónde se dibuje:
+
+   1. EN LA PANTALLA DE EDICIÓN (visor 3D y plano 2D) — la de siempre, sin tocar:
+      línea negra en todo, blanca solo en el bloque casi negro.
+      Acá estás editando y podés girar el modelo, así que alcanza.
+
+   2. EN LAS INSTRUCCIONES (vista previa, PDF, PNG y video) — regla nueva de v49:
+      línea negra fina en todos los colores, y BLANCA en negro, café y azul, que
+      son los colores donde una línea negra impresa no se llega a ver.
+      Acá hay una foto fija y el contorno es lo que deja ver dónde termina un
+      bloque y empieza el otro: si no se ve, no se puede armar.
+
+   Cuál de las dos se usa lo decide `contornoInstrucciones`, que enciende
+   rebuildMesh3D() cuando lo llama el manual. Ver `rebuildMesh3D`. */
+
+/* ¿Es negro, café o azul? — la regla del manual.
+   No alcanza con mirar cuán oscuro es el color: el CAFÉ y el NARANJA tienen
+   exactamente el mismo matiz (30°) y solo se diferencian por lo claro que son; y
+   al AZUL hay que separarlo del cyan (185°) y del violeta (270°), que están
+   pegados. Por eso se pasa el color a matiz / saturación / claridad.
+   Medido sobre la paleta del programa:
+     café    #935210 → matiz  30°, claridad 32%  ✔     naranja #f0800f → 30°, 50%  ✘
+     azul    #104793 → matiz 215°, claridad 32%  ✔     cyan    #0fddf0 → 185°, 50% ✘
+     azul    #0f6df0 → matiz 215°, claridad 50%  ✔     violeta #800ff0 → 270°, 50% ✘
+     marino  #1b1093 → matiz 245°, claridad 32%  ✔     gris    #8a93ac → sat 17%   ✘
+     negro   #000000 → claridad 0%               ✔     gris osc #3a3f4d → sat 14%  ✘
+   El filtro de saturación es el que deja afuera los grises azulados como el
+   #3a3f4d, que por matiz caerían dentro del rango del azul sin ser azules.
+
+   ⚠️ Los tres cortes (42°, 46% y 55%) están puestos con margen A PROPÓSITO.
+   Un corte justo hace que dos colores casi iguales caigan de lados distintos y
+   queden con líneas de distinto color al lado, lo que se ve como un error.
+   Pasó con el tronco del árbol de ejemplo, que usa tres marrones parecidos:
+     #8a5a34 → claridad 40,2%   #7c4f2c → 32,9%   #93613a → 40,2%
+   con el corte en 40% dos salían blancas y una negra. Con 46% los tres van
+   juntos, y el naranja vivo (#f0800f, claridad 50%) sigue quedando afuera.
+   Si más adelante agregás un color y la línea "salta", mové estos números —
+   pero siempre dejando espacio entre el color que entra y el que queda afuera. */
+function rgbAHsl(r, g, b){          // r,g,b en sRGB 0..1
+  const max = Math.max(r,g,b), min = Math.min(r,g,b), d = max - min;
+  const l = (max + min) / 2;
+  if (d < 1e-6) return { h:0, s:0, l };
+  const s = d / (1 - Math.abs(2*l - 1));
+  let h;
+  if (max === r)      h = 60 * (((g - b) / d) % 6);
+  else if (max === g) h = 60 * (((b - r) / d) + 2);
+  else                h = 60 * (((r - g) / d) + 4);
+  if (h < 0) h += 360;
+  return { h, s, l };
+}
+function esNegroCafeOAzul(r, g, b){ // r,g,b en sRGB 0..1
+  const { h, s, l } = rgbAHsl(r, g, b);
+  if (l <= 0.16) return true;                          // negro y casi negro
+  if (s < 0.25)  return false;                         // grises: ni café ni azul
+  if (h >= 195 && h < 265 && l <= 0.55) return true;   // azul (sin cyan ni violeta)
+  if (h >= 12  && h <= 42 && l <= 0.46) return true;   // café = naranja oscuro
+  return false;
+}
+
+/* ⚠️ OJO CON EL ESPACIO DE COLOR — es fácil equivocarse acá y el error no se ve.
+   Hay dos orígenes de color en este archivo y NO vienen igual:
+     · un THREE.Color  → sus canales vienen en espacio LINEAL (three.js los
+       convierte al hacer .set(), desde r152). Para leerlos como sRGB hay que
+       deshacer esa conversión.
+     · un `#rrggbb` suelto (el plano 2D, que dibuja con canvas) → ya viene en sRGB.
+   Tratar los canales de un THREE.Color como si fueran sRGB manda mal la decisión:
+   probando la paleta color por color, un gris medio daba 0,071 donde le
+   correspondía 0,292, o sea se llevaba línea blanca sin ser oscuro. */
+const aSRGB = c => c <= 0.0031308 ? c*12.92 : 1.055*Math.pow(c, 1/2.4) - 0.055;
+function sRGBDeColor(c){            // un THREE.Color → [r,g,b] en sRGB 0..1
+  return (THREE.ColorManagement && THREE.ColorManagement.enabled)
+    ? [aSRGB(c.r), aSRGB(c.g), aSRGB(c.b)]
+    : [c.r, c.g, c.b];
+}
+function rgbDeHex(hex){             // '#rrggbb' → [r,g,b] en sRGB 0..1
+  const h = cleanColor(hex).slice(1);
+  return [parseInt(h.slice(0,2),16)/255, parseInt(h.slice(2,4),16)/255, parseInt(h.slice(4,6),16)/255];
+}
+
+let contornoInstrucciones = false;  // lo enciende rebuildMesh3D() cuando lo llama el manual
+function colorDeContorno(c){        // recibe un THREE.Color
+  if (contornoInstrucciones){
+    const [r,g,b] = sRGBDeColor(c);
+    return esNegroCafeOAzul(r,g,b) ? '#ffffff' : '#000000';
+  }
+  // Pantalla de edición: la regla de siempre. Se mira el canal más alto, no la
+  // luminancia — con luminancia, un azul marino o un marrón oscuro también
+  // recibían línea blanca acá, que no es lo que se quiere en el visor.
   return Math.max(c.r, c.g, c.b) < 0.18 ? '#ffffff' : '#000000';
+}
+/* Misma decisión, pero para el plano 2D IMPRESO del manual, que dibuja con canvas
+   y no con THREE. Devuelve la línea ya con su transparencia: la blanca necesita
+   más cuerpo que la negra para verse igual de marcada sobre un bloque oscuro. */
+function contornoParaHex(hex){
+  const [r,g,b] = rgbDeHex(hex);
+  return esNegroCafeOAzul(r,g,b) ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.35)';
 }
 const wireOn = { v:false };
 
 /* ---------------------------- Contorno REAL del bloque ----------------------------
-   La textura de contorno (getMeshTexture) dibuja el borde de un CUADRADO en cada
-   cara: sirve para el bloque de caja, pero sobre el Magic Block cae como una raya
-   negra atravesada, porque la pieza real no es un cubo.
-   Para el Magic Block usamos el contorno de VERDAD: las aristas de su propia malla
-   (dientes, muescas y el círculo del botón), dibujadas como líneas.
-   Cuesta 401 aristas por bloque, así que tiene un tope de seguridad. */
+   Desde v49 el contorno de TODOS los estilos son líneas de verdad. Lo que cambia
+   es CUÁNTAS: en un bloque de caja son las 12 aristas del cubo (barato), y en el
+   Magic Block son las aristas de su propia malla — dientes, muescas y el círculo
+   del botón — unas 260 por bloque. Por eso el bloque real tiene un tope de
+   seguridad y el de caja no. */
 const MAGIC_EDGE_LIMIT = 20000;
 /* OJO: se mide contra el modelo COMPLETO (voxels.length), no contra lo que está
    visible en pantalla. Antes se medía lo visible, y en un modelo de ~3.300 bloques
@@ -1391,17 +1479,20 @@ function buildPieceGeometry(size, len){
   return mergeGeometries(parts);
 }
 
-/* Textura simple: solo el contorno de cada cara del bloque, en gris fino (estilo
-   lápiz) — sin subdivisiones internas, para que no se vea "sucio" ni recargado.
-   Con la geometría de caja simple, las coordenadas UV son las normales de una caja,
-   así que esta textura se ve prolija en cada cara (a diferencia de la malla real
-   compleja de antes, donde el mapeo UV quedaba mal proyectado). */
+/* Textura de contorno de los bloques de CAJA ('simple' y 'muesca'), en la
+   pantalla de edición: dibuja el borde de un cuadrado en cada cara.
+   ⚠️ Solo sirve en la pantalla. NO se usa en las instrucciones, y hay un motivo
+   de fondo: la textura se MULTIPLICA por el color del bloque, y cualquier cosa
+   multiplicada por negro da negro — o sea que en un bloque NEGRO esta línea es
+   invisible, y casi invisible en café y azul. Eso no se puede arreglar desde la
+   textura. Por eso el manual usa líneas de verdad (`edgeMesh`), que sí pueden
+   llevar un color propio por bloque. */
 let meshTexture = null;
 function getMeshTexture(){
   if (meshTexture) return meshTexture;
-  // Resolución alta (256) + línea más gruesa: la malla se ve más marcada y nítida,
-  // incluso mirando de cerca. (En 3D las líneas de verdad no se pueden engrosar —
-  // es una limitación del navegador — así que el grosor se controla desde acá.)
+  // Resolución alta (256) + línea gruesa: se ve marcada y nítida incluso de cerca.
+  // (En 3D las líneas de verdad no se pueden engrosar — es una limitación del
+  // navegador — así que el grosor se controla desde acá.)
   const size = 256;
   const canvas = document.createElement('canvas');
   canvas.width = size; canvas.height = size;
@@ -1409,20 +1500,19 @@ function getMeshTexture(){
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0,0,size,size);
   ctx.strokeStyle = '#000000';
-  ctx.lineWidth = 6.5;                    // un poco más fina que antes (era 9)
+  ctx.lineWidth = 6.5;
   ctx.strokeRect(3.25, 3.25, size-6.5, size-6.5);
   meshTexture = new THREE.CanvasTexture(canvas);
   meshTexture.wrapS = THREE.RepeatWrapping;
   meshTexture.wrapT = THREE.RepeatWrapping;
-  meshTexture.anisotropy = 8;             // nítida también en ángulo
+  meshTexture.anisotropy = 8;
   meshTexture.colorSpace = THREE.SRGBColorSpace;
   return meshTexture;
 }
 
-/* Segunda textura: borde BLANCO con el centro transparente. Se usa como una capa
-   superpuesta solo sobre los bloques oscuros. Hace falta porque la textura normal
-   se MULTIPLICA con el color del bloque, y cualquier cosa multiplicada por negro
-   da negro — o sea que en un bloque negro la línea negra es invisible. */
+/* Segunda textura: borde BLANCO con el centro transparente. Es el modo "Contorno
+   reforzado" — una capa que se apoya encima de los bloques oscuros para marcar
+   todavía más la separación, cuando el diseño es casi todo negro. */
 let whiteEdgeTexture = null;
 function getWhiteEdgeTexture(){
   if (whiteEdgeTexture) return whiteEdgeTexture;
@@ -1487,9 +1577,9 @@ function buildPieceMeshes(visible){
   // reintroducir el problema de los triángulos negros al apilar.
     const mat = new THREE.MeshBasicMaterial({ toneMapped:false });
     if (esMagic()){ mat.side = THREE.DoubleSide; mat.vertexColors = true; }
-    // En el Magic Block NO se pega la textura de cuadrado: su contorno se dibuja
-    // aparte, con las aristas reales de la pieza.
-    if (showMeshTexture && !esMagic()) mat.map = getMeshTexture();
+    // Igual que en rebuildMesh3D: textura en la pantalla, líneas de verdad en el
+    // manual (donde el material se reemplaza por el plástico con luces).
+    if (showMeshTexture && !esMagic() && !contornoInstrucciones) mat.map = getMeshTexture();
     const mesh = new THREE.InstancedMesh(geo, mat, list.length);
     list.forEach((cells,i)=>{
       const xs = cells.map(c=>c.x), zs = cells.map(c=>c.z);
@@ -1509,8 +1599,8 @@ function buildPieceMeshes(visible){
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     scene.add(mesh);
     pieceMeshes.push(mesh);
-    // Contorno real de la pieza — también en el manual y el video
-    if (usarContornoReal()){
+    // Contorno de la pieza — también en el manual y el video
+    if (usarContornoReal() || (contornoInstrucciones && showMeshTexture)){
       try{
         const tc = new THREE.Color();
         const lineas = buildEdgesForInstances(geo, mesh, list.length, i=>{
@@ -1524,7 +1614,15 @@ function buildPieceMeshes(visible){
   });
 }
 
-function rebuildMesh3D(){
+/* `opts.instrucciones = true` → este dibujado es para el manual (vista previa,
+   PDF, PNG o video), no para la pantalla. Cambia dos cosas: el contorno pasa a
+   ser líneas de verdad (que pueden ser blancas en los bloques oscuros) en vez de
+   la textura, y el color de la línea usa la regla del manual.
+   Se pasa por parámetro y no con una variable global encendida "desde afuera" a
+   propósito: así no puede quedarse prendida si algo falla en el medio — cada
+   llamada la define de nuevo, y el próximo dibujado normal la apaga solo. */
+function rebuildMesh3D(opts){
+  contornoInstrucciones = !!(opts && opts.instrucciones);
   clearModelMeshes();
   const visible = showFullDesign
     ? voxels
@@ -1569,10 +1667,15 @@ function rebuildMesh3D(){
   // vertexColors: el sombreado horneado en la malla se MULTIPLICA por el color del
   // bloque, así el verde sigue siendo verde pero cada cara con su brillo propio.
   if (esMagic()){ mat.side = THREE.DoubleSide; mat.vertexColors = true; }
-  // En el Magic Block NO se pega la textura de cuadrado: su contorno son las
-  // aristas reales de la pieza, que ya se dibujan abajo como líneas (edgeMesh).
-  if (showMeshTexture && !esMagic()) mat.map = getMeshTexture();
+  // En la PANTALLA, el bloque de caja lleva su contorno como textura pegada en
+  // cada cara (como siempre). En el MANUAL no: ahí el material se reemplaza por
+  // el plástico con luces y el contorno son las líneas de verdad, que pueden ser
+  // blancas en los bloques negros. Ver `contornoInstrucciones`.
+  if (showMeshTexture && !esMagic() && !contornoInstrucciones) mat.map = getMeshTexture();
   const contornoReal = usarContornoReal();
+  // ¿Se dibujan las líneas de contorno? Con el bloque real, según el tope de
+  // seguridad (usarContornoReal). Con el bloque de caja, solo en el manual.
+  const contornoLineas = contornoReal || (contornoInstrucciones && showMeshTexture);
   instMesh = new THREE.InstancedMesh(geo, mat, visible.length);
   instMesh.castShadow = false; instMesh.receiveShadow = false;
 
@@ -1589,16 +1692,16 @@ function rebuildMesh3D(){
   const edgeMat = new THREE.LineBasicMaterial({
     vertexColors: true,
     transparent: true,
-    opacity: showMeshTexture ? 0.75 : 0.45
+    opacity: contornoLineas ? 0.85 : 0.45
   });
   const edgeGeometry = new THREE.BufferGeometry();
   edgeGeometry.setAttribute('position', new THREE.BufferAttribute(edgePositions, 3));
   edgeGeometry.setAttribute('color', new THREE.BufferAttribute(edgeColors, 3, true));
   edgeMesh = new THREE.LineSegments(edgeGeometry, edgeMat);
   // Con el Magic Block, este contorno de líneas ES el diseño real de la pieza
-  // (dientes, muescas y el botón), así que el botón "Contorno" lo enciende.
-  edgeMesh.visible = wireOn.v || contornoReal;
-  if (contornoReal) edgeMat.opacity = 0.85;
+  // (dientes, muescas y el botón). Con los bloques de caja son las 12 aristas del
+  // cubo. En los dos casos lo enciende el botón "Contorno".
+  edgeMesh.visible = wireOn.v || contornoLineas;
 
   // Línea fina de separación entre piezas apiladas: una franjita delgada y oscura
   // justo en el borde de arriba de cada bloque — así se nota dónde termina una
@@ -1645,11 +1748,12 @@ function rebuildMesh3D(){
     // sola masa) — así que el contorno pasa a blanco solo ahí; en el resto de
     // colores (más claros) se mantiene negro, como siempre.
     const defaultEdgeColor = colorDeContorno(tmpColor);
-    // Luminancia percibida del color del bloque (ITU-R BT.709). Sin esta linea
-    // `lum` quedaba sin definir y rebuildMesh3D() se cortaba con un error: el
-    // visor 3D aparecia VACIO. Es el mismo criterio de siempre, ahora calculado.
-    const lum = 0.2126*tmpColor.r + 0.7152*tmpColor.g + 0.0722*tmpColor.b;
-    if (lum < 0.35) darkPositions.push([px, py, pz]); // le va el contorno blanco encima
+    // Bloques oscuros: en el modo "Contorno blanco" les va además un recuadro
+    // blanco encima. Se decide con el MISMO criterio que el color de la línea,
+    // para que las dos cosas no puedan contradecirse.
+    // (Acá vivía el bug de v48: se usaba una variable `lum` que no existía y
+    //  rebuildMesh3D() se cortaba con un error → el visor 3D salía VACÍO.)
+    if (defaultEdgeColor === '#ffffff') darkPositions.push([px, py, pz]);
     edgeColor.set(isBoxSelected ? '#22d3ee' : (isHighlighted ? '#39ff6a' : defaultEdgeColor));
     // Copia el contorno del bloque (líneas de verdad) desplazado a esta posición
     const base = i * vertsPerBlock * 3;
@@ -1898,10 +2002,15 @@ function drawPrintLayer(ctx, W, H, layer){
     const px=ox+x*cell+inset, py=oy+z*cell+inset, s=cell-inset*2;
     ctx.fillStyle = color;
     ctx.fillRect(px,py,s,s);
-    ctx.strokeStyle='rgba(0,0,0,0.35)'; ctx.lineWidth=1; ctx.strokeRect(px,py,s,s);
+    // Línea fina: negra en los colores claros, BLANCA en los oscuros (negro,
+    // café, azul), que es donde una línea negra no se llega a ver impresa.
+    const linea = contornoParaHex(color);
+    const claro = linea.startsWith('rgba(255');
+    ctx.strokeStyle = linea; ctx.lineWidth=1; ctx.strokeRect(px,py,s,s);
     if (s>8){
       ctx.beginPath(); ctx.arc(px+s/2,py+s/2,s*0.2,0,Math.PI*2);
-      ctx.fillStyle='rgba(0,0,0,0.18)'; ctx.fill();
+      // el puntito del botón sigue el mismo criterio, si no desaparece igual
+      ctx.fillStyle = claro ? 'rgba(255,255,255,0.30)' : 'rgba(0,0,0,0.18)'; ctx.fill();
     }
   });
 }
@@ -1960,7 +2069,7 @@ async function generatePresentationRender(){
     clearcoat: 0.65,        // capa brillante fina por encima, como una pieza inyectada de verdad
     clearcoatRoughness: 0.18,
   });
-  instMesh.material = realMat;
+  materialParaInstrucciones(realMat);
   const wasEdgeVisible = edgeMesh.visible;
   edgeMesh.visible = false; // el contorno grueso no queda bien en una foto con luces reales
   const wasDarkEdgeVisible = darkEdgeMesh ? darkEdgeMesh.visible : false;
@@ -2063,6 +2172,34 @@ function focusPointForLayer(stepBox, layerNum){
    para esa generación (el visor sigue mostrando el Magic Block normalmente). */
 const MAGIC_BLOCK_LIMIT = 6000;       // manual PDF / PNG / vista previa (una foto por capa)
 const MAGIC_BLOCK_LIMIT_VIDEO = 3000; // video: dibuja MUCHOS cuadros seguidos, va más justo
+
+/* ---------------------------- Cómo se preparan las fotos de las INSTRUCCIONES ----------------------------
+   Las usan la vista previa, el PDF, los PNG y el video. Van juntas acá para que
+   las cuatro salgan iguales: si una se toca y las otras no, el manual queda
+   inconsistente y es muy difícil de notar. */
+
+/* CONTORNO SIEMPRE ENCENDIDO en las instrucciones.
+   Antes estaba forzado en `false` en los cuatro lados, con el comentario "igual
+   que el visor 3D, que se ve bien" — resto de la cacería de la vieja "sombra
+   triangular". Pero el visor y el manual no tienen el mismo trabajo:
+     · en el VISOR estás editando y podés girar el modelo, así que el contorno
+       es opcional (y hay un botón para apagarlo);
+     · en el MANUAL hay una foto fija, y sin contorno dos bloques del mismo color
+       se funden en una sola mancha: el que arma no puede ver dónde termina uno y
+       empieza el otro. Ahí el contorno no es decoración, es la información.
+   La franjita `seamMesh` sigue apagada: ESA sí era una de las dos causas reales
+   de la "sombra triangular" (ver el historial de bugs). */
+function contornoParaInstrucciones(){
+  if (edgeMesh) edgeMesh.visible = true;
+  if (seamMesh) seamMesh.visible = false;
+}
+/* El material de plástico de la foto va sobre el cuerpo de los bloques. Con las
+   piezas 1x2/1x3 agrupadas el dibujado va por `pieceMeshes` y `instMesh` queda
+   en null — antes esto reventaba con "Cannot read properties of null". */
+function materialParaInstrucciones(mat){
+  if (instMesh) instMesh.material = mat;
+  pieceMeshes.forEach(m => { if (m.isInstancedMesh) m.material = mat; });
+}
 function adjustStyleForHeavyRender(esVideo){
   let limite = esVideo ? MAGIC_BLOCK_LIMIT_VIDEO : MAGIC_BLOCK_LIMIT;
   // El bloque B tiene 704 caras contra 419 del otro: aguanta ~40% menos bloques.
@@ -2147,14 +2284,12 @@ async function quickAnglePreview(previewLayer){
   const layerNum = useFullDesign ? maxLayer : parseInt(previewLayer, 10);
   showBelowLayers = true;
   if (useFullDesign){ showFullDesign = true; } else { showFullDesign = false; currentLayer = layerNum; }
-  rebuildMesh3D();
+  rebuildMesh3D({ instrucciones:true });
   const realMat = new THREE.MeshPhysicalMaterial({
     roughness: 0.32, metalness: 0.02, clearcoat: 0.65, clearcoatRoughness: 0.18,
   });
-  instMesh.material = realMat;
-  // Contorno APAGADO, exactamente igual que en el visor 3D (que se ve bien).
-  // Forzarlo encendido acá era la única diferencia real entre el visor y el manual.
-  edgeMesh.visible = false; seamMesh.visible = false;
+  materialParaInstrucciones(realMat);
+  contornoParaInstrucciones();
 
   const origSize = new THREE.Vector2();
   renderer.getSize(origSize);
@@ -2291,9 +2426,9 @@ async function generateInstructionsPDF(){
     ];
     const wasFullForCover = showFullDesign;
     showFullDesign = true;
-    rebuildMesh3D();
-    instMesh.material = realMat;
-    edgeMesh.visible = false; seamMesh.visible = false;
+    rebuildMesh3D({ instrucciones:true });
+    materialParaInstrucciones(realMat);
+    contornoParaInstrucciones();
     const coverBox = centeredBounds();
     const coverW = 88, coverY = 52;
     coverAngles.forEach((ca, idx)=>{
@@ -2375,14 +2510,9 @@ async function generateInstructionsPDF(){
 
     for (let layer=0; layer<=maxLayer; layer++){
       currentLayer = layer;
-      rebuildMesh3D(); // con showFullDesign=false y showBelowLayers=true: esta capa a color, las de abajo gris
-      instMesh.material = realMat;
-      // Contorno APAGADO, igual que en el visor 3D (que se ve bien).
-      edgeMesh.visible = false; seamMesh.visible = false;
-      // El contorno ya sale blanco en bloques oscuros y negro en los claros (mismo
-      // sistema que ya funciona bien en el visor normal) — antes lo forzábamos a
-      // negro parejo, y eso volvía invisible el borde en bloques oscuros/negros,
-      // viéndose como una sola mancha oscura ("sombra triangular").
+      rebuildMesh3D({ instrucciones:true }); // con showFullDesign=false y showBelowLayers=true: esta capa a color, las de abajo gris
+      materialParaInstrucciones(realMat);
+      contornoParaInstrucciones();  // línea negra en los claros, blanca en los oscuros
       const visibleNow = voxels.filter(v => Math.round(v.y) <= layer);
       const stepBox = worldBoxFromVoxelList(visibleNow); // encuadre ajustado a lo que se ve EN ESTE PASO, no al modelo entero
       const instrAngle = customInstructionAngle || { elevation: 35, azimuth: 45 };
@@ -2565,9 +2695,9 @@ async function generateAssemblyVideo(){
 
     for (let layer=0; layer<=maxLayer; layer++){
       currentLayer = layer;
-      rebuildMesh3D();
-      instMesh.material = realMat;
-      edgeMesh.visible = false; seamMesh.visible = false;
+      rebuildMesh3D({ instrucciones:true });
+      materialParaInstrucciones(realMat);
+      contornoParaInstrucciones();
 
       // Índices de los bloques NUEVOS de esta capa, para hacerlos "crecer"
       const newOnes = [];
@@ -2605,9 +2735,9 @@ async function generateAssemblyVideo(){
 
     // Recién al final, con el modelo ya terminado: vuelta completa de 360°
     showFullDesign = true;
-    rebuildMesh3D();
-    instMesh.material = realMat;
-    edgeMesh.visible = false; seamMesh.visible = false;
+    rebuildMesh3D({ instrucciones:true });
+    materialParaInstrucciones(realMat);
+    contornoParaInstrucciones();
     const spinFrames = FPS*6; // 6 segundos para dar la vuelta completa, bien pausado
     for (let f=0; f<spinFrames; f++){
       const spin = (f/spinFrames) * 360;
@@ -2712,11 +2842,9 @@ async function generateInstructionsPNGZip(){
 
     for (let layer=0; layer<=maxLayer; layer++){
       currentLayer = layer;
-      rebuildMesh3D();
-      instMesh.material = realMat;
-      // Contorno APAGADO, igual que en el visor 3D (que se ve bien).
-      edgeMesh.visible = false; seamMesh.visible = false;
-      // Contorno adaptable (blanco en oscuros, negro en claros), igual que el visor normal.
+      rebuildMesh3D({ instrucciones:true });
+      materialParaInstrucciones(realMat);
+      contornoParaInstrucciones();  // línea negra en los claros, blanca en los oscuros
       const visibleNow = voxels.filter(v => Math.round(v.y) <= layer);
       const stepBox = worldBoxFromVoxelList(visibleNow);
       const instrAngle2 = customInstructionAngle || { elevation: 35, azimuth: 45 };
@@ -2811,6 +2939,9 @@ function drawLayerDiagram(){
     diagCtx.fillStyle = grad;
     roundRect(diagCtx, px, py, s, s, Math.min(5, s*0.22));
     diagCtx.fill();
+    // OJO: este es el plano de PANTALLA y va con la línea de siempre (negra).
+    // El de las instrucciones es otro (drawPrintLayer), y ese sí usa la línea
+    // blanca en negro/café/azul. Son dos funciones distintas a propósito.
     diagCtx.strokeStyle = 'rgba(0,0,0,0.35)';
     diagCtx.lineWidth = 1;
     diagCtx.stroke();
