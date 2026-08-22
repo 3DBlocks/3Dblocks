@@ -108,7 +108,7 @@
   #layerMeta b{ color:var(--text); }
 
   /* ---------- Main split: 2D build plan (dominant) + 3D context ---------- */
-  #mainSplit{ flex:1; display:flex; min-height:0; }
+  #mainSplit{ flex:1; display:flex; min-height:0; position:relative; }
   #mainSplit.show-2d #contextPane{ display:none; }
   #mainSplit.show-2d #diagramPane{ flex:1; border-right:none; }
   #mainSplit.show-3d #diagramPane{ display:none; }
@@ -123,10 +123,12 @@
   #printInstructionsBtn{ flex-shrink:0; }
   /* Barra de herramientas flotante, vertical, pegada al costado izquierdo del
      visor 3D (no le quita ancho a la escena, va superpuesta). */
+  /* Barra de herramientas flotante: vive en #mainSplit (no adentro del panel 3D),
+     así aparece tanto en la vista 2D como en la 3D. */
   #editBar{
-    position:absolute; top:12px; left:12px; z-index:6;
+    position:absolute; top:12px; left:12px; z-index:12;
     display:flex; flex-direction:column; align-items:flex-start; gap:6px;
-    background:rgba(30,33,40,.88); backdrop-filter:blur(6px);
+    background:rgba(30,33,40,.92); backdrop-filter:blur(6px);
     border:1px solid var(--border-soft); border-radius:10px; padding:8px;
   }
   #editBar:has(.tool-btn.active) #paletteRow{ margin-top:2px; }
@@ -388,7 +390,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v31</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v32</small></div>
     </div>
     <div id="modelNameText">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -435,6 +437,19 @@
   </div>
 
   <div id="mainSplit" class="show-2d">
+    <div id="editBar" class="admin-only">
+        <button class="btn icon" id="paintModeBtn" title="Activar edición: pintar/colocar/borrar en el plano 2D o el visor 3D">✏️</button>
+        <button class="tool-btn active" id="toolPaintBtn" data-tool="paint" title="Pintar (selecciona toda la zona pegada del mismo color)">🎨</button>
+        <button class="tool-btn" id="toolBrushBtn" data-tool="brush" title="Pincel: pinta un solo bloque a la vez, para retoques finos">🖌️</button>
+        <button class="tool-btn" id="toolPlaceBtn" data-tool="place" title="Colocar bloques nuevos en celdas vacías">➕</button>
+        <button class="tool-btn" id="toolEraseBtn" data-tool="erase" title="Borrar bloques">🧹</button>
+        <button class="tool-btn" id="toolReplaceBtn" data-tool="replace" title="Tocá un bloque de cualquier color: se resaltan TODOS los bloques de ese color en el modelo entero. Después elegí el color nuevo en la paleta para cambiarlos a todos juntos.">🔁</button>
+        <button class="tool-btn" id="toolSelectBtn" data-tool="select" title="Selección: arrastrá un rectángulo (en el plano 2D o en el visor 3D, desde cualquier ángulo) para elegir varios bloques a la vez, y copiarlos o espejarlos">▭</button>
+        <button class="tool-btn" id="undoBtn" title="Deshacer (Ctrl+Z)">↩️</button>
+        <button class="tool-btn" id="hollowLayerBtn3d" title="Vaciar el interior de la capa que estás viendo (usa el grosor de pared del panel lateral)">🕳️</button>
+        <button class="tool-btn" id="renderBtnFloating" title="Generar una foto de presentación con luces e iluminación real">🖼️</button>
+        <div id="paletteRow" style="display:none;"></div>
+      </div>
     <section id="diagramPane">
       <div id="diagramHead">
         <div id="diagramHeadRow">
@@ -451,19 +466,6 @@
     </section>
 
     <section id="contextPane">
-      <div id="editBar" class="admin-only">
-        <button class="btn icon" id="paintModeBtn" title="Activar edición: pintar/colocar/borrar en el plano 2D o el visor 3D">✏️</button>
-        <button class="tool-btn active" id="toolPaintBtn" data-tool="paint" title="Pintar (selecciona toda la zona pegada del mismo color)">🎨</button>
-        <button class="tool-btn" id="toolBrushBtn" data-tool="brush" title="Pincel: pinta un solo bloque a la vez, para retoques finos">🖌️</button>
-        <button class="tool-btn" id="toolPlaceBtn" data-tool="place" title="Colocar bloques nuevos en celdas vacías">➕</button>
-        <button class="tool-btn" id="toolEraseBtn" data-tool="erase" title="Borrar bloques">🧹</button>
-        <button class="tool-btn" id="toolReplaceBtn" data-tool="replace" title="Tocá un bloque de cualquier color: se resaltan TODOS los bloques de ese color en el modelo entero. Después elegí el color nuevo en la paleta para cambiarlos a todos juntos.">🔁</button>
-        <button class="tool-btn" id="toolSelectBtn" data-tool="select" title="Selección: arrastrá un rectángulo (en el plano 2D o en el visor 3D, desde cualquier ángulo) para elegir varios bloques a la vez, y copiarlos o espejarlos">▭</button>
-        <button class="tool-btn" id="undoBtn" title="Deshacer (Ctrl+Z)">↩️</button>
-        <button class="tool-btn" id="hollowLayerBtn3d" title="Vaciar el interior de la capa que estás viendo (usa el grosor de pared del panel lateral)">🕳️</button>
-        <button class="tool-btn" id="renderBtnFloating" title="Generar una foto de presentación con luces e iluminación real">🖼️</button>
-        <div id="paletteRow" style="display:none;"></div>
-      </div>
       <div id="contextLabel">Contexto 3D</div>
       <div id="viewIndicator">🧱 <span id="viewIndicatorLabel">Libre</span></div>
       <div id="rightPanelsStack" class="admin-only">
@@ -521,7 +523,23 @@
       <p style="font-size:10.5px; color:var(--text-faint); margin:0 0 9px; line-height:1.5;">Este .dae no tiene piezas discretas repetidas, así que se genera un bloque por resolución de rejilla en vez de uno por pieza.</p>
       <div class="row"><span class="label-sm">Resolución de bloques</span><span class="value-mono" id="resVal">32</span></div>
       <input type="range" id="resSlider" min="6" max="130" step="1" value="32" />
-      <button class="btn wide" id="revoxelizeBtn" style="width:100%; margin-top:8px;">Volver a voxelizar</button>
+
+      <p class="section-title" style="margin-top:14px;">Piezas a usar</p>
+      <p style="font-size:10.5px; color:var(--text-faint); margin:0 0 8px; line-height:1.5;">Elegí qué tamaños de pieza puede usar el diseño. Si activás las largas, se agrupan bloques vecinos del mismo color en una sola pieza (usa menos piezas y arma más rápido). Se combinan solas: primero prueba las largas y rellena el resto con 1x1.</p>
+      <div id="pieceSizesRow" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+        <label style="display:flex; align-items:center; gap:5px; font-size:11.5px; color:var(--text-dim); cursor:pointer;">
+          <input type="checkbox" id="piece1x1" checked /> 1x1
+        </label>
+        <label style="display:flex; align-items:center; gap:5px; font-size:11.5px; color:var(--text-dim); cursor:pointer;">
+          <input type="checkbox" id="piece1x2" /> 1x2
+        </label>
+        <label style="display:flex; align-items:center; gap:5px; font-size:11.5px; color:var(--text-dim); cursor:pointer;">
+          <input type="checkbox" id="piece1x3" /> 1x3
+        </label>
+      </div>
+      <button class="btn wide" id="revoxelizeBtn" style="width:100%; margin-top:4px;">Volver a voxelizar</button>
+      <button class="btn wide" id="regroupPiecesBtn" style="width:100%; margin-top:6px;" title="Reagrupa el diseño actual usando los tamaños de pieza elegidos, sin volver a voxelizar">🧩 Reagrupar piezas del diseño actual</button>
+      <p id="pieceStatsText" style="font-size:11px; color:var(--text-faint); margin:8px 0 0; line-height:1.5;"></p>
 
       <p class="section-title" style="margin-top:16px;">Pintar con imagen de referencia</p>
       <p style="font-size:10.5px; color:var(--text-faint); margin:0 0 9px; line-height:1.5;">Subí una foto o dibujo a color (de frente) y cada bloque se pinta solo según lo que le toque en esa imagen — después solo corregís los detalles que hagan falta a mano.</p>
@@ -748,8 +766,11 @@ renderer.setSize(host.clientWidth, host.clientHeight);
 renderer.shadowMap.enabled = false;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 if ('outputColorSpace' in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+// SIN filtro cinematográfico (antes ACESFilmic): ese filtro apaga y desatura los
+// colores para dar look de película, pero acá queremos ver el color REAL de cada
+// bloque, tal cual lo elegiste. Así se ven mucho más nítidos y vivos.
+renderer.toneMapping = THREE.NoToneMapping;
+renderer.toneMappingExposure = 1.0;
 renderer.domElement.id = 'contextCanvas3d';
 host.appendChild(renderer.domElement);
 const marqueeBox = document.createElement('div');
@@ -1041,18 +1062,23 @@ function buildBrickGeometry(size){
 let meshTexture = null;
 function getMeshTexture(){
   if (meshTexture) return meshTexture;
-  const size = 128;
+  // Resolución alta (256) + línea más gruesa: la malla se ve más marcada y nítida,
+  // incluso mirando de cerca. (En 3D las líneas de verdad no se pueden engrosar —
+  // es una limitación del navegador — así que el grosor se controla desde acá.)
+  const size = 256;
   const canvas = document.createElement('canvas');
   canvas.width = size; canvas.height = size;
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0,0,size,size);
   ctx.strokeStyle = '#000000';
-  ctx.lineWidth = 2.5;
-  ctx.strokeRect(2,2,size-4,size-4);
+  ctx.lineWidth = 9;
+  ctx.strokeRect(4.5, 4.5, size-9, size-9);
   meshTexture = new THREE.CanvasTexture(canvas);
   meshTexture.wrapS = THREE.RepeatWrapping;
   meshTexture.wrapT = THREE.RepeatWrapping;
+  meshTexture.anisotropy = 8;             // nítida también en ángulo
+  meshTexture.colorSpace = THREE.SRGBColorSpace;
   return meshTexture;
 }
 
@@ -2201,6 +2227,31 @@ function drawLayerDiagram(){
     }
   });
 
+  // Contorno de las piezas largas (1x2 / 1x3): marca con una línea más marcada
+  // los bloques que forman UNA SOLA pieza, para que al armar se vea claro cuáles
+  // van juntos y no como bloques sueltos.
+  const hereForPieces = voxels.filter(v => Math.round(v.y) === currentLayer && v.pieceSize && v.pieceSize !== '1x1');
+  if (hereForPieces.length){
+    const groups = new Map();
+    hereForPieces.forEach(v=>{
+      if (!groups.has(v.piece)) groups.set(v.piece, []);
+      groups.get(v.piece).push(v);
+    });
+    diagCtx.save();
+    diagCtx.strokeStyle = 'rgba(255,255,255,0.85)';
+    diagCtx.lineWidth = Math.max(2, cell*0.09);
+    diagCtx.lineJoin = 'round';
+    groups.forEach(cells=>{
+      const xs = cells.map(c=>c.x), zs = cells.map(c=>c.z);
+      const x0 = Math.min(...xs), x1 = Math.max(...xs);
+      const z0 = Math.min(...zs), z1 = Math.max(...zs);
+      const pad = cell*0.10;
+      diagCtx.strokeRect(ox + x0*cell + pad, oy + z0*cell + pad,
+                         (x1-x0+1)*cell - pad*2, (z1-z0+1)*cell - pad*2);
+    });
+    diagCtx.restore();
+  }
+
   // axis labels
   diagCtx.fillStyle = '#545e78';
   diagCtx.font = '10px ' + getComputedStyle(document.body).fontFamily;
@@ -3147,6 +3198,89 @@ async function handleFile(file){
   }
 }
 
+/* ---------------------------- Agrupado en piezas 1x2 / 1x3 ----------------------------
+   Junta bloques vecinos del MISMO color y de la MISMA capa en piezas más largas,
+   como en los sets reales (donde no todo son piezas 1x1). Cada bloque queda
+   marcado con a qué pieza pertenece, para poder contar cuántas piezas de cada
+   tamaño hacen falta. */
+function allowedPieceLengths(){
+  const out = [];
+  if (document.getElementById('piece1x3').checked) out.push(3);
+  if (document.getElementById('piece1x2').checked) out.push(2);
+  if (document.getElementById('piece1x1').checked) out.push(1);
+  if (!out.length) out.push(1); // si desmarcaron todo, al menos 1x1
+  return out.sort((a,b)=>b-a); // primero las largas: usan menos piezas
+}
+
+function groupVoxelsIntoPieces(list, lengths){
+  const byKey = new Map();
+  list.forEach(v=>{ byKey.set(v.x+','+Math.round(v.y)+','+v.z, v); });
+  const used = new Set();
+  let pieceId = 0;
+  const stats = new Map(); // "1x2" -> cantidad
+
+  // Recorrido ordenado para que el resultado sea siempre el mismo
+  const sorted = list.slice().sort((a,b)=>
+    (Math.round(a.y)-Math.round(b.y)) || (a.z-b.z) || (a.x-b.x));
+
+  sorted.forEach(v=>{
+    const key = v.x+','+Math.round(v.y)+','+v.z;
+    if (used.has(key)) return;
+    const y = Math.round(v.y);
+    let placed = false;
+
+    for (const len of lengths){
+      if (placed) break;
+      if (len === 1) break; // el 1x1 se resuelve abajo
+      // Prueba en las dos direcciones: a lo largo de X y a lo largo de Z
+      for (const dir of [[1,0],[0,1]]){
+        const cells = [];
+        for (let i=0; i<len; i++){
+          const nx = v.x + dir[0]*i, nz = v.z + dir[1]*i;
+          const nk = nx+','+y+','+nz;
+          const nv = byKey.get(nk);
+          if (!nv || used.has(nk) || nv.color !== v.color) break;
+          cells.push({k:nk, v:nv});
+        }
+        if (cells.length === len){
+          const id = 'p'+(pieceId++);
+          const label = '1x'+len;
+          cells.forEach(({k,v:cv},i)=>{
+            used.add(k);
+            cv.piece = id; cv.pieceSize = label; cv.pieceIndex = i;
+          });
+          stats.set(label, (stats.get(label)||0)+1);
+          placed = true;
+          break;
+        }
+      }
+    }
+
+    if (!placed){
+      used.add(key);
+      const id = 'p'+(pieceId++);
+      v.piece = id; v.pieceSize = '1x1'; v.pieceIndex = 0;
+      stats.set('1x1', (stats.get('1x1')||0)+1);
+    }
+  });
+
+  return stats;
+}
+
+function applyPieceGrouping(){
+  if (!voxels.length){ setStatus('No hay ningún modelo cargado.', 'err'); return; }
+  const lengths = allowedPieceLengths();
+  const stats = groupVoxelsIntoPieces(voxels, lengths);
+  const parts = [];
+  ['1x3','1x2','1x1'].forEach(k=>{ if (stats.get(k)) parts.push(stats.get(k)+' de '+k); });
+  const totalPiezas = Array.from(stats.values()).reduce((a,b)=>a+b,0);
+  const el = document.getElementById('pieceStatsText');
+  if (el) el.textContent = 'Resultado: ' + totalPiezas + ' piezas en total (' + parts.join(', ') + ') para ' + voxels.length + ' bloques.';
+  drawLayerDiagram(); rebuildMesh3D(); refreshLayerUI();
+  setStatus('Piezas reagrupadas: ' + totalPiezas + ' piezas (' + parts.join(', ') + ').', 'ok');
+}
+document.getElementById('regroupPiecesBtn').addEventListener('click', ()=>{ pushUndoSnapshot(); applyPieceGrouping(); });
+
 document.getElementById('revoxelizeBtn').addEventListener('click', async ()=>{
   const tris = lastVoxelizerTris || (lastDaeParsed && lastDaeParsed.tris);
   if (!tris) return;
@@ -3156,7 +3290,9 @@ document.getElementById('revoxelizeBtn').addEventListener('click', async ()=>{
     const res = parseInt(document.getElementById('resSlider').value,10);
     const {list} = voxelizeTriangles(tris, res);
     setVoxels(list);
-    setStatus('Voxelizado actualizado: '+list.length+' bloques.', 'ok');
+    const lengths = allowedPieceLengths();
+    if (lengths.some(l=>l>1)) applyPieceGrouping();
+    else setStatus('Voxelizado actualizado: '+list.length+' bloques.', 'ok');
   } catch(err){ setStatus(err.message,'err'); } finally { setLoading(false); }
 });
 document.getElementById('resSlider').addEventListener('input', e=>{ document.getElementById('resVal').textContent = e.target.value; });
@@ -4502,6 +4638,11 @@ function buscarDiseno(){
   // alejar del todo con la rueda del mouse, la cámara llegaba más lejos de lo que
   // el "far" dejaba dibujar, y el modelo desaparecía por completo (quedaba "recortado").
   camera.far = controls.maxRadius * 1.4 + maxDim*4;
+  // La NIEBLA se ajusta al tamaño del modelo. Antes tenía una densidad fija que,
+  // al alejarse (sobre todo en modelos grandes), fundía el modelo con el color del
+  // fondo hasta hacerlo desaparecer. Ahora, por lejos que te alejes, el modelo se
+  // sigue viendo — solo se hace más chico, que es lo que corresponde.
+  if (scene.fog) scene.fog.density = 0.3 / Math.max(1, controls.maxRadius);
   camera.updateProjectionMatrix();
   controls.focus(box, true);
 }
