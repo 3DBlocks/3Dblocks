@@ -71,10 +71,14 @@
   .btn:disabled{ opacity:.35; cursor:not-allowed; pointer-events:none; }
   .btn.icon{ padding:7px 9px; }
 
-  /* ---------- Layer command strip (the focus of the whole app) ---------- */
+  /* ---------- Barra de capas — al PIE de la pantalla (v49) ----------
+     Antes estaba arriba, entre la franja del nombre y el modelo. Bajarla libera
+     toda esa altura para el modelo, que es lo que uno mira. Los controles de
+     capa quedan del lado del pulgar en pantallas táctiles, además.
+     Ojo: por eso el borde ahora es `border-top` y el degradado va al revés. */
   #layerStrip{
-    flex-shrink:0; padding:8px 16px 6px; border-bottom:1px solid var(--border-soft);
-    background: linear-gradient(180deg, var(--panel), var(--bg-2)); z-index:15;
+    flex-shrink:0; padding:7px 16px 6px; border-top:1px solid var(--border-soft);
+    background: linear-gradient(0deg, var(--panel), var(--bg-2)); z-index:15;
   }
   #stepperRow{ display:flex; align-items:center; justify-content:center; gap:10px; }
   .stepBtn{
@@ -133,11 +137,16 @@
   }
   #editBar:has(.tool-btn.active) #paletteRow{ margin-top:2px; }
   #paletteRow{ display:flex; flex-wrap:wrap; gap:4px; max-width:200px; align-content:flex-start; }
+  /* Corrido a la izquierda de la columna de herramientas para no taparla, y un
+     poco más abajo para no pisarse con la leyenda de ejes (que también va
+     arriba a la derecha — antes se superponían en modo edición). */
   #rightPanelsStack{
-    position:absolute; top:12px; right:12px; z-index:6;
+    position:absolute; top:44px; right:calc(var(--ctxbar-w) + 20px); z-index:6;
     display:flex; flex-direction:column; align-items:flex-end; gap:8px;
     max-width:172px;
   }
+  /* En la vista 2D no hay columna de herramientas, así que puede ir pegado al borde. */
+  #mainSplit.show-2d #rightPanelsStack{ right:12px; }
   #usedColorsPanel{
     display:flex; flex-direction:column; align-items:flex-end; gap:5px;
     background:rgba(30,33,40,.88); backdrop-filter:blur(6px);
@@ -181,6 +190,19 @@
   #diagramSub b{ color:var(--accent); }
   #diagramCanvasWrap{ flex:1; position:relative; min-height:0; }
   #diagramCanvas{ position:absolute; inset:0; width:100%; height:100%; }
+  #diagramCanvasWrap.pan-cursor{ cursor:grabbing; }
+  /* Control de zoom del plano 2D */
+  #zoom2dBar{
+    position:absolute; bottom:10px; right:10px; z-index:5;
+    display:flex; align-items:center; gap:4px;
+    background:rgba(30,33,40,.9); backdrop-filter:blur(6px);
+    border:1px solid var(--border-soft); border-radius:9px; padding:4px 5px;
+  }
+  #zoom2dBar .btn{ padding:3px 8px; font-size:13px; line-height:1; min-width:26px; }
+  #zoom2dVal{
+    font-family:var(--mono); font-size:11px; color:var(--accent);
+    min-width:40px; text-align:center; user-select:none;
+  }
   #legendRow{
     display:flex; gap:8px; flex-wrap:wrap; padding:10px 18px 14px; border-top:1px solid var(--border-soft); flex-shrink:0;
     max-height:88px; overflow-y:auto;
@@ -205,7 +227,7 @@
     display:flex; align-items:center; gap:6px;
   }
   #axesLegend{
-    position:absolute; top:12px; right:14px; z-index:2; display:flex; gap:10px;
+    position:absolute; top:12px; right:calc(var(--ctxbar-w) + 20px); z-index:2; display:flex; gap:10px;
     background:rgba(22,24,29,.6); padding:5px 10px; border-radius:6px; backdrop-filter:blur(4px);
     font-size:11px; font-family:var(--mono); color:var(--text-dim); pointer-events:none;
   }
@@ -219,16 +241,31 @@
     border:2px dashed #39ff6a; background:rgba(57,255,106,0.12);
   }
 
+  /* ---------- Herramientas del 3D — en COLUMNA, al costado derecho (v49) ----------
+     Antes iban en una fila flotando abajo del centro, encima del modelo. En
+     columna a la derecha no se pisan con nada, entran las 9 sin apretarse, y el
+     texto de cada una se lee de corrido en vez de en dos renglones.
+     El ancho está en una variable porque hay otras tres cosas ancladas a la
+     derecha (los colores en uso, la leyenda de ejes) que tienen que correrse
+     justo lo mismo. Si cambiás el ancho, se acomodan solas. */
+  :root{ --ctxbar-w: 138px; }
   #ctxToolbar{
-    position:absolute; bottom:12px; left:50%; transform:translateX(-50%); display:flex; gap:5px;
-    background:rgba(30,33,40,.85); backdrop-filter:blur(10px); border:1px solid var(--border); border-radius:9px; padding:5px; z-index:2;
+    position:absolute; top:50%; right:10px; transform:translateY(-50%);
+    display:flex; flex-direction:column; gap:3px; width:var(--ctxbar-w);
+    max-height:calc(100% - 24px); overflow-y:auto;
+    background:rgba(30,33,40,.85); backdrop-filter:blur(10px); border:1px solid var(--border); border-radius:9px; padding:5px; z-index:4;
   }
-  #ctxToolbar .btn{ background:transparent; border:none; padding:6px 9px; }
+  #ctxToolbar::-webkit-scrollbar{ width:6px; }
+  #ctxToolbar::-webkit-scrollbar-thumb{ background:var(--border); border-radius:3px; }
+  #ctxToolbar .btn{
+    background:transparent; border:none; padding:6px 8px; justify-content:flex-start;
+    text-align:left; font-size:11.5px; line-height:1.25; width:100%; flex-shrink:0;
+  }
   #ctxToolbar .btn:hover{ background:var(--panel-2); }
 
   #ctxHint{
-    position:absolute; bottom:12px; right:12px; font-size:9.5px; color:var(--text-faint); font-family:var(--mono);
-    text-align:right; line-height:1.5; pointer-events:none; z-index:2;
+    position:absolute; bottom:10px; left:14px; font-size:9.5px; color:var(--text-faint); font-family:var(--mono);
+    text-align:left; line-height:1.5; pointer-events:none; z-index:2;
   }
 
   /* ---------- Sidebar drawer (secondary: import & settings) ---------- */
@@ -349,6 +386,17 @@
     #diagramHead{ padding:8px 12px 0; }
     #diagramTitle{ font-size:9.5px; }
     #diagramSub{ font-size:11px; }
+
+    /* En el celular la columna de la derecha con texto se comería medio ancho.
+       Pasa a solo íconos (el texto sigue en el globito al mantener apretado). */
+    :root{ --ctxbar-w: 44px; }
+    #ctxToolbar .btn{
+      padding:7px 0; justify-content:center; font-size:15px;
+      overflow:hidden; white-space:nowrap;
+    }
+    #ctxToolbar .btn .txt{ display:none; }
+    #axesLegend{ display:none; }
+    #ctxHint{ display:none; }
   }
   @media (max-width: 640px) and (max-height: 700px){
     /* pantallas muy bajas: el plano 2D pasa a segundo plano para priorizar el 3D */
@@ -390,12 +438,86 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v49</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v50</small></div>
     </div>
     <div id="modelNameText">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
     <button class="btn icon" id="logoutBtn" title="Cerrar sesión" style="display:none;">⎋</button>
     <button class="btn icon" id="openSidebarBtn" title="Importar y ajustes">⚙︎ <span style="display:inline-block">Importar</span></button>
+  </div>
+
+
+  <div id="mainSplit" class="show-2d">
+    <div id="editBar" class="admin-only">
+        <button class="btn icon" id="paintModeBtn" title="Activar edición: pintar/colocar/borrar en el plano 2D o el visor 3D">✏️</button>
+        <button class="tool-btn active" id="toolPaintBtn" data-tool="paint" title="Pintar (selecciona toda la zona pegada del mismo color)">🎨</button>
+        <button class="tool-btn" id="toolBrushBtn" data-tool="brush" title="Pincel: pinta un solo bloque a la vez, para retoques finos">🖌️</button>
+        <button class="tool-btn" id="toolPlaceBtn" data-tool="place" title="Colocar bloques nuevos en celdas vacías">➕</button>
+        <button class="tool-btn" id="toolEraseBtn" data-tool="erase" title="Borrar bloques">🧹</button>
+        <button class="tool-btn" id="toolReplaceBtn" data-tool="replace" title="Tocá un bloque de cualquier color: se resaltan TODOS los bloques de ese color en el modelo entero. Después elegí el color nuevo en la paleta para cambiarlos a todos juntos.">🔁</button>
+        <button class="tool-btn" id="toolSelectBtn" data-tool="select" title="Selección: arrastrá un rectángulo (en el plano 2D o en el visor 3D, desde cualquier ángulo) para elegir varios bloques a la vez, y copiarlos o espejarlos">▭</button>
+        <button class="tool-btn" id="undoBtn" title="Deshacer (Ctrl+Z)">↩️</button>
+        <button class="tool-btn" id="hollowLayerBtn3d" title="Vaciar el interior de la capa que estás viendo (usa el grosor de pared del panel lateral)">🕳️</button>
+        <button class="tool-btn" id="renderBtnFloating" title="Generar una foto de presentación con luces e iluminación real">🖼️</button>
+        <div id="paletteRow" style="display:none;"></div>
+      </div>
+    <section id="diagramPane">
+      <div id="diagramHead">
+        <div id="diagramHeadRow">
+          <div id="diagramTitle">Plano de la capa — vista superior</div>
+          <button class="btn sm" id="renderBtn" title="Genera una foto de presentación con luces e iluminación real, según cómo esté orientado el modelo ahora mismo">🖼️ Render</button>
+          <button class="btn sm" id="printInstructionsBtn" title="Descargar un PDF con todas las capas, listo para imprimir">🖨️ Imprimir instrucciones</button>
+          <button class="btn sm" id="printInstructionsPngBtn" title="Descargar las instrucciones como imágenes PNG (un archivo .zip) — mucho más liviano que el PDF, sin perder nitidez">🖼️ Instrucciones en PNG (.zip)</button>
+          <button class="btn sm" id="videoInstructionsBtn" title="Genera un video del armado: el modelo se va construyendo capa por capa, girando lentamente">🎬 Video de armado</button>
+        </div>
+        <div id="diagramSub">Coloca <b id="diagramCount">0</b> bloques nuevos en esta capa. Los bloques atenuados ya están colocados debajo.</div>
+      </div>
+      <div id="diagramCanvasWrap">
+        <canvas id="diagramCanvas"></canvas>
+        <div id="zoom2dBar" title="Acercar el plano para ver mejor los bloques. También podés usar la rueda del mouse, y arrastrar con el botón del medio para moverte.">
+          <button class="btn sm" id="zoom2dOut" title="Alejar">−</button>
+          <span id="zoom2dVal">100%</span>
+          <button class="btn sm" id="zoom2dIn" title="Acercar">+</button>
+          <button class="btn sm" id="zoom2dReset" title="Volver a ver el diseño completo">⟲</button>
+        </div>
+      </div>
+      <div id="legendRow"></div>
+    </section>
+
+    <section id="contextPane">
+      <div id="contextLabel">Contexto 3D</div>
+      <div id="viewIndicator">🧱 <span id="viewIndicatorLabel">Libre</span></div>
+      <div id="rightPanelsStack" class="admin-only">
+        <div id="usedColorsPanel" style="display:none;"></div>
+        <div id="selectionPanel" style="display:none;">
+          <div id="selectionCount">0 bloques</div>
+          <div id="selectionBtns">
+            <button class="btn sm" id="selCopyBtn" title="Copiar (Ctrl+C)">📋 Copiar</button>
+            <button class="btn sm" id="selPasteBtn" title="Pegar (Ctrl+V)">📥 Pegar</button>
+            <button class="btn sm" id="selMirrorBtn" title="Copia la selección y la espeja en el eje X, pegada al lado — para completar mitades simétricas">🪞 Copiar y Espejo</button>
+            <button class="btn sm" id="selClearBtn" title="Cancelar selección (Esc)">✖</button>
+          </div>
+        </div>
+      </div>
+      <div id="axesLegend">
+        <span><i style="background:#ff4d4d"></i>X</span>
+        <span><i style="background:#4dff88"></i>Y (arriba)</span>
+        <span><i style="background:#4d88ff"></i>Z</span>
+      </div>
+      <div id="canvasHost"></div>
+      <div id="ctxToolbar">
+        <button class="btn icon" id="resetViewBtn" title="Buscar y centrar el diseño en la pantalla">🔍<span class="txt">Buscar</span></button>
+        <button class="btn icon active" id="flatBlockBtn" title="Cambia el estilo del bloque: simple (caja lisa) → con muesca (botón arriba) → Magic Block real (la pieza física, con sus dientes de encastre)">◻️<span class="txt">Bloque: simple</span></button>
+        <button class="btn icon active" id="belowLayersBtn" title="Mostrar/ocultar capas ya construidas (en gris)">▤<span class="txt">Gris</span></button>
+        <button class="btn icon" id="fullViewBtn" title="Ver el diseño completo, con todos los colores">👁<span class="txt">Completo</span></button>
+        <button class="btn icon" id="bgToggleBtn" title="Cambiar fondo del visor">◐<span class="txt">Fondo</span></button>
+        <button class="btn icon active" id="meshTexBtn" title="Contorno de cada bloque. Tocá para cambiar: oscuro → blanco en oscuros → sin contorno">▦<span class="txt">Contorno oscuro</span></button>
+        <button class="btn icon" id="previewInstrAngleBtn" title="Pone la cámara en el MISMO ángulo exacto que usan las instrucciones, con el diseño completo — para comparar directo, sin generar el PDF">📐<span class="txt">Ángulo del manual</span></button>
+        <button class="btn icon" id="useThisAngleBtn" title="Guarda el ángulo EXACTO en el que está la cámara ahora mismo (girá con el mouse hasta que se vea bien) para que el manual use ese, en vez de uno fijo">📌<span class="txt">Usar este ángulo</span></button>
+        <button class="btn icon" id="quickPreviewBtn" title="Foto rápida del modelo completo, con el ángulo guardado — para ver el resultado en segundos, sin generar todo el manual">⚡<span class="txt">Vista previa</span></button>
+      </div>
+      <div id="ctxHint">clic derecho: orbitar<br/>rueda: zoom</div>
+    </section>
   </div>
 
   <div id="layerStrip">
@@ -434,71 +556,6 @@
       <span>Acumulado: <b id="metaAccum">0</b> / <span id="metaTotal">0</span></span>
       <span>Restantes: <b id="metaRemaining">0</b></span>
     </div>
-  </div>
-
-  <div id="mainSplit" class="show-2d">
-    <div id="editBar" class="admin-only">
-        <button class="btn icon" id="paintModeBtn" title="Activar edición: pintar/colocar/borrar en el plano 2D o el visor 3D">✏️</button>
-        <button class="tool-btn active" id="toolPaintBtn" data-tool="paint" title="Pintar (selecciona toda la zona pegada del mismo color)">🎨</button>
-        <button class="tool-btn" id="toolBrushBtn" data-tool="brush" title="Pincel: pinta un solo bloque a la vez, para retoques finos">🖌️</button>
-        <button class="tool-btn" id="toolPlaceBtn" data-tool="place" title="Colocar bloques nuevos en celdas vacías">➕</button>
-        <button class="tool-btn" id="toolEraseBtn" data-tool="erase" title="Borrar bloques">🧹</button>
-        <button class="tool-btn" id="toolReplaceBtn" data-tool="replace" title="Tocá un bloque de cualquier color: se resaltan TODOS los bloques de ese color en el modelo entero. Después elegí el color nuevo en la paleta para cambiarlos a todos juntos.">🔁</button>
-        <button class="tool-btn" id="toolSelectBtn" data-tool="select" title="Selección: arrastrá un rectángulo (en el plano 2D o en el visor 3D, desde cualquier ángulo) para elegir varios bloques a la vez, y copiarlos o espejarlos">▭</button>
-        <button class="tool-btn" id="undoBtn" title="Deshacer (Ctrl+Z)">↩️</button>
-        <button class="tool-btn" id="hollowLayerBtn3d" title="Vaciar el interior de la capa que estás viendo (usa el grosor de pared del panel lateral)">🕳️</button>
-        <button class="tool-btn" id="renderBtnFloating" title="Generar una foto de presentación con luces e iluminación real">🖼️</button>
-        <div id="paletteRow" style="display:none;"></div>
-      </div>
-    <section id="diagramPane">
-      <div id="diagramHead">
-        <div id="diagramHeadRow">
-          <div id="diagramTitle">Plano de la capa — vista superior</div>
-          <button class="btn sm" id="renderBtn" title="Genera una foto de presentación con luces e iluminación real, según cómo esté orientado el modelo ahora mismo">🖼️ Render</button>
-          <button class="btn sm" id="printInstructionsBtn" title="Descargar un PDF con todas las capas, listo para imprimir">🖨️ Imprimir instrucciones</button>
-          <button class="btn sm" id="printInstructionsPngBtn" title="Descargar las instrucciones como imágenes PNG (un archivo .zip) — mucho más liviano que el PDF, sin perder nitidez">🖼️ Instrucciones en PNG (.zip)</button>
-          <button class="btn sm" id="videoInstructionsBtn" title="Genera un video del armado: el modelo se va construyendo capa por capa, girando lentamente">🎬 Video de armado</button>
-        </div>
-        <div id="diagramSub">Coloca <b id="diagramCount">0</b> bloques nuevos en esta capa. Los bloques atenuados ya están colocados debajo.</div>
-      </div>
-      <div id="diagramCanvasWrap"><canvas id="diagramCanvas"></canvas></div>
-      <div id="legendRow"></div>
-    </section>
-
-    <section id="contextPane">
-      <div id="contextLabel">Contexto 3D</div>
-      <div id="viewIndicator">🧱 <span id="viewIndicatorLabel">Libre</span></div>
-      <div id="rightPanelsStack" class="admin-only">
-        <div id="usedColorsPanel" style="display:none;"></div>
-        <div id="selectionPanel" style="display:none;">
-          <div id="selectionCount">0 bloques</div>
-          <div id="selectionBtns">
-            <button class="btn sm" id="selCopyBtn" title="Copiar (Ctrl+C)">📋 Copiar</button>
-            <button class="btn sm" id="selPasteBtn" title="Pegar (Ctrl+V)">📥 Pegar</button>
-            <button class="btn sm" id="selMirrorBtn" title="Copia la selección y la espeja en el eje X, pegada al lado — para completar mitades simétricas">🪞 Copiar y Espejo</button>
-            <button class="btn sm" id="selClearBtn" title="Cancelar selección (Esc)">✖</button>
-          </div>
-        </div>
-      </div>
-      <div id="axesLegend">
-        <span><i style="background:#ff4d4d"></i>X</span>
-        <span><i style="background:#4dff88"></i>Y (arriba)</span>
-        <span><i style="background:#4d88ff"></i>Z</span>
-      </div>
-      <div id="canvasHost"></div>
-      <div id="ctxToolbar">
-        <button class="btn icon" id="resetViewBtn" title="Buscar y centrar el diseño en la pantalla">🔍 Buscar</button>
-        <button class="btn icon active" id="flatBlockBtn" title="Cambia el estilo del bloque: simple (caja lisa) → con muesca (botón arriba) → Magic Block real (la pieza física, con sus dientes de encastre)">◻️ Bloque: simple</button>
-        <button class="btn icon active" id="belowLayersBtn" title="Mostrar/ocultar capas ya construidas (en gris)">▤ Gris</button>
-        <button class="btn icon" id="fullViewBtn" title="Ver el diseño completo, con todos los colores">👁 Completo</button>
-        <button class="btn icon" id="bgToggleBtn" title="Cambiar fondo del visor">◐ Fondo</button>
-        <button class="btn icon active" id="meshTexBtn" title="Contorno de cada bloque. Tocá para cambiar: oscuro → blanco en oscuros → sin contorno">▦ Contorno oscuro</button>
-        <button class="btn icon" id="previewInstrAngleBtn" title="Pone la cámara en el MISMO ángulo exacto que usan las instrucciones, con el diseño completo — para comparar directo, sin generar el PDF">📐 Ver ángulo del manual</button>
-        <button class="btn icon" id="useThisAngleBtn" title="Guarda el ángulo EXACTO en el que está la cámara ahora mismo (girá con el mouse hasta que se vea bien) para que el manual use ese, en vez de uno fijo">📌 Usar este ángulo</button>
-        <button class="btn icon" id="quickPreviewBtn" title="Foto rápida del modelo completo, con el ángulo guardado — para ver el resultado en segundos, sin generar todo el manual">⚡ Vista previa rápida</button>
-      </div>
-      <div id="ctxHint">clic derecho: orbitar<br/>rueda: zoom</div>
-    </section>
   </div>
 
   <div id="loadingOverlay"><div class="lt" id="loadingText">Procesando…</div></div>
@@ -825,7 +882,7 @@ function applyBackground(idx){
   scene.fog.color.set(p.bg);
   ground.material.color.set(p.ground);
   rebuildGrid(p.gridMain, p.gridSec);
-  document.getElementById('bgToggleBtn').textContent = '◐ ' + p.name;
+  etiquetaBoton(document.getElementById('bgToggleBtn'), '◐', p.name);
 }
 applyBackground(0);
 
@@ -1041,6 +1098,21 @@ window.addEventListener('keydown', e=>{
 
 /* ---------------------------- Malla instanciada (3D) ---------------------------- */
 let instMesh = null, edgeMesh = null, seamMesh = null, darkEdgeMesh = null;
+/* Pone la etiqueta de un botón de la columna de herramientas: el ícono suelto y
+   el texto adentro de un <span class="txt">.
+   Hace falta el span porque en el celular la columna pasa a mostrar SOLO los
+   íconos (ver la regla `@media` del CSS), y para poder esconder el texto tiene
+   que estar en su propia etiqueta. Con `textContent` a secas el span se perdía
+   en el primer clic y el botón quedaba con el texto pegado para siempre. */
+function etiquetaBoton(btn, icono, texto){
+  if (!btn) return;
+  btn.textContent = icono;
+  const sp = document.createElement('span');
+  sp.className = 'txt';
+  sp.textContent = texto;
+  btn.appendChild(sp);
+}
+
 const dummy = new THREE.Object3D();
 const tmpColor = new THREE.Color();
 const edgeColor = new THREE.Color();
@@ -1125,46 +1197,56 @@ function rgbDeHex(hex){             // '#rrggbb' → [r,g,b] en sRGB 0..1
 }
 
 let contornoInstrucciones = false;  // lo enciende rebuildMesh3D() cuando lo llama el manual
+
+/* ---------------------------- El color de la línea clara ----------------------------
+   ⚠️ NO es blanca: es un GRIS. Y el motivo no es estético, es de acumulación.
+
+   En 3D no se puede hacer una línea más fina — el navegador dibuja siempre 1
+   píxel y `LineBasicMaterial.linewidth` se ignora (limitación de WebGL). Así que
+   al principio la línea clara se bajó de peso con transparencia (blanca al 45 %).
+   De cerca se veía bien. De LEJOS no: al alejarse, muchas líneas del mismo bloque
+   caen en el mismo píxel, y como son transparentes se SUMAN entre ellas:
+       una línea blanca al 45 %          → 45 % de blanco
+       dos encima                        → 70 %
+       tres                              → 83 %
+       cuatro                            → 91 %  ← ya es blanco
+   Por eso una pieza negra vista de lejos se veía blanca y de cerca negra: no era
+   una impresión, la transparencia se acumula de verdad.
+
+   La solución es que la línea NO sea transparente, sino de un gris opaco: por
+   muchas que se junten, ninguna puede pasar de ese gris. El tope deja de depender
+   de cuán lejos estés mirando.
+   (Idea del usuario, mirando su propio modelo de lejos y de cerca.) */
+const LINEA_CLARA = '#8a8a8a';      // gris de la línea en bloques negros / oscuros
+const LINEA_OSCURA = '#000000';     // negra, en los colores claros
+
 function colorDeContorno(c){        // recibe un THREE.Color
   if (contornoInstrucciones){
     const [r,g,b] = sRGBDeColor(c);
-    return esNegroCafeOAzul(r,g,b) ? '#ffffff' : '#000000';
+    return esNegroCafeOAzul(r,g,b) ? LINEA_CLARA : LINEA_OSCURA;
   }
   // Pantalla de edición: la regla de siempre. Se mira el canal más alto, no la
   // luminancia — con luminancia, un azul marino o un marrón oscuro también
-  // recibían línea blanca acá, que no es lo que se quiere en el visor.
-  return Math.max(c.r, c.g, c.b) < 0.18 ? '#ffffff' : '#000000';
+  // recibían línea clara acá, que no es lo que se quiere en el visor.
+  return Math.max(c.r, c.g, c.b) < 0.18 ? LINEA_CLARA : LINEA_OSCURA;
 }
-/* ---------------------------- Cuánto pesa cada línea ----------------------------
-   ⚠️ En 3D NO se puede hacer una línea más fina: el navegador dibuja SIEMPRE 1
-   píxel de ancho y `LineBasicMaterial.linewidth` se ignora (es una limitación de
-   WebGL, no del programa). Así que el único control que queda es la INTENSIDAD.
 
-   Y hace falta, porque blanco y negro no pesan igual aunque midan lo mismo:
-   una línea blanca sobre un bloque negro tiene el contraste al máximo, mientras
-   que una negra sobre un bloque claro tiene bastante menos. Resultado: con la
-   misma transparencia, la blanca se ve MUCHO más gruesa de lo que es.
-   Se nota sobre todo con el bloque real, que dibuja ~260 aristas por pieza: en un
-   modelo con muchas piezas negras, todas esas líneas blancas juntas tapan el
-   color y el bloque se ve como una mancha blanca.
-
-   Por eso la línea blanca va a poco menos de la mitad de peso que la negra. No es
-   un truco: es compensar el contraste para que las dos se LEAN igual de finas.
-   Se hace con transparencia por vértice (el atributo `color` lleva 4 valores en
-   vez de 3), así las dos conviven en un mismo dibujado. */
-const ALPHA_LINEA_BLANCA = 0.45;   // sobre bloques negros/oscuros
-const ALPHA_LINEA_NEGRA  = 1.0;    // sobre bloques claros (la de siempre)
-function pesoDeLinea(colorLinea){  // devuelve 0..255, para el atributo de color
-  return Math.round(255 * (colorLinea === '#ffffff' ? ALPHA_LINEA_BLANCA : ALPHA_LINEA_NEGRA));
-}
+/* Peso de cada línea (la transparencia por vértice: el atributo `color` de las
+   líneas lleva 4 valores en vez de 3, así conviven las dos en un mismo dibujado).
+   Las DOS van opacas, justamente para que no se sumen al alejarse. Lo que separa
+   a una de la otra es el color, no la transparencia. */
+function pesoDeLinea(){ return 255; }
 
 /* Misma decisión, pero para el plano 2D IMPRESO del manual, que dibuja con canvas
-   y no con THREE. Devuelve la línea ya con su transparencia: la blanca necesita
-   más cuerpo que la negra para verse igual de marcada sobre un bloque oscuro. */
+   y no con THREE.
+   Acá SÍ va blanca y no gris: en el plano cada bloque es un cuadrado con UNA sola
+   línea, no hay decenas de aristas que se puedan superponer, así que el problema
+   de acumulación no existe — y sobre papel conviene el máximo contraste. */
 function contornoParaHex(hex){
   const [r,g,b] = rgbDeHex(hex);
   return esNegroCafeOAzul(r,g,b) ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.35)';
 }
+
 const wireOn = { v:false };
 
 /* ---------------------------- Contorno REAL del bloque ----------------------------
@@ -1223,7 +1305,7 @@ function buildEdgesForInstances(geo, mesh, cantidad, colorDe){
   const pos = new Float32Array(cantidad * tp.length);
   // 4 valores por vértice (color + transparencia), 1 byte cada uno. La
   // transparencia por vértice es lo que deja que la línea blanca pese menos que
-  // la negra en un mismo dibujado — ver ALPHA_LINEA_BLANCA.
+  // la negra en un mismo dibujado — ver LINEA_CLARA y pesoDeLinea().
   const col = new Uint8Array(cantidad * vertsPer * 4);
   const m = new THREE.Matrix4();
   const vtmp = new THREE.Vector3();
@@ -1719,7 +1801,7 @@ function rebuildMesh3D(opts){
   const edgePositions = new Float32Array(visible.length * tmplPos.length);
   // 4 valores por vértice (color + transparencia), no 3. La transparencia por
   // vértice es lo que permite que la línea BLANCA pese menos que la negra dentro
-  // del MISMO dibujado — ver ALPHA_LINEA_BLANCA.
+  // del MISMO dibujado — ver LINEA_CLARA y pesoDeLinea().
   const edgeColors = new Uint8Array(visible.length * vertsPerBlock * 4);
   const edgeMat = new THREE.LineBasicMaterial({
     vertexColors: true,
@@ -1785,7 +1867,7 @@ function rebuildMesh3D(opts){
     // para que las dos cosas no puedan contradecirse.
     // (Acá vivía el bug de v48: se usaba una variable `lum` que no existía y
     //  rebuildMesh3D() se cortaba con un error → el visor 3D salía VACÍO.)
-    if (defaultEdgeColor === '#ffffff') darkPositions.push([px, py, pz]);
+    if (defaultEdgeColor === LINEA_CLARA) darkPositions.push([px, py, pz]);
     const resaltado = isBoxSelected ? '#22d3ee' : (isHighlighted ? '#39ff6a' : null);
     edgeColor.set(resaltado || defaultEdgeColor);
     // Los bloques resaltados (selección) van a full: son un aviso, tienen que
@@ -1944,15 +2026,15 @@ document.getElementById('flatBlockBtn').addEventListener('click', e=>{
   else if (blockStyle === 'muesca') blockStyle = 'magic';
   else if (blockStyle === 'magic') blockStyle = 'magic2';
   else blockStyle = 'simple';
-  const labels = { simple:'◻️ Bloque: simple', muesca:'◻️ Bloque: con muesca',
-                   magic:'🧱 Bloque: Magic Block', magic2:'🧱 Bloque: Magic B (nuevo)' };
+  const labels = { simple:['◻️','Bloque: simple'], muesca:['◻️','Bloque: con muesca'],
+                   magic:['🧱','Bloque: Magic Block'], magic2:['🧱','Bloque: Magic B'] };
   const msgs = {
     simple: 'Bloque simple (caja lisa).',
     muesca: 'Bloque con muesca (botón arriba).',
     magic: 'Magic Block real: la pieza física, con sus dientes de encastre metiéndose en el bloque vecino.',
     magic2: 'Bloque B (el del STL nuevo): malla perfecta, sin agujeros. Mide 1,25 celdas de ancho, así que los dientes se meten más en el vecino — mirá si se pisan.'
   };
-  e.currentTarget.textContent = labels[blockStyle];
+  etiquetaBoton(e.currentTarget, labels[blockStyle][0], labels[blockStyle][1]);
   e.currentTarget.classList.toggle('active', blockStyle !== 'simple');
   flatBlockMode = (blockStyle === 'simple'); // se mantiene por compatibilidad
   rebuildMesh3D();
@@ -2929,16 +3011,50 @@ async function generateInstructionsPNGZip(){
   }
 }
 
-function drawLayerDiagram(){
+/* ---------------------------- Encuadre del plano 2D ----------------------------
+   Dónde cae cada celda del plano en la pantalla. Devuelve el tamaño de celda y
+   la esquina de arriba a la izquierda de la rejilla.
+
+   ⚠️ Esta cuenta estaba COPIADA en cinco lugares (el dibujado, los dos
+   resaltados de selección, el rectángulo que se arrastra, y la conversión de
+   clic a celda). Mientras fue una cuenta fija no molestó, pero con el zoom
+   cualquier copia que quedara sin actualizar haría que pintes una celda
+   distinta de la que estás tocando — un bug muy difícil de ver. Por eso ahora
+   hay una sola función y las cinco la usan.
+
+   El zoom se aplica multiplicando el tamaño de celda, y el desplazamiento
+   (arrastre) corre la esquina. Con zoom 1 y sin arrastre da exactamente lo
+   mismo que antes. */
+let zoom2D = 1;                  // 1 = el diseño entra completo en la pantalla
+let pan2D = { x:0, y:0 };        // desplazamiento en píxeles, para moverse con zoom
+const ZOOM2D_MIN = 1, ZOOM2D_MAX = 8;
+function encuadre2D(){
   const wrap = document.getElementById('diagramCanvasWrap');
   const W = wrap.clientWidth, H = wrap.clientHeight;
-  diagCtx.clearRect(0,0,W,H);
+  const pad = 28;
+  const cellBase = Math.max(4, Math.min((W-pad*2)/Math.max(1,dims.x), (H-pad*2)/Math.max(1,dims.z)));
+  const cell = cellBase * zoom2D;
+  const gridW = cell*dims.x, gridH = cell*dims.z;
+  const ox = (W-gridW)/2 + pan2D.x, oy = (H-gridH)/2 + pan2D.y;
+  return { W, H, pad, cellBase, cell, gridW, gridH, ox, oy };
+}
+/* Con zoom 1 el diseño está centrado y no tiene sentido moverlo; y con zoom no
+   se puede arrastrar tan lejos como para perder el diseño de vista. */
+function limitarPan2D(){
+  if (zoom2D <= 1){ pan2D.x = 0; pan2D.y = 0; return; }
+  const { W, H, gridW, gridH } = encuadre2D();
+  const maxX = Math.max(0, (gridW - W)/2 + 40);
+  const maxY = Math.max(0, (gridH - H)/2 + 40);
+  pan2D.x = Math.max(-maxX, Math.min(maxX, pan2D.x));
+  pan2D.y = Math.max(-maxY, Math.min(maxY, pan2D.y));
+}
+
+function drawLayerDiagram(){
+  const wrap = document.getElementById('diagramCanvasWrap');
+  diagCtx.clearRect(0,0,wrap.clientWidth,wrap.clientHeight);
   if (!voxels.length || dims.x===0 || dims.z===0) return;
 
-  const pad = 28;
-  const cell = Math.max(4, Math.min((W-pad*2)/dims.x, (H-pad*2)/dims.z));
-  const gridW = cell*dims.x, gridH = cell*dims.z;
-  const ox = (W-gridW)/2, oy = (H-gridH)/2;
+  const { W, H, cell, gridW, gridH, ox, oy } = encuadre2D();
 
   // base grid
   diagCtx.strokeStyle = '#1a2338';
@@ -3199,6 +3315,7 @@ function setVoxels(list, opts){
   buscarDiseno();
   fitAxesToModel();
   fitLayerPlaneToModel();
+  resetZoom2D(); // modelo nuevo: el zoom del plano vuelve a "diseño completo"
 }
 
 /* ---------------------------- Modelo de ejemplo: árbol de bloques ---------------------------- */
@@ -4752,12 +4869,7 @@ function floodSelectSameColor(gx, gz){
 
 function drawMagicSelectionOverlay(){
   if (!magicSelection || !magicSelection.size) return;
-  const wrap = document.getElementById('diagramCanvasWrap');
-  const W = wrap.clientWidth, H = wrap.clientHeight;
-  const pad = 28;
-  const cell = Math.max(4, Math.min((W-pad*2)/dims.x, (H-pad*2)/dims.z));
-  const gridW = cell*dims.x, gridH = cell*dims.z;
-  const ox = (W-gridW)/2, oy = (H-gridH)/2;
+  const { W, H, cell, gridW, gridH, ox, oy } = encuadre2D();
   diagCtx.save();
   diagCtx.fillStyle = 'rgba(57,255,106,0.16)';
   diagCtx.strokeStyle = '#39ff6a';
@@ -4774,12 +4886,7 @@ function drawMagicSelectionOverlay(){
 // alrededor de todo el grupo, igual que en el visor 3D y que Studio 2.0.
 function drawBoxSelectionOverlay(){
   if (!boxSelection || !boxSelection.size) return;
-  const wrap = document.getElementById('diagramCanvasWrap');
-  const W = wrap.clientWidth, H = wrap.clientHeight;
-  const pad = 28;
-  const cell = Math.max(4, Math.min((W-pad*2)/dims.x, (H-pad*2)/dims.z));
-  const gridW = cell*dims.x, gridH = cell*dims.z;
-  const ox = (W-gridW)/2, oy = (H-gridH)/2;
+  const { W, H, cell, gridW, gridH, ox, oy } = encuadre2D();
   let minX=Infinity, maxX=-Infinity, minZ=Infinity, maxZ=-Infinity;
   boxSelection.forEach(key=>{
     const [x,,z] = key.split(',').map(Number);
@@ -4802,12 +4909,7 @@ function clearMagicSelection(){
 }
 
 function cellFromDiagramEvent(e){
-  const wrap = document.getElementById('diagramCanvasWrap');
-  const W = wrap.clientWidth, H = wrap.clientHeight;
-  const pad = 28;
-  const cell = Math.max(4, Math.min((W-pad*2)/dims.x, (H-pad*2)/dims.z));
-  const gridW = cell*dims.x, gridH = cell*dims.z;
-  const ox = (W-gridW)/2, oy = (H-gridH)/2;
+  const { W, H, cell, gridW, gridH, ox, oy } = encuadre2D();
   const rect = e.currentTarget.getBoundingClientRect();
   const px = e.clientX - rect.left, py = e.clientY - rect.top;
   return { gx: Math.floor((px-ox)/cell), gz: Math.floor((py-oy)/cell) };
@@ -4820,12 +4922,7 @@ const CLICK_MOVE_THRESHOLD = 6; // píxeles: por debajo de esto, es un "clic", n
 
 function drawSelectionOverlay(){
   if (!boxSelectStart || !boxSelectCurrent) return;
-  const wrap = document.getElementById('diagramCanvasWrap');
-  const W = wrap.clientWidth, H = wrap.clientHeight;
-  const pad = 28;
-  const cell = Math.max(4, Math.min((W-pad*2)/dims.x, (H-pad*2)/dims.z));
-  const gridW = cell*dims.x, gridH = cell*dims.z;
-  const ox = (W-gridW)/2, oy = (H-gridH)/2;
+  const { W, H, cell, gridW, gridH, ox, oy } = encuadre2D();
   const x0 = Math.min(boxSelectStart.gx, boxSelectCurrent.gx), x1 = Math.max(boxSelectStart.gx, boxSelectCurrent.gx);
   const z0 = Math.min(boxSelectStart.gz, boxSelectCurrent.gz), z1 = Math.max(boxSelectStart.gz, boxSelectCurrent.gz);
   diagCtx.save();
@@ -4837,6 +4934,87 @@ function drawSelectionOverlay(){
   diagCtx.fillRect(ox+x0*cell, oy+z0*cell, (x1-x0+1)*cell, (z1-z0+1)*cell);
   diagCtx.restore();
 }
+
+/* ---------------------------- Zoom del plano 2D ----------------------------
+   En un diseño grande, el plano entero entra en pantalla pero cada bloque queda
+   de 4 o 5 píxeles y no se distingue el color ni el botón. Con esto te podés
+   acercar a mirar la zona que estás armando.
+   Tres formas de usarlo, para que nadie quede afuera:
+     · rueda del mouse sobre el plano  → acerca/aleja hacia donde apunta el cursor
+     · arrastrar con el botón del medio (o con el izquierdo si NO estás editando)
+     · los botones − / + / ⟲ de la esquina
+   El botón izquierdo se deja libre cuando estás editando, para no pisar el
+   pintado ni la selección por rectángulo. */
+function redibujarPlano2D(){
+  drawLayerDiagram();
+  drawMagicSelectionOverlay();
+  drawBoxSelectionOverlay();
+  drawSelectionOverlay();
+}
+function mostrarZoom2D(){
+  const el = document.getElementById('zoom2dVal');
+  if (el) el.textContent = Math.round(zoom2D*100) + '%';
+  const reset = document.getElementById('zoom2dReset');
+  if (reset) reset.disabled = (zoom2D === 1 && pan2D.x === 0 && pan2D.y === 0);
+}
+/* Acerca o aleja manteniendo quieto el punto del plano que está bajo el cursor.
+   Sin esto, al acercar el diseño se te escapa de la pantalla y hay que ir
+   corriéndolo a mano todo el tiempo. */
+function aplicarZoom2D(nuevoZoom, px, py){
+  const antes = encuadre2D();
+  if (px === undefined){ px = antes.W/2; py = antes.H/2; }
+  const celdaX = (px - antes.ox) / antes.cell;
+  const celdaZ = (py - antes.oy) / antes.cell;
+  zoom2D = Math.max(ZOOM2D_MIN, Math.min(ZOOM2D_MAX, nuevoZoom));
+  const despues = encuadre2D();
+  pan2D.x += px - (despues.ox + celdaX*despues.cell);
+  pan2D.y += py - (despues.oy + celdaZ*despues.cell);
+  limitarPan2D();
+  mostrarZoom2D();
+  redibujarPlano2D();
+}
+function resetZoom2D(){
+  zoom2D = 1; pan2D.x = 0; pan2D.y = 0;
+  mostrarZoom2D();
+  redibujarPlano2D();
+}
+diagCanvasEl.addEventListener('wheel', e=>{
+  if (!voxels.length) return;
+  e.preventDefault();
+  const rect = diagCanvasEl.getBoundingClientRect();
+  const factor = e.deltaY < 0 ? 1.18 : 1/1.18;
+  aplicarZoom2D(zoom2D * factor, e.clientX - rect.left, e.clientY - rect.top);
+}, { passive:false });
+
+let pan2DDesde = null;
+diagCanvasEl.addEventListener('pointerdown', e=>{
+  // Botón del medio siempre mueve. El izquierdo solo cuando NO estás editando
+  // (si estás editando, el izquierdo pinta o selecciona).
+  const conMedio = (e.button === 1);
+  const conIzquierdo = (e.button === 0 && !paintMode);
+  if (!conMedio && !conIzquierdo) return;
+  e.preventDefault();
+  diagCanvasEl.setPointerCapture(e.pointerId);
+  pan2DDesde = { x:e.clientX, y:e.clientY, panX:pan2D.x, panY:pan2D.y };
+  document.getElementById('diagramCanvasWrap').classList.add('pan-cursor');
+});
+diagCanvasEl.addEventListener('pointermove', e=>{
+  if (!pan2DDesde) return;
+  pan2D.x = pan2DDesde.panX + (e.clientX - pan2DDesde.x);
+  pan2D.y = pan2DDesde.panY + (e.clientY - pan2DDesde.y);
+  limitarPan2D();
+  redibujarPlano2D();
+});
+window.addEventListener('pointerup', ()=>{
+  if (!pan2DDesde) return;
+  pan2DDesde = null;
+  document.getElementById('diagramCanvasWrap').classList.remove('pan-cursor');
+});
+document.getElementById('zoom2dIn').addEventListener('click', ()=> aplicarZoom2D(zoom2D * 1.35));
+document.getElementById('zoom2dOut').addEventListener('click', ()=> aplicarZoom2D(zoom2D / 1.35));
+document.getElementById('zoom2dReset').addEventListener('click', resetZoom2D);
+mostrarZoom2D();
+
 
 // "Gotero" con clic derecho: toma el color de un bloque sin cambiar de
 // herramienta, así no hay que volver a la paleta cada vez que cambia el color a pintar.
@@ -5499,11 +5677,11 @@ document.getElementById('bgToggleBtn').addEventListener('click', ()=>{
    0 = contorno oscuro · 1 = contorno + línea blanca en los bloques oscuros · 2 = sin contorno */
 let contornoModo = 0;
 const CONTORNO_ESTADOS = [
-  { mesh:true,  blanca:false, texto:'▦ Contorno oscuro', activo:true,
+  { mesh:true,  blanca:false, icono:'▦', texto:'Contorno oscuro', activo:true,
     msg:'Contorno oscuro en cada bloque.' },
-  { mesh:true,  blanca:true,  texto:'⬜ Contorno blanco', activo:true,
+  { mesh:true,  blanca:true,  icono:'⬜', texto:'Contorno blanco', activo:true,
     msg:'Contorno con línea blanca en los bloques oscuros.' },
-  { mesh:false, blanca:false, texto:'○ Sin contorno',     activo:false,
+  { mesh:false, blanca:false, icono:'○', texto:'Sin contorno',     activo:false,
     msg:'Contorno invisible: se ve solo el plástico del bloque.' },
 ];
 document.getElementById('meshTexBtn').addEventListener('click', e=>{
@@ -5511,7 +5689,7 @@ document.getElementById('meshTexBtn').addEventListener('click', e=>{
   const est = CONTORNO_ESTADOS[contornoModo];
   showMeshTexture = est.mesh;
   showWhiteDarkEdge = est.blanca;
-  e.currentTarget.textContent = est.texto;
+  etiquetaBoton(e.currentTarget, est.icono, est.texto);
   e.currentTarget.classList.toggle('active', est.activo);
   rebuildMesh3D();
   setStatus(est.msg, 'ok');
