@@ -390,7 +390,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v44</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v46</small></div>
     </div>
     <div id="modelNameText">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -1014,19 +1014,53 @@ const wireOn = { v:false };
    Para el Magic Block usamos el contorno de VERDAD: las aristas de su propia malla
    (dientes, muescas y el círculo del botón), dibujadas como líneas.
    Cuesta 401 aristas por bloque, así que tiene un tope de seguridad. */
-const MAGIC_EDGE_LIMIT = 3000;
-function usarContornoReal(cantidad){
-  return blockStyle === 'magic' && showMeshTexture && cantidad <= MAGIC_EDGE_LIMIT;
+const MAGIC_EDGE_LIMIT = 20000;
+/* OJO: se mide contra el modelo COMPLETO (voxels.length), no contra lo que está
+   visible en pantalla. Antes se medía lo visible, y en un modelo de ~3.300 bloques
+   el contorno se apagaba solo al ir subiendo de capa (porque con "ver capas de
+   abajo" la cantidad visible va creciendo y en algún momento cruzaba el tope).
+   Ahora la decisión es una sola para todo el diseño: o está siempre, o nunca. */
+let avisoContornoDado = false;
+function usarContornoReal(){
+  if (blockStyle !== 'magic' || !showMeshTexture) return false;
+  if (voxels.length > MAGIC_EDGE_LIMIT){
+    // Antes simplemente no aparecía y parecía un error. Ahora lo dice una vez.
+    if (!avisoContornoDado){
+      avisoContornoDado = true;
+      setStatus('El diseño tiene ' + voxels.length + ' bloques: demasiados para dibujar el contorno de cada pieza (tope ' + MAGIC_EDGE_LIMIT + '). Los bloques se ven igual, con su sombreado, pero sin línea de contorno.', 'ok');
+    }
+    return false;
+  }
+  return true;
+}
+
+/* Contorno del bloque, SIN el borde de abajo.
+   De las 401 aristas del Magic Block, 114 son el reborde de la base — y esa base
+   siempre está apoyada contra el bloque de abajo (o contra el piso), así que esa
+   línea nunca aporta nada: solo duplica la línea del bloque de abajo y ensucia
+   cada junta. Sacándola quedan 287 aristas: se ve más limpio Y pesa 28% menos. */
+function contornoTemplate(geo, recortarBase){
+  const t = new THREE.EdgesGeometry(geo, 25);
+  const a = t.attributes.position.array;
+  t.dispose();
+  if (!recortarBase) return a;
+  geo.computeBoundingBox();
+  const yMin = geo.boundingBox.min.y;
+  const eps = Math.max(1e-4, (geo.boundingBox.max.y - yMin) * 0.01);
+  const out = [];
+  for (let i=0;i<a.length;i+=6){
+    if (a[i+1] < yMin + eps && a[i+4] < yMin + eps) continue; // los dos extremos en la base
+    for (let k=0;k<6;k++) out.push(a[i+k]);
+  }
+  return new Float32Array(out);
 }
 /* Replica el contorno de `geo` en cada instancia de `mesh`, con su color.
    colorDe(i) devuelve el color del contorno para la instancia i. */
 function buildEdgesForInstances(geo, mesh, cantidad, colorDe){
-  const tmpl = new THREE.EdgesGeometry(geo, 25);
-  const tp = tmpl.attributes.position.array;
+  const tp = contornoTemplate(geo, blockStyle === 'magic');
   const vertsPer = tp.length / 3;
-  tmpl.dispose();
   const pos = new Float32Array(cantidad * tp.length);
-  const col = new Float32Array(cantidad * tp.length);
+  const col = new Uint8Array(cantidad * tp.length); // 1 byte por canal: 4x menos memoria
   const m = new THREE.Matrix4();
   const vtmp = new THREE.Vector3();
   const c = new THREE.Color();
@@ -1038,12 +1072,12 @@ function buildEdgesForInstances(geo, mesh, cantidad, colorDe){
       vtmp.set(tp[k*3], tp[k*3+1], tp[k*3+2]).applyMatrix4(m);
       const o = base + k*3;
       pos[o] = vtmp.x; pos[o+1] = vtmp.y; pos[o+2] = vtmp.z;
-      col[o] = c.r; col[o+1] = c.g; col[o+2] = c.b;
+      col[o] = c.r*255; col[o+1] = c.g*255; col[o+2] = c.b*255;
     }
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos,3));
-  g.setAttribute('color', new THREE.BufferAttribute(col,3));
+  g.setAttribute('color', new THREE.BufferAttribute(col,3,true));
   g.computeBoundingSphere();
   return new THREE.LineSegments(g, new THREE.LineBasicMaterial({
     vertexColors:true, transparent:true, opacity:0.85
@@ -1134,7 +1168,19 @@ const MAGIC_BLOCK_DATA = {"v":[[0.0713,1.0,-0.57],[0.285,1.0,-0.57],[0.285,1.0,-
 let magicBlockGeoCache = null;
 function buildMagicBlockGeometry(size){
   if (!magicBlockGeoCache){
-    const V = MAGIC_BLOCK_DATA.v, F = MAGIC_BLOCK_DATA.f;
+    const V = MAGIC_BLOCK_DATA.v, F0 = MAGIC_BLOCK_DATA.f;
+    // 53 de las 472 caras tienen área CERO (triángulos con los 3 puntos en línea):
+    // son restos de cuando se taparon los contornos abiertos de la base y de la unión
+    // con el botón. No se ven — no tienen superficie — pero al no tener una dirección
+    // definida, el contorno las toma como aristas de verdad y dibuja rayitas sueltas
+    // por todo el bloque (los "garabatos"). Se descartan acá, de una vez.
+    const F = F0.filter(t=>{
+      const p0=V[t[0]], p1=V[t[1]], p2=V[t[2]];
+      const ax=p1[0]-p0[0], ay=p1[1]-p0[1], az=p1[2]-p0[2];
+      const bx=p2[0]-p0[0], by=p2[1]-p0[1], bz=p2[2]-p0[2];
+      const cx=ay*bz-az*by, cy=az*bx-ax*bz, cz=ax*by-ay*bx;
+      return Math.hypot(cx,cy,cz) > 1e-9;
+    });
     const pos = new Float32Array(F.length*9);
     const uv  = new Float32Array(F.length*6);
     const col = new Float32Array(F.length*9); // sombreado horneado, cara por cara
@@ -1354,7 +1400,7 @@ function buildPieceMeshes(visible){
     scene.add(mesh);
     pieceMeshes.push(mesh);
     // Contorno real de la pieza — también en el manual y el video
-    if (usarContornoReal(visible.length)){
+    if (usarContornoReal()){
       try{
         const tc = new THREE.Color();
         const lineas = buildEdgesForInstances(geo, mesh, list.length, i=>{
@@ -1417,7 +1463,7 @@ function rebuildMesh3D(){
   // En el Magic Block NO se pega la textura de cuadrado: su contorno son las
   // aristas reales de la pieza, que ya se dibujan abajo como líneas (edgeMesh).
   if (showMeshTexture && blockStyle !== 'magic') mat.map = getMeshTexture();
-  const contornoReal = usarContornoReal(visible.length);
+  const contornoReal = usarContornoReal();
   instMesh = new THREE.InstancedMesh(geo, mat, visible.length);
   instMesh.castShadow = false; instMesh.receiveShadow = false;
 
@@ -1427,12 +1473,10 @@ function rebuildMesh3D(){
   // triángulos negros basura por todo el modelo: esa era la famosa "sombra/mancha
   // triangular" que perseguimos tanto tiempo. Ahora se arma un único LineSegments
   // de verdad, replicando el contorno del bloque en cada posición.
-  const edgeTemplate = new THREE.EdgesGeometry(geo, 25);
-  const tmplPos = edgeTemplate.attributes.position.array;
+  const tmplPos = contornoTemplate(geo, blockStyle === 'magic');
   const vertsPerBlock = tmplPos.length / 3;
   const edgePositions = new Float32Array(visible.length * tmplPos.length);
-  const edgeColors = new Float32Array(visible.length * tmplPos.length);
-  edgeTemplate.dispose();
+  const edgeColors = new Uint8Array(visible.length * tmplPos.length);
   const edgeMat = new THREE.LineBasicMaterial({
     vertexColors: true,
     transparent: true,
@@ -1440,7 +1484,7 @@ function rebuildMesh3D(){
   });
   const edgeGeometry = new THREE.BufferGeometry();
   edgeGeometry.setAttribute('position', new THREE.BufferAttribute(edgePositions, 3));
-  edgeGeometry.setAttribute('color', new THREE.BufferAttribute(edgeColors, 3));
+  edgeGeometry.setAttribute('color', new THREE.BufferAttribute(edgeColors, 3, true));
   edgeMesh = new THREE.LineSegments(edgeGeometry, edgeMat);
   // Con el Magic Block, este contorno de líneas ES el diseño real de la pieza
   // (dientes, muescas y el botón), así que el botón "Contorno" lo enciende.
@@ -1502,9 +1546,9 @@ function rebuildMesh3D(){
       edgePositions[o]   = tmplPos[k*3]   + px;
       edgePositions[o+1] = tmplPos[k*3+1] + py;
       edgePositions[o+2] = tmplPos[k*3+2] + pz;
-      edgeColors[o]   = edgeColor.r;
-      edgeColors[o+1] = edgeColor.g;
-      edgeColors[o+2] = edgeColor.b;
+      edgeColors[o]   = edgeColor.r*255;
+      edgeColors[o+1] = edgeColor.g*255;
+      edgeColors[o+2] = edgeColor.b*255;
     }
   });
   instMesh.instanceMatrix.needsUpdate = true;
@@ -1902,8 +1946,8 @@ function focusPointForLayer(stepBox, layerNum){
    manual o el video — parece que el programa "deja de funcionar". Esta función
    revisa el tamaño del modelo y, si es demasiado, usa el bloque con muesca solo
    para esa generación (el visor sigue mostrando el Magic Block normalmente). */
-const MAGIC_BLOCK_LIMIT = 2500;       // manual PDF / PNG / vista previa (una foto por capa)
-const MAGIC_BLOCK_LIMIT_VIDEO = 1200; // video: dibuja MUCHOS cuadros seguidos, va más justo
+const MAGIC_BLOCK_LIMIT = 6000;       // manual PDF / PNG / vista previa (una foto por capa)
+const MAGIC_BLOCK_LIMIT_VIDEO = 3000; // video: dibuja MUCHOS cuadros seguidos, va más justo
 function adjustStyleForHeavyRender(esVideo){
   const limite = esVideo ? MAGIC_BLOCK_LIMIT_VIDEO : MAGIC_BLOCK_LIMIT;
   if (blockStyle === 'magic' && voxels.length > limite){
