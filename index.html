@@ -1098,6 +1098,12 @@ window.addEventListener('keydown', e=>{
 
 /* ---------------------------- Malla instanciada (3D) ---------------------------- */
 let instMesh = null, edgeMesh = null, seamMesh = null, darkEdgeMesh = null;
+/* Segundo contorno, el simple, para mirar de lejos (ver actualizarNivelDeContorno).
+   `edgeMeshVisiblePorBoton` guarda si el CONTORNO está encendido según el botón,
+   aparte de cuál de los dos niveles toca en este momento: si no lo guardáramos,
+   al cambiar de nivel se perdería que el usuario lo tenía apagado. */
+let edgeMeshLejos = null;
+let edgeMeshVisiblePorBoton = false;
 /* Pone la etiqueta de un botón de la columna de herramientas: el ícono suelto y
    el texto adentro de un <span class="txt">.
    Hace falta el span porque en el celular la columna pasa a mostrar SOLO los
@@ -1282,6 +1288,67 @@ function usarContornoReal(){
    siempre está apoyada contra el bloque de abajo (o contra el piso), así que esa
    línea nunca aporta nada: solo duplica la línea del bloque de abajo y ensucia
    cada junta. Sacándola quedan 287 aristas: se ve más limpio Y pesa 28% menos. */
+/* Contorno SIMPLE: las 12 aristas de la celda del bloque, nada más.
+   Es el que se usa mirando de lejos, cuando las ~260 aristas del bloque real ya
+   no entran en los píxeles que ocupa la pieza. Ver actualizarNivelDeContorno().
+   Se recorta un pelín (0.996, el mismo criterio de siempre) para que dos bloques
+   pegados no dibujen su arista compartida exactamente en el mismo lugar. */
+let contornoSimpleCache = null, contornoSimpleCacheSize = null;
+function contornoSimpleTemplate(size){
+  if (contornoSimpleCache && contornoSimpleCacheSize === size) return contornoSimpleCache;
+  const caja = new THREE.BoxGeometry(size*0.996, size*0.996, size*0.996);
+  const t = new THREE.EdgesGeometry(caja, 1);
+  const a = new Float32Array(t.attributes.position.array);
+  t.dispose(); caja.dispose();
+  contornoSimpleCache = a; contornoSimpleCacheSize = size;
+  return a;
+}
+
+/* ---------------------------- Cuánto detalle según la distancia ----------------------------
+   El contorno del bloque real son ~260 aristas por pieza. Cuando el bloque mide
+   80 píxeles en pantalla, esas líneas SON el dibujo de la pieza. Cuando mide 10,
+   las 260 caen sobre los mismos píxeles y el bloque se vuelve una mancha: no
+   importa de qué color sea la línea, no hay lugar donde dibujarlas.
+   Por eso hay dos contornos y se prende uno u otro según cuántos píxeles ocupa
+   un bloque en la pantalla:
+       más de 30 px  → contorno REAL (dientes, muescas, botón)
+       menos de 30   → contorno de la CELDA (12 aristas): fino y limpio
+       menos de 5    → sin contorno (a esa altura ni la línea simple se distingue,
+                       solo ensucia el color)
+   La cuenta sale de la cámara: a distancia d, en pantalla entran
+   2·d·tan(fov/2) unidades de mundo, así que un bloque de 1 unidad ocupa
+   alto_en_píxeles / esa cantidad. */
+const CONTORNO_PX_DETALLE = 30;   // desde acá para arriba, el contorno real
+const CONTORNO_PX_MINIMO  = 5;    // por debajo, ni el simple aporta
+function pixelesPorBloque(objetivo){
+  // `objetivo` = el punto al que mira la cámara. En el visor es el centro del
+  // orbitado; en el manual, el punto que le pasa positionCameraFixedAngle (que
+  // NO es el mismo, porque la cámara sube con las capas).
+  const d = camera.position.distanceTo(objetivo || controls.target);
+  const altoMundo = 2 * d * Math.tan((camera.fov * Math.PI/180) / 2);
+  if (!(altoMundo > 0)) return 999;
+  return (renderer.domElement.height / altoMundo) * voxelSize;
+}
+let nivelContornoActual = null;
+function actualizarNivelDeContorno(forzar, objetivo){
+  if (!edgeMesh) return;
+  // Sin el contorno simple armado (bloques de caja, o contorno apagado) no hay
+  // nada que cambiar: el de caja ya son 12 aristas, no se gana nada.
+  if (!edgeMeshLejos){ nivelContornoActual = null; return; }
+  const px = pixelesPorBloque(objetivo);
+  /* Histéresis: para SUBIR de nivel hace falta un poco más que para bajar. Sin
+     esto, parando la rueda justo en el límite el contorno parpadea entre los dos
+     niveles a cada cuadro. El margen es del 15 %. */
+  const holgura = nivelContornoActual === 'real' ? 0.85 : 1;
+  const nivel = px >= CONTORNO_PX_DETALLE*holgura ? 'real'
+              : (px >= CONTORNO_PX_MINIMO*(nivelContornoActual==='simple'?0.85:1) ? 'simple' : 'nada');
+  if (!forzar && nivel === nivelContornoActual) return;   // no tocar nada si no cambió
+  nivelContornoActual = nivel;
+  const encendido = wireOn.v || edgeMeshVisiblePorBoton;
+  edgeMesh.visible      = encendido && nivel === 'real';
+  edgeMeshLejos.visible = encendido && nivel === 'simple';
+}
+
 function contornoTemplate(geo, recortarBase){
   const t = new THREE.EdgesGeometry(geo, 25);
   const a = t.attributes.position.array;
@@ -1336,6 +1403,7 @@ function buildEdgesForInstances(geo, mesh, cantidad, colorDe){
 function clearModelMeshes(){
   if (instMesh){ scene.remove(instMesh); instMesh.geometry.dispose(); instMesh.material.dispose(); instMesh = null; }
   if (edgeMesh){ scene.remove(edgeMesh); edgeMesh.geometry.dispose(); edgeMesh.material.dispose(); edgeMesh = null; }
+  if (edgeMeshLejos){ scene.remove(edgeMeshLejos); edgeMeshLejos.geometry.dispose(); edgeMeshLejos.material.dispose(); edgeMeshLejos = null; }
   if (seamMesh){ scene.remove(seamMesh); seamMesh.geometry.dispose(); seamMesh.material.dispose(); seamMesh = null; }
   if (darkEdgeMesh){ scene.remove(darkEdgeMesh); darkEdgeMesh.geometry.dispose(); darkEdgeMesh.material.dispose(); darkEdgeMesh = null; }
   if (typeof pieceMeshes !== 'undefined' && pieceMeshes.length){
@@ -1799,9 +1867,8 @@ function rebuildMesh3D(opts){
   const tmplPos = contornoTemplate(geo, esMagic());
   const vertsPerBlock = tmplPos.length / 3;
   const edgePositions = new Float32Array(visible.length * tmplPos.length);
-  // 4 valores por vértice (color + transparencia), no 3. La transparencia por
-  // vértice es lo que permite que la línea BLANCA pese menos que la negra dentro
-  // del MISMO dibujado — ver LINEA_CLARA y pesoDeLinea().
+  // 4 valores por vértice (color + transparencia), no 3. Así conviven en un mismo
+  // dibujado la línea negra y la gris — ver LINEA_CLARA y pesoDeLinea().
   const edgeColors = new Uint8Array(visible.length * vertsPerBlock * 4);
   const edgeMat = new THREE.LineBasicMaterial({
     vertexColors: true,
@@ -1815,7 +1882,34 @@ function rebuildMesh3D(opts){
   // Con el Magic Block, este contorno de líneas ES el diseño real de la pieza
   // (dientes, muescas y el botón). Con los bloques de caja son las 12 aristas del
   // cubo. En los dos casos lo enciende el botón "Contorno".
+  edgeMeshVisiblePorBoton = contornoLineas;
   edgeMesh.visible = wireOn.v || contornoLineas;
+
+  /* ---- Segundo contorno, el SIMPLE, para mirar de lejos ----
+     El contorno del bloque real son ~260 aristas por pieza. De cerca eso es el
+     dibujo de la pieza; de lejos, cuando el bloque mide 10 píxeles en pantalla,
+     esas 260 líneas no entran: caen todas en los mismos píxeles y el bloque se
+     convierte en una mancha, sin importar de qué color sea la línea.
+     Así que de lejos se dibuja otro contorno, de 12 aristas: el contorno de la
+     CELDA. Sigue separando un bloque del otro, que es lo único que se puede
+     distinguir a esa distancia, y se ve fino de verdad.
+     Los dos se arman una sola vez acá y después solo se prende uno u otro según
+     la distancia (ver actualizarNivelDeContorno). Cuesta un 5 % más de memoria y
+     evita tener que rehacer todo cada vez que movés la rueda. */
+  let tmplLejos = null, lejosPositions = null, lejosColors = null, vertsLejos = 0;
+  if (esMagic() && contornoLineas){
+    tmplLejos = contornoSimpleTemplate(voxelSize);
+    vertsLejos = tmplLejos.length / 3;
+    lejosPositions = new Float32Array(visible.length * tmplLejos.length);
+    lejosColors = new Uint8Array(visible.length * vertsLejos * 4);
+    const lejosGeo = new THREE.BufferGeometry();
+    lejosGeo.setAttribute('position', new THREE.BufferAttribute(lejosPositions, 3));
+    lejosGeo.setAttribute('color', new THREE.BufferAttribute(lejosColors, 4, true));
+    edgeMeshLejos = new THREE.LineSegments(lejosGeo, new THREE.LineBasicMaterial({
+      vertexColors:true, transparent:true, opacity:0.85
+    }));
+    edgeMeshLejos.visible = false;   // lo decide actualizarNivelDeContorno()
+  }
 
   // Línea fina de separación entre piezas apiladas: una franjita delgada y oscura
   // justo en el borde de arriba de cada bloque — así se nota dónde termina una
@@ -1887,6 +1981,21 @@ function rebuildMesh3D(opts){
       edgeColors[c+2] = edgeColor.b*255;
       edgeColors[c+3] = alfa;
     }
+    // El mismo bloque, en el contorno simple de lejos (12 aristas de la celda)
+    if (tmplLejos){
+      const bp = i * vertsLejos * 3, bc = i * vertsLejos * 4;
+      for (let k=0; k<vertsLejos; k++){
+        const o = bp + k*3;
+        lejosPositions[o]   = tmplLejos[k*3]   + px;
+        lejosPositions[o+1] = tmplLejos[k*3+1] + py;
+        lejosPositions[o+2] = tmplLejos[k*3+2] + pz;
+        const c = bc + k*4;
+        lejosColors[c]   = edgeColor.r*255;
+        lejosColors[c+1] = edgeColor.g*255;
+        lejosColors[c+2] = edgeColor.b*255;
+        lejosColors[c+3] = alfa;
+      }
+    }
   });
   instMesh.instanceMatrix.needsUpdate = true;
   seamMesh.instanceMatrix.needsUpdate = true;
@@ -1895,6 +2004,13 @@ function rebuildMesh3D(opts){
   edgeGeometry.attributes.color.needsUpdate = true;
   edgeGeometry.computeBoundingSphere();
   scene.add(instMesh); scene.add(edgeMesh); scene.add(seamMesh);
+  if (edgeMeshLejos){
+    edgeMeshLejos.geometry.attributes.position.needsUpdate = true;
+    edgeMeshLejos.geometry.attributes.color.needsUpdate = true;
+    edgeMeshLejos.geometry.computeBoundingSphere();
+    scene.add(edgeMeshLejos);
+  }
+  actualizarNivelDeContorno(true);
 
   // Capa con el contorno BLANCO, solo encima de los bloques oscuros — así en los
   // bloques negros también se ve dónde termina uno y empieza el otro.
@@ -2267,6 +2383,10 @@ function positionCameraFixedAngle(box, elevationDeg, azimuthDeg, marginMult, foc
   camera.far = dist + maxDim*6;
   camera.lookAt(target);
   camera.updateProjectionMatrix();
+  // El nivel de detalle del contorno depende de la distancia, así que se recalcula
+  // ACÁ y no en quien llama: esta función es la que mueve la cámara para el manual,
+  // y poniéndolo adentro no hay forma de que un sitio se olvide de hacerlo.
+  actualizarNivelDeContorno(true, target);
 }
 
 // Qué tan cerca encuadra la cámara en el manual. 1.0 = como estaba antes (el
@@ -2311,8 +2431,15 @@ const MAGIC_BLOCK_LIMIT_VIDEO = 3000; // video: dibuja MUCHOS cuadros seguidos, 
    La franjita `seamMesh` sigue apagada: ESA sí era una de las dos causas reales
    de la "sombra triangular" (ver el historial de bugs). */
 function contornoParaInstrucciones(){
-  if (edgeMesh) edgeMesh.visible = true;
   if (seamMesh) seamMesh.visible = false;
+  if (!edgeMesh) return;
+  edgeMeshVisiblePorBoton = true;
+  edgeMesh.visible = true;
+  // El manual también elige el nivel de detalle por distancia: en un modelo
+  // grande, la foto lo muestra chico y las 260 aristas por pieza serían una
+  // mancha impresa. Se llama DESPUÉS de encuadrar la cámara, así que las páginas
+  // lo vuelven a llamar (ver generateInstructionsPDF).
+  actualizarNivelDeContorno(true);
 }
 /* El material de plástico de la foto va sobre el cuerpo de los bloques. Con las
    piezas 1x2/1x3 agrupadas el dibujado va por `pieceMeshes` y `instMesh` queda
@@ -5749,6 +5876,9 @@ function loop(t){
   const dt = Math.min(0.05,(t-lastT)/1000); lastT = t;
   applyKeyboardOrbit(dt);
   controls.update(dt);
+  // Nivel de detalle del contorno según cuán lejos esté la cámara. Es barato:
+  // solo hace una cuenta y, si el nivel no cambió, no toca nada.
+  actualizarNivelDeContorno();
   renderer.render(scene,camera);
   requestAnimationFrame(loop);
 }
