@@ -390,7 +390,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v41</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v42</small></div>
     </div>
     <div id="modelNameText">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -492,8 +492,7 @@
         <button class="btn icon active" id="belowLayersBtn" title="Mostrar/ocultar capas ya construidas (en gris)">▤ Gris</button>
         <button class="btn icon" id="fullViewBtn" title="Ver el diseño completo, con todos los colores">👁 Completo</button>
         <button class="btn icon" id="bgToggleBtn" title="Cambiar fondo del visor">◐ Fondo</button>
-        <button class="btn icon active" id="meshTexBtn" title="Resaltar el contorno de cada bloque">▦ Contorno</button>
-        <button class="btn icon" id="whiteEdgeBtn" title="Línea blanca de separación en los bloques oscuros. Apagada por defecto: en el Magic Block se ve como un corte entre bloque y bloque.">⬜ Línea en oscuros</button>
+        <button class="btn icon active" id="meshTexBtn" title="Contorno de cada bloque. Tocá para cambiar: oscuro → blanco en oscuros → sin contorno">▦ Contorno oscuro</button>
         <button class="btn icon" id="previewInstrAngleBtn" title="Pone la cámara en el MISMO ángulo exacto que usan las instrucciones, con el diseño completo — para comparar directo, sin generar el PDF">📐 Ver ángulo del manual</button>
         <button class="btn icon" id="useThisAngleBtn" title="Guarda el ángulo EXACTO en el que está la cámara ahora mismo (girá con el mouse hasta que se vea bien) para que el manual use ese, en vez de uno fijo">📌 Usar este ángulo</button>
         <button class="btn icon" id="quickPreviewBtn" title="Foto rápida del modelo completo, con el ángulo guardado — para ver el resultado en segundos, sin generar todo el manual">⚡ Vista previa rápida</button>
@@ -1124,7 +1123,13 @@ function buildMagicBlockGeometry(size){
     magicBlockGeoCache = g;
   }
   const geo = magicBlockGeoCache.clone();
-  geo.scale(size, size, size);
+  // 0.996 en vez de 1.0 (mismo criterio que el bloque de caja). La malla real mide
+  // EXACTAMENTE 1 celda de alto: al apilar, la cara de arriba de un bloque y la de
+  // abajo del siguiente quedaban en el MISMO plano exacto, y las dos peleaban por
+  // dibujarse (z-fighting) → se veían partes invisibles / se colaba el bloque de al
+  // lado. Achicando un 0,4% queda una separación mínima y el problema desaparece.
+  // Los dientes de encastre siguen sobresaliendo lo mismo a simple vista.
+  geo.scale(size*0.996, size*0.996, size*0.996);
   return geo;
 }
 
@@ -1814,17 +1819,21 @@ function focusPointForLayer(stepBox, layerNum){
    manual o el video — parece que el programa "deja de funcionar". Esta función
    revisa el tamaño del modelo y, si es demasiado, usa el bloque con muesca solo
    para esa generación (el visor sigue mostrando el Magic Block normalmente). */
-const MAGIC_BLOCK_LIMIT = 900; // bloques (900 x 472 caras = ~425 mil caras, que el navegador aguanta bien)
-function adjustStyleForHeavyRender(){
-  if (blockStyle === 'magic' && voxels.length > MAGIC_BLOCK_LIMIT){
+const MAGIC_BLOCK_LIMIT = 2500;       // manual PDF / PNG / vista previa (una foto por capa)
+const MAGIC_BLOCK_LIMIT_VIDEO = 1200; // video: dibuja MUCHOS cuadros seguidos, va más justo
+function adjustStyleForHeavyRender(esVideo){
+  const limite = esVideo ? MAGIC_BLOCK_LIMIT_VIDEO : MAGIC_BLOCK_LIMIT;
+  if (blockStyle === 'magic' && voxels.length > limite){
     blockStyle = 'muesca';
     renderAsPieces = false;
     setStatus('El modelo tiene ' + voxels.length + ' bloques: demasiado para el Magic Block detallado. Se genera con el bloque con muesca para que no se trabe.', 'ok');
     return true;
   }
-  // Aun dentro del límite, no unimos las mallas del Magic Block en piezas largas:
-  // triplica las caras y no vale la pena para lo poco que cambia a la vista.
-  if (blockStyle === 'magic') renderAsPieces = false;
+  // ANTES acá se apagaba el modo piezas para el Magic Block, con la idea de que unir
+  // mallas "triplica las caras". Estaba mal contado: un 1x3 unido tiene 3 x 472 caras
+  // pero pasa a ser UNA instancia en vez de tres, así que el total en pantalla es el
+  // mismo. Y los grupos se separan solo por largo y orientación (5 combinaciones como
+  // mucho), o sea 3 uniones de malla al generar. Por eso ahora sí se permite.
   return false;
 }
 
@@ -2280,7 +2289,7 @@ async function generateAssemblyVideo(){
   const wasFlatBlockMode = flatBlockMode;
   const wasBlockStyle = blockStyle;
   if (blockStyle === 'simple') blockStyle = 'muesca'; // respeta el Magic Block si lo elegiste
-  adjustStyleForHeavyRender();
+  adjustStyleForHeavyRender(true);
   flatBlockMode = (blockStyle === 'simple');
   const wasRenderAsPieces = renderAsPieces;
   renderAsPieces = true; // 1x2 y 1x3 se ven como UNA pieza también en el video
@@ -5070,18 +5079,26 @@ document.getElementById('bgToggleBtn').addEventListener('click', ()=>{
   bgIndex = (bgIndex+1) % bgPresets.length;
   applyBackground(bgIndex);
 });
+/* Un solo botón que gira entre tres estados, en vez de dos botones sueltos:
+   0 = contorno oscuro · 1 = contorno + línea blanca en los bloques oscuros · 2 = sin contorno */
+let contornoModo = 0;
+const CONTORNO_ESTADOS = [
+  { mesh:true,  blanca:false, texto:'▦ Contorno oscuro', activo:true,
+    msg:'Contorno oscuro en cada bloque.' },
+  { mesh:true,  blanca:true,  texto:'⬜ Contorno blanco', activo:true,
+    msg:'Contorno con línea blanca en los bloques oscuros.' },
+  { mesh:false, blanca:false, texto:'○ Sin contorno',     activo:false,
+    msg:'Contorno invisible: se ve solo el plástico del bloque.' },
+];
 document.getElementById('meshTexBtn').addEventListener('click', e=>{
-  showMeshTexture = !showMeshTexture;
-  e.currentTarget.classList.toggle('active', showMeshTexture);
+  contornoModo = (contornoModo + 1) % CONTORNO_ESTADOS.length;
+  const est = CONTORNO_ESTADOS[contornoModo];
+  showMeshTexture = est.mesh;
+  showWhiteDarkEdge = est.blanca;
+  e.currentTarget.textContent = est.texto;
+  e.currentTarget.classList.toggle('active', est.activo);
   rebuildMesh3D();
-});
-document.getElementById('whiteEdgeBtn').addEventListener('click', e=>{
-  showWhiteDarkEdge = !showWhiteDarkEdge;
-  e.currentTarget.classList.toggle('active', showWhiteDarkEdge);
-  rebuildMesh3D();
-  setStatus(showWhiteDarkEdge
-    ? 'Línea blanca activada en los bloques oscuros.'
-    : 'Línea blanca desactivada.', 'ok');
+  setStatus(est.msg, 'ok');
 });
 /* ---------------------------- Switch 2D / 3D ---------------------------- */
 const mainSplit = document.getElementById('mainSplit');
