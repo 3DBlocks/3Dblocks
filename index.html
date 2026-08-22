@@ -390,7 +390,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v33</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v34</small></div>
     </div>
     <div id="modelNameText">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -1001,7 +1001,7 @@ window.addEventListener('keydown', e=>{
 
 
 /* ---------------------------- Malla instanciada (3D) ---------------------------- */
-let instMesh = null, edgeMesh = null, seamMesh = null;
+let instMesh = null, edgeMesh = null, seamMesh = null, darkEdgeMesh = null;
 const dummy = new THREE.Object3D();
 const tmpColor = new THREE.Color();
 const edgeColor = new THREE.Color();
@@ -1011,6 +1011,7 @@ function clearModelMeshes(){
   if (instMesh){ scene.remove(instMesh); instMesh.geometry.dispose(); instMesh.material.dispose(); instMesh = null; }
   if (edgeMesh){ scene.remove(edgeMesh); edgeMesh.geometry.dispose(); edgeMesh.material.dispose(); edgeMesh = null; }
   if (seamMesh){ scene.remove(seamMesh); seamMesh.geometry.dispose(); seamMesh.material.dispose(); seamMesh = null; }
+  if (darkEdgeMesh){ scene.remove(darkEdgeMesh); darkEdgeMesh.geometry.dispose(); darkEdgeMesh.material.dispose(); darkEdgeMesh = null; }
 }
 
 /* Geometría del bloque: columna simple + botón arriba (garantiza CERO huecos o
@@ -1082,6 +1083,29 @@ function getMeshTexture(){
   return meshTexture;
 }
 
+/* Segunda textura: borde BLANCO con el centro transparente. Se usa como una capa
+   superpuesta solo sobre los bloques oscuros. Hace falta porque la textura normal
+   se MULTIPLICA con el color del bloque, y cualquier cosa multiplicada por negro
+   da negro — o sea que en un bloque negro la línea negra es invisible. */
+let whiteEdgeTexture = null;
+function getWhiteEdgeTexture(){
+  if (whiteEdgeTexture) return whiteEdgeTexture;
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,size,size);           // centro transparente
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 9;                      // mismo grosor que la malla negra
+  ctx.strokeRect(4.5, 4.5, size-9, size-9);
+  whiteEdgeTexture = new THREE.CanvasTexture(canvas);
+  whiteEdgeTexture.wrapS = THREE.RepeatWrapping;
+  whiteEdgeTexture.wrapT = THREE.RepeatWrapping;
+  whiteEdgeTexture.anisotropy = 8;
+  whiteEdgeTexture.colorSpace = THREE.SRGBColorSpace;
+  return whiteEdgeTexture;
+}
+
 let showBelowLayers = true; // capas ya construidas: mostrarlas en gris, u ocultarlas del todo
 let showFullDesign = false; // vista previa: todo el modelo con sus colores reales, sin importar la capa actual
 let showMeshTexture = true; // textura de rejilla sobre cada cara del bloque
@@ -1150,6 +1174,8 @@ function rebuildMesh3D(){
   const offsetX = (dims.x*voxelSize)/2;
   const offsetZ = (dims.z*voxelSize)/2;
 
+  const darkPositions = []; // bloques oscuros: llevan un contorno blanco encima
+
   visible.forEach((v,i)=>{
     const px = v.x*voxelSize - offsetX, py = v.y*voxelSize + voxelSize/2, pz = v.z*voxelSize - offsetZ;
     dummy.position.set(px, py, pz);
@@ -1177,6 +1203,7 @@ function rebuildMesh3D(){
     // colores (más claros) se mantiene negro, como siempre.
     const lum = tmpColor.r*0.299 + tmpColor.g*0.587 + tmpColor.b*0.114;
     const defaultEdgeColor = lum < 0.35 ? '#ffffff' : '#000000';
+    if (lum < 0.35) darkPositions.push([px, py, pz]); // le va el contorno blanco encima
     edgeColor.set(isBoxSelected ? '#22d3ee' : (isHighlighted ? '#39ff6a' : defaultEdgeColor));
     // Copia el contorno del bloque (líneas de verdad) desplazado a esta posición
     const base = i * vertsPerBlock * 3;
@@ -1197,6 +1224,28 @@ function rebuildMesh3D(){
   edgeGeometry.attributes.color.needsUpdate = true;
   edgeGeometry.computeBoundingSphere();
   scene.add(instMesh); scene.add(edgeMesh); scene.add(seamMesh);
+
+  // Capa con el contorno BLANCO, solo encima de los bloques oscuros — así en los
+  // bloques negros también se ve dónde termina uno y empieza el otro.
+  if (showMeshTexture && darkPositions.length){
+    const darkMat = new THREE.MeshBasicMaterial({
+      map: getWhiteEdgeTexture(),
+      transparent: true,
+      depthWrite: false,   // no tapa nada, solo se apoya encima
+      toneMapped: false,
+    });
+    darkEdgeMesh = new THREE.InstancedMesh(geo, darkMat, darkPositions.length);
+    darkEdgeMesh.renderOrder = 2;
+    darkPositions.forEach((p,i)=>{
+      dummy.position.set(p[0], p[1], p[2]);
+      dummy.scale.setScalar(1.004); // un pelín más grande, para que se apoye justo encima
+      dummy.updateMatrix();
+      darkEdgeMesh.setMatrixAt(i, dummy.matrix);
+    });
+    dummy.scale.setScalar(1); // deja el ayudante como estaba
+    darkEdgeMesh.instanceMatrix.needsUpdate = true;
+    scene.add(darkEdgeMesh);
+  }
 
   layerPlane.position.y = currentLayer*voxelSize + voxelSize*1.001;
   refreshUsedColorsPanel();
@@ -1455,6 +1504,8 @@ async function generatePresentationRender(){
   instMesh.material = realMat;
   const wasEdgeVisible = edgeMesh.visible;
   edgeMesh.visible = false; // el contorno grueso no queda bien en una foto con luces reales
+  const wasDarkEdgeVisible = darkEdgeMesh ? darkEdgeMesh.visible : false;
+  if (darkEdgeMesh) darkEdgeMesh.visible = false; // la malla blanca tampoco: la foto busca verse realista
   const wasSeamVisible = seamMesh.visible;
   seamMesh.visible = false;
 
@@ -1466,6 +1517,7 @@ async function generatePresentationRender(){
   realMat.dispose();
   edgeMesh.visible = wasEdgeVisible;
   seamMesh.visible = wasSeamVisible;
+  if (darkEdgeMesh) darkEdgeMesh.visible = wasDarkEdgeVisible;
   ground.visible = wasGroundVisible;
   ground.material.color.copy(wasGroundColor);
   ground.scale.copy(wasGroundScale);
