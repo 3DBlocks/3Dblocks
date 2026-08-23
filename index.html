@@ -1319,7 +1319,13 @@ function contornoSimpleTemplate(size){
    2·d·tan(fov/2) unidades de mundo, así que un bloque de 1 unidad ocupa
    alto_en_píxeles / esa cantidad. */
 const CONTORNO_PX_DETALLE = 30;   // desde acá para arriba, el contorno real
-const CONTORNO_PX_MINIMO  = 5;    // por debajo, ni el simple aporta
+const CONTORNO_PX_MINIMO  = 3;    // por debajo, ni el simple aporta
+/* Desde este tamaño de bloque para arriba, la línea simple ya va a su intensidad
+   máxima; por debajo se va desvaneciendo hasta OPACIDAD_LEJOS_MIN.
+   Ojo con bajarle la intensidad de más: el primer ajuste desvanecía demasiado
+   pronto y la línea desaparecía cuando el modelo todavía se veía grande. */
+const CONTORNO_PX_LLENO   = 20;
+const OPACIDAD_LEJOS_MIN  = 0.38; // nunca por debajo de esto mientras haya línea
 function pixelesPorBloque(objetivo){
   // `objetivo` = el punto al que mira la cámara. En el visor es el centro del
   // orbitado; en el manual, el punto que le pasa positionCameraFixedAngle (que
@@ -1369,8 +1375,8 @@ function actualizarNivelDeContorno(forzar, objetivo){
   // La opacidad se ajusta SIEMPRE, en cada cuadro: es lo que hace que el
   // desvanecido sea suave y no un salto. Cambiar `material.opacity` es barato,
   // no recompila nada.
-  edgeMesh.material.opacity      = rampa(px, CONTORNO_PX_DETALLE, 70, 0.45, OPACIDAD_CONTORNO_MAX);
-  edgeMeshLejos.material.opacity = rampa(px, CONTORNO_PX_MINIMO, CONTORNO_PX_DETALLE, 0.06, OPACIDAD_CONTORNO_MAX);
+  edgeMesh.material.opacity      = rampa(px, CONTORNO_PX_DETALLE, 70, 0.55, OPACIDAD_CONTORNO_MAX);
+  edgeMeshLejos.material.opacity = rampa(px, CONTORNO_PX_MINIMO, CONTORNO_PX_LLENO, OPACIDAD_LEJOS_MIN, OPACIDAD_CONTORNO_MAX);
 
   if (!forzar && nivel === nivelContornoActual) return;   // el resto solo si cambió
   nivelContornoActual = nivel;
