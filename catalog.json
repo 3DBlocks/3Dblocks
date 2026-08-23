@@ -107,6 +107,15 @@
       "price": 10,
       "thumb": "thumbs/croconaw.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/croconaw.json"
+    },
+    {
+      "slug": "chucky",
+      "name": "ChuCky",
+      "description": "terror",
+      "category": "terror",
+      "price": 15,
+      "thumb": "thumbs/chucky.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/chucky.json"
     }
   ]
 }
