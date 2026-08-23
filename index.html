@@ -2547,13 +2547,31 @@ function focusPointForLayer(stepBox, layerNum){
   return new THREE.Vector3(center.x, center.y*0.4 + layerY*0.6, center.z);
 }
 
-/* El Magic Block real tiene 472 caras por bloque (una caja tiene 12). En modelos
-   grandes eso multiplica el trabajo por 40 y el navegador se traba al generar el
-   manual o el video — parece que el programa "deja de funcionar". Esta función
-   revisa el tamaño del modelo y, si es demasiado, usa el bloque con muesca solo
-   para esa generación (el visor sigue mostrando el Magic Block normalmente). */
-const MAGIC_BLOCK_LIMIT = 6000;       // manual PDF / PNG / vista previa (una foto por capa)
-const MAGIC_BLOCK_LIMIT_VIDEO = 3000; // video: dibuja MUCHOS cuadros seguidos, va más justo
+/* El bloque real tiene cientos de caras (una caja tiene 12). En modelos grandes
+   eso multiplica el trabajo y el navegador se puede trabar al generar el manual o
+   el video — parece que el programa "deja de funcionar". Esta función revisa el
+   tamaño del modelo y, si es demasiado, usa el bloque con muesca solo para esa
+   generación (el visor sigue mostrando el bloque real normalmente).
+
+   ⚠️ TOPES SUBIDOS EN v51. El 6.000 de antes venía de una época sin mediciones y
+   dejaba afuera modelos que hoy salen sin problema. Medido con el bloque 4 sobre
+   esferas macizas, en esta máquina:
+
+     bloques   rearmar   1 foto   PDF de 48 capas   triángulos   memoria
+      14.147    214 ms   780 ms         37 s          10,1 M      114 MB
+      20.479    266 ms  1.067 ms        51 s          14,6 M      165 MB
+      33.401    419 ms  1.683 ms        81 s          23,8 M      269 MB
+      50.883    661 ms  2.606 ms       125 s          36,2 M      410 MB
+
+   Se eligió cortar cerca de los 20.000 con el bloque 4: un PDF de menos de un
+   minuto y 165 MB. De ahí para arriba el tiempo y la memoria se van de las manos.
+   OJO: el tope se divide por 419/704 cuando el estilo es 'magic2' (tiene 68 % más
+   caras), así que 34.000 acá son ~20.200 bloques reales con el bloque 4.
+
+   El video va MUCHO más justo: no saca una foto por capa, saca ~30 por segundo
+   durante todo el armado. Por eso su tope queda bastante más abajo. */
+const MAGIC_BLOCK_LIMIT = 34000;      // manual PDF / PNG / vista previa (una foto por capa)
+const MAGIC_BLOCK_LIMIT_VIDEO = 8000; // video: dibuja MUCHOS cuadros seguidos, va más justo
 
 /* ---------------------------- Cómo se preparan las fotos de las INSTRUCCIONES ----------------------------
    Las usan la vista previa, el PDF, los PNG y el video. Van juntas acá para que
@@ -2585,6 +2603,18 @@ function contornoParaInstrucciones(){
 /* El material de plástico de la foto va sobre el cuerpo de los bloques. Con las
    piezas 1x2/1x3 agrupadas el dibujado va por `pieceMeshes` y `instMesh` queda
    en null — antes esto reventaba con "Cannot read properties of null". */
+/* El manual SIEMPRE se dibuja con el bloque real "Magic B" (el 4º estilo del
+   botón), sin importar cuál estés mirando en la pantalla. El manual es lo que ve
+   el cliente mientras arma: ahí tiene que aparecer la pieza física de verdad, con
+   sus dientes y su botón, no una caja lisa.
+   Lo único que puede bajarlo es adjustStyleForHeavyRender(): si el modelo tiene
+   demasiados bloques para dibujarlos una y otra vez, cae al bloque con muesca y
+   avisa por pantalla. */
+function estiloParaInstrucciones(esVideo){
+  blockStyle = 'magic2';
+  adjustStyleForHeavyRender(esVideo);
+  flatBlockMode = (blockStyle === 'simple');
+}
 function materialParaInstrucciones(mat){
   if (instMesh) instMesh.material = mat;
   pieceMeshes.forEach(m => { if (m.isInstancedMesh) m.material = mat; });
@@ -2596,7 +2626,9 @@ function adjustStyleForHeavyRender(esVideo){
   if (esMagic() && voxels.length > limite){
     blockStyle = 'muesca';
     renderAsPieces = false;
-    setStatus('El modelo tiene ' + voxels.length + ' bloques: demasiado para el Magic Block detallado. Se genera con el bloque con muesca para que no se trabe.', 'ok');
+    setStatus('El modelo tiene ' + voxels.length + ' bloques y el tope para ' +
+      (esVideo ? 'el video' : 'el manual') + ' es ' + limite +
+      '. Esta vez se genera con el bloque con muesca para que no se trabe el navegador.', 'ok');
     return true;
   }
   // ANTES acá se apagaba el modo piezas para el Magic Block, con la idea de que unir
@@ -2664,9 +2696,7 @@ async function quickAnglePreview(previewLayer){
 
   const wasFlatBlockMode = flatBlockMode;
   const wasBlockStyle = blockStyle;
-  if (blockStyle === 'simple') blockStyle = 'muesca'; // si estaba en simple, el manual queda mejor con muesca; si elegiste Magic Block, se respeta
-  adjustStyleForHeavyRender();
-  flatBlockMode = (blockStyle === 'simple');
+  estiloParaInstrucciones();
   const wasRenderAsPieces = renderAsPieces;
   renderAsPieces = true; // 1x2 y 1x3 se ven como UNA pieza, no como bloques sueltos
   const useFullDesign = (previewLayer === 'full');
@@ -2772,9 +2802,7 @@ async function generateInstructionsPDF(){
 
   const wasFlatBlockMode = flatBlockMode;
   const wasBlockStyle = blockStyle;
-  if (blockStyle === 'simple') blockStyle = 'muesca'; // respeta el Magic Block si lo elegiste
-  adjustStyleForHeavyRender();
-  flatBlockMode = (blockStyle === 'simple');
+  estiloParaInstrucciones();
   const wasRenderAsPieces = renderAsPieces;
   renderAsPieces = true; // 1x2 y 1x3 se ven como UNA pieza, no como bloques sueltos
   showFullDesign = false; showBelowLayers = true; // capa actual con su color real, las de abajo atenuadas — así se ve qué es nuevo
@@ -3051,9 +3079,7 @@ async function generateAssemblyVideo(){
 
   const wasFlatBlockMode = flatBlockMode;
   const wasBlockStyle = blockStyle;
-  if (blockStyle === 'simple') blockStyle = 'muesca'; // respeta el Magic Block si lo elegiste
-  adjustStyleForHeavyRender(true);
-  flatBlockMode = (blockStyle === 'simple');
+  estiloParaInstrucciones(true);   // true = video
   const wasRenderAsPieces = renderAsPieces;
   renderAsPieces = true; // 1x2 y 1x3 se ven como UNA pieza también en el video
   showFullDesign = false; showBelowLayers = true;
@@ -3210,9 +3236,7 @@ async function generateInstructionsPNGZip(){
 
   const wasFlatBlockMode = flatBlockMode;
   const wasBlockStyle = blockStyle;
-  if (blockStyle === 'simple') blockStyle = 'muesca'; // respeta el Magic Block si lo elegiste
-  adjustStyleForHeavyRender();
-  flatBlockMode = (blockStyle === 'simple');
+  estiloParaInstrucciones();
   const wasRenderAsPieces = renderAsPieces;
   renderAsPieces = true; // 1x2 y 1x3 se ven como UNA pieza, no como bloques sueltos
   showFullDesign = false; showBelowLayers = true;
