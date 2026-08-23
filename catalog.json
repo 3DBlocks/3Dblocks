@@ -125,6 +125,15 @@
       "price": 19,
       "thumb": "thumbs/super-mario.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/super-mario.json"
+    },
+    {
+      "slug": "mario-con-yoshi",
+      "name": "mario con yoshi",
+      "description": "mario",
+      "category": "mario",
+      "price": 10,
+      "thumb": "thumbs/mario-con-yoshi.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/mario-con-yoshi.json"
     }
   ]
 }
