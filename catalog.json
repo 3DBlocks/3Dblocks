@@ -116,6 +116,15 @@
       "price": 15,
       "thumb": "thumbs/chucky.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/chucky.json"
+    },
+    {
+      "slug": "super-mario",
+      "name": "super mario",
+      "description": "mario",
+      "category": "mario",
+      "price": 19,
+      "thumb": "thumbs/super-mario.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/super-mario.json"
     }
   ]
 }
