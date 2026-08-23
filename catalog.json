@@ -134,6 +134,15 @@
       "price": 10,
       "thumb": "thumbs/mario-con-yoshi.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/mario-con-yoshi.json"
+    },
+    {
+      "slug": "condorito",
+      "name": "condorito",
+      "description": "condorito",
+      "category": "popular",
+      "price": 5,
+      "thumb": "thumbs/condorito.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/condorito.json"
     }
   ]
 }
