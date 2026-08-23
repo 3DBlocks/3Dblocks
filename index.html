@@ -1288,19 +1288,42 @@ function usarContornoReal(){
    siempre está apoyada contra el bloque de abajo (o contra el piso), así que esa
    línea nunca aporta nada: solo duplica la línea del bloque de abajo y ensucia
    cada junta. Sacándola quedan 287 aristas: se ve más limpio Y pesa 28% menos. */
-/* Contorno SIMPLE: las 12 aristas de la celda del bloque, nada más.
+/* Contorno SIMPLE: las 12 aristas de una caja alrededor del bloque, nada más.
    Es el que se usa mirando de lejos, cuando las ~260 aristas del bloque real ya
    no entran en los píxeles que ocupa la pieza. Ver actualizarNivelDeContorno().
-   Se recorta un pelín (0.996, el mismo criterio de siempre) para que dos bloques
-   pegados no dibujen su arista compartida exactamente en el mismo lugar. */
-let contornoSimpleCache = null, contornoSimpleCacheSize = null;
-function contornoSimpleTemplate(size){
-  if (contornoSimpleCache && contornoSimpleCacheSize === size) return contornoSimpleCache;
-  const caja = new THREE.BoxGeometry(size*0.996, size*0.996, size*0.996);
+
+   ⚠️ EL TAMAÑO DE ESTA CAJA ES LO IMPORTANTE, y no es obvio.
+   El primer intento usó el tamaño de la CELDA (0,996). Resultado: de lejos las
+   piezas se veían pegadas, sin separación — sobre todo las negras, que quedaban
+   como una mancha sólida. El motivo:
+
+       el bloque real mide 1,1354 de ancho, o sea que sus dientes SOBRESALEN
+       0,0697 por lado, más allá de la celda.
+
+   Así que la caja de la celda quedaba ENTERRADA adentro de los dientes del
+   bloque de al lado, y la tarjeta gráfica la descartaba por estar detrás. Las
+   líneas se dibujaban, pero no se veían.
+
+   Ahora la caja se saca del tamaño REAL de la malla:
+     · ancho y fondo → el del bloque (con los dientes), un pelín agrandado para
+       que no pelee con la superficie;
+     · alto → una CELDA, no el alto total: la parte de arriba del cuerpo es donde
+       termina un bloque y empieza el siguiente, el botón ya va adentro del de
+       arriba. */
+let contornoSimpleCache = null, contornoSimpleCacheClave = null;
+function contornoSimpleTemplate(geo, size){
+  geo.computeBoundingBox();
+  const bb = geo.boundingBox;
+  const anchoX = (bb.max.x - bb.min.x) * 1.004;
+  const anchoZ = (bb.max.z - bb.min.z) * 1.004;
+  const altoY  = size * 0.996;
+  const clave = anchoX.toFixed(4)+'|'+altoY.toFixed(4)+'|'+anchoZ.toFixed(4);
+  if (contornoSimpleCache && contornoSimpleCacheClave === clave) return contornoSimpleCache;
+  const caja = new THREE.BoxGeometry(anchoX, altoY, anchoZ);
   const t = new THREE.EdgesGeometry(caja, 1);
   const a = new Float32Array(t.attributes.position.array);
   t.dispose(); caja.dispose();
-  contornoSimpleCache = a; contornoSimpleCacheSize = size;
+  contornoSimpleCache = a; contornoSimpleCacheClave = clave;
   return a;
 }
 
@@ -1934,7 +1957,7 @@ function rebuildMesh3D(opts){
      evita tener que rehacer todo cada vez que movés la rueda. */
   let tmplLejos = null, lejosPositions = null, lejosColors = null, vertsLejos = 0;
   if (esMagic() && contornoLineas){
-    tmplLejos = contornoSimpleTemplate(voxelSize);
+    tmplLejos = contornoSimpleTemplate(geo, voxelSize);
     vertsLejos = tmplLejos.length / 3;
     lejosPositions = new Float32Array(visible.length * tmplLejos.length);
     lejosColors = new Uint8Array(visible.length * vertsLejos * 4);
