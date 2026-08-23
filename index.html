@@ -101,7 +101,6 @@
   #viewSwitch button + button{ border-left:1px solid var(--border); }
   #viewSwitch button.active{ background:var(--accent); color:#1a1305; }
   #orientRow{ display:flex; gap:6px; flex-wrap:wrap; justify-content:center; }
-  #moveRow{ display:flex; gap:6px; flex-wrap:wrap; justify-content:center; margin-top:6px; }
   #orientRow .btn{ padding:8px 10px; font-size:12px; }
 
   #strataTrack{ display:flex; gap:2px; margin-top:7px; max-width:640px; margin-left:auto; margin-right:auto; }
@@ -389,7 +388,6 @@
     #viewSwitchRow{ margin-top:7px !important; gap:7px !important; }
     #viewSwitch button{ padding:5px 11px; font-size:11px; }
     #orientRow .btn{ padding:5px 8px; font-size:10.5px; }
-    #moveRow .btn{ padding:5px 8px; font-size:10.5px; }
 
     #strataTrack{ margin-top:7px; }
     .strataSeg{ height:5px; }
@@ -452,7 +450,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v50</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v51</small></div>
     </div>
     <div id="modelNameText">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -545,7 +543,10 @@
       <button class="stepBtn" id="nextBtn" title="Capa siguiente (→)">Siguiente ›</button>
       <button class="btn primary" id="playBtn" title="Reproducir armado completo">▶</button>
     </div>
-    <div id="viewSwitchRow" style="display:flex; justify-content:center; align-items:center; gap:12px; margin-top:7px; flex-wrap:wrap;">
+    <!-- Alineada a la IZQUIERDA (v51): antes iba centrada y quedaba justo debajo
+         del modelo, compitiendo con los controles de capa. Contra el borde
+         izquierdo queda fuera del camino y siempre en el mismo lugar. -->
+    <div id="viewSwitchRow" style="display:flex; justify-content:flex-start; align-items:center; gap:12px; margin-top:7px; flex-wrap:wrap;">
       <div id="viewSwitch">
         <button id="view2dBtn" class="active">▦ 2D</button>
         <button id="view3dBtn">◈ 3D</button>
@@ -556,14 +557,9 @@
         <button class="btn sm" id="rotateZBtn" title="Rotar 90° sobre el eje Z">↻ Z</button>
         <button class="btn sm" id="flipYBtn" title="Invertir vertical">↕ Invertir</button>
       </div>
-      <div id="moveRow" title="Mover el modelo completo de lugar">
-        <button class="btn sm" id="moveXNegBtn" title="Mover hacia -X">← X</button>
-        <button class="btn sm" id="moveXPosBtn" title="Mover hacia +X">X →</button>
-        <button class="btn sm" id="moveZNegBtn" title="Mover hacia -Z">← Z</button>
-        <button class="btn sm" id="moveZPosBtn" title="Mover hacia +Z">Z →</button>
-        <button class="btn sm" id="moveYNegBtn" title="Bajar (−Y)">↓ Y</button>
-        <button class="btn sm" id="moveYPosBtn" title="Subir (+Y)">↑ Y</button>
-      </div>
+      <!-- SACADA EN v51: la fila de "mover el modelo" (← X, X →, ← Z, Z →, ↓ Y, ↑ Y).
+           Ocupaba media barra y casi no se usaba; la función `shiftVoxels()` sigue
+           en el código por si alguna vez hay que volver a exponerla. -->
     </div>
     <div id="strataTrack"></div>
     <div id="layerMeta">
@@ -4560,12 +4556,9 @@ function shiftVoxels(dx, dy, dz){
   document.getElementById('statDims').textContent = `${dims.x}×${dims.y}×${dims.z}`;
   document.getElementById('statCount').textContent = `${voxels.length}`;
 }
-document.getElementById('moveXNegBtn').addEventListener('click', ()=> shiftVoxels(-1,0,0));
-document.getElementById('moveXPosBtn').addEventListener('click', ()=> shiftVoxels(1,0,0));
-document.getElementById('moveZNegBtn').addEventListener('click', ()=> shiftVoxels(0,0,-1));
-document.getElementById('moveZPosBtn').addEventListener('click', ()=> shiftVoxels(0,0,1));
-document.getElementById('moveYNegBtn').addEventListener('click', ()=> shiftVoxels(0,-1,0));
-document.getElementById('moveYPosBtn').addEventListener('click', ()=> shiftVoxels(0,1,0));
+/* Los botones de mover el modelo se sacaron de la pantalla en v51. `shiftVoxels()`
+   queda disponible por si hay que volver a ponerlos: alcanza con devolver la fila
+   al HTML y estas seis líneas. */
 
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
