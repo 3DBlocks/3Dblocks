@@ -215,8 +215,11 @@
   .legendChip .ct{ color:var(--text); font-weight:600; }
 
   #contextPane{ flex:1; min-width:0; position:relative; display:flex; flex-direction:column; }
+  /* Corrido a la derecha para no quedar tapado por la barra de herramientas de
+     edición, que arranca en left:12px y mide ~54px de ancho — antes se leía
+     "ITO 3D". */
   #contextLabel{
-    position:absolute; top:12px; left:14px; font-size:10px; text-transform:uppercase; letter-spacing:.14em;
+    position:absolute; top:12px; left:78px; font-size:10px; text-transform:uppercase; letter-spacing:.14em;
     color:var(--text-faint); font-weight:700; z-index:2; pointer-events:none;
     background:rgba(22,24,29,.6); padding:3px 8px; border-radius:5px; backdrop-filter:blur(4px);
   }
@@ -267,6 +270,17 @@
     position:absolute; bottom:10px; left:14px; font-size:9.5px; color:var(--text-faint); font-family:var(--mono);
     text-align:left; line-height:1.5; pointer-events:none; z-index:2;
   }
+  /* Lectura del zoom: cuántos píxeles ocupa un bloque y qué contorno le toca.
+     Está para poder hablar con números en vez de "se ve mal de lejos". */
+  #zoomInfo{
+    position:absolute; bottom:44px; left:14px; z-index:3;
+    font-family:var(--mono); font-size:10.5px; color:var(--text-dim);
+    background:rgba(30,33,40,.82); backdrop-filter:blur(4px);
+    border:1px solid var(--border-soft); border-radius:6px; padding:4px 8px;
+    white-space:nowrap;
+  }
+  #zoomInfo b{ color:var(--accent); font-weight:700; }
+  #zoomInfo i{ font-style:normal; color:var(--text-faint); }
 
   /* ---------- Sidebar drawer (secondary: import & settings) ---------- */
   #sidebarOverlay{
@@ -516,6 +530,7 @@
         <button class="btn icon" id="useThisAngleBtn" title="Guarda el ángulo EXACTO en el que está la cámara ahora mismo (girá con el mouse hasta que se vea bien) para que el manual use ese, en vez de uno fijo">📌<span class="txt">Usar este ángulo</span></button>
         <button class="btn icon" id="quickPreviewBtn" title="Foto rápida del modelo completo, con el ángulo guardado — para ver el resultado en segundos, sin generar todo el manual">⚡<span class="txt">Vista previa</span></button>
       </div>
+      <div id="zoomInfo" title="Cuántos píxeles de pantalla ocupa un bloque a este zoom, y qué contorno le corresponde. Sirve para poder decir 'a este número se ve mal' en vez de adivinar.">—</div>
       <div id="ctxHint">clic derecho: orbitar<br/>rueda: zoom</div>
     </section>
   </div>
@@ -1292,40 +1307,64 @@ function usarContornoReal(){
    Es el que se usa mirando de lejos, cuando las ~260 aristas del bloque real ya
    no entran en los píxeles que ocupa la pieza. Ver actualizarNivelDeContorno().
 
-   ⚠️ EL TAMAÑO DE ESTA CAJA ES LO IMPORTANTE, y no es obvio.
-   El primer intento usó el tamaño de la CELDA (0,996). Resultado: de lejos las
-   piezas se veían pegadas, sin separación — sobre todo las negras, que quedaban
-   como una mancha sólida. El motivo:
+   ⚠️ ES DEL TAMAÑO DE LA CELDA, Y TIENE QUE SERLO. Historia de dos intentos
+   fallidos, para no repetirlos:
 
-       el bloque real mide 1,1354 de ancho, o sea que sus dientes SOBRESALEN
-       0,0697 por lado, más allá de la celda.
+   1) Caja del tamaño de la CELDA, sin más. De lejos las piezas se veían pegadas,
+      sin separación — sobre todo las negras, que quedaban como una mancha.
+      Causa: el bloque real mide 1,1354 de ancho, o sea que sus dientes
+      SOBRESALEN 0,0697 por lado. La caja quedaba ENTERRADA adentro de los
+      dientes del bloque vecino y la placa la descartaba por estar detrás.
+      Las líneas se dibujaban, pero no se veían.
 
-   Así que la caja de la celda quedaba ENTERRADA adentro de los dientes del
-   bloque de al lado, y la tarjeta gráfica la descartaba por estar detrás. Las
-   líneas se dibujaban, pero no se veían.
+   2) Caja del tamaño REAL del bloque (1,1354). Se veían… pero DOBLES:
+         borde derecho de A      → +0,5677
+         borde izquierdo de B    → 1 − 0,5677 = +0,4323
+         separación              →  0,1354 celdas = 4 px con bloques de 30 px
+      Cada vecino ponía su propia línea en un lugar distinto, en vez de compartir
+      una sola en la junta.
 
-   Ahora la caja se saca del tamaño REAL de la malla:
-     · ancho y fondo → el del bloque (con los dientes), un pelín agrandado para
-       que no pelee con la superficie;
-     · alto → una CELDA, no el alto total: la parte de arriba del cuerpo es donde
-       termina un bloque y empieza el siguiente, el botón ya va adentro del de
-       arriba. */
-let contornoSimpleCache = null, contornoSimpleCacheClave = null;
-function contornoSimpleTemplate(geo, size){
-  geo.computeBoundingBox();
-  const bb = geo.boundingBox;
-  const anchoX = (bb.max.x - bb.min.x) * 1.004;
-  const anchoZ = (bb.max.z - bb.min.z) * 1.004;
-  const altoY  = size * 0.996;
-  const clave = anchoX.toFixed(4)+'|'+altoY.toFixed(4)+'|'+anchoZ.toFixed(4);
-  if (contornoSimpleCache && contornoSimpleCacheClave === clave) return contornoSimpleCache;
-  const caja = new THREE.BoxGeometry(anchoX, altoY, anchoZ);
+   La solución no era el tamaño: era la PROFUNDIDAD. La caja vuelve a ser del
+   tamaño de la celda — así los dos vecinos ponen su línea exactamente en el
+   mismo lugar y se ve UNA — y para que no quede enterrada, el material la
+   acerca 0,09 hacia la cámara en el sombreador (ver sesgoHaciaLaCamara).
+   El alto es una CELDA, no el alto total: arriba del cuerpo es donde termina un
+   bloque y empieza el siguiente; el botón ya va adentro del de arriba. */
+let contornoSimpleCache = null, contornoSimpleCacheSize = null;
+function contornoSimpleTemplate(size){
+  if (contornoSimpleCache && contornoSimpleCacheSize === size) return contornoSimpleCache;
+  const caja = new THREE.BoxGeometry(size*0.996, size*0.996, size*0.996);
   const t = new THREE.EdgesGeometry(caja, 1);
   const a = new Float32Array(t.attributes.position.array);
   t.dispose(); caja.dispose();
-  contornoSimpleCache = a; contornoSimpleCacheClave = clave;
+  contornoSimpleCache = a; contornoSimpleCacheSize = size;
   return a;
 }
+
+/* Acerca las líneas a la cámara una distancia FIJA del mundo, para que no queden
+   enterradas dentro de los dientes del bloque vecino.
+   Se hace en el espacio de la cámara (`mvPosition.z += sesgo`) y NO en el de
+   pantalla: un sesgo de pantalla parece equivalente pero escala con el cuadrado
+   de la distancia — con la cámara a 40 unidades habría que correr las líneas 8
+   unidades enteras, y se verían a través del modelo. En el espacio de la cámara,
+   0,09 es 0,09 esté donde esté la cámara.
+   0,09 alcanza porque los dientes sobresalen 0,0697, y es MUY inferior a la
+   separación entre bloques (1), así que ninguna línea puede colarse por delante
+   de un bloque que de verdad esté adelante. */
+function sesgoHaciaLaCamara(mat, sesgo){
+  mat.onBeforeCompile = (shader)=>{
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <project_vertex>',
+      [ 'vec4 mvPosition = vec4( transformed, 1.0 );',
+        'mvPosition = modelViewMatrix * mvPosition;',
+        'mvPosition.z += ' + sesgo.toFixed(4) + ';',
+        'gl_Position = projectionMatrix * mvPosition;' ].join('\n')
+    );
+  };
+  mat.customProgramCacheKey = ()=> 'sesgo' + sesgo.toFixed(4);
+  return mat;
+}
+const SESGO_CONTORNO_LEJOS = 0.09;
 
 /* ---------------------------- Cuánto detalle según la distancia ----------------------------
    El contorno del bloque real son ~260 aristas por pieza. Cuando el bloque mide
@@ -1341,21 +1380,39 @@ function contornoSimpleTemplate(geo, size){
    La cuenta sale de la cámara: a distancia d, en pantalla entran
    2·d·tan(fov/2) unidades de mundo, así que un bloque de 1 unidad ocupa
    alto_en_píxeles / esa cantidad. */
-const CONTORNO_PX_DETALLE = 30;   // desde acá para arriba, el contorno real
-const CONTORNO_PX_MINIMO  = 3;    // por debajo, ni el simple aporta
+/* 14, no 30. Lo pidió el usuario mirando su propio modelo: "hasta 27 px se ve
+   bien, menos de eso se pierde y se ve cuadrado; hasta 14 debería verse con
+   contorno completo". Con 30 el contorno de la celda entraba demasiado pronto y
+   las piezas se veían como cubos lisos.
+   Bajarlo obligó a bajar también la intensidad mínima del contorno completo (ver
+   la rampa más abajo): con 260 aristas por pieza a 15 px, si la línea va fuerte
+   las zonas negras se vuelven grises otra vez. Medido sobre el Electivire, a
+   15 px por bloque: con intensidad 0,55 el negro subía a 51/255; con 0,35 se
+   queda en 25/255 y el detalle igual se ve. Los dos números van juntos. */
+const CONTORNO_PX_DETALLE = 14;   // desde acá para arriba, el contorno real
+const CONTORNO_PX_MINIMO  = 5;    // por debajo, ni el simple aporta
 /* Desde este tamaño de bloque para arriba, la línea simple ya va a su intensidad
    máxima; por debajo se va desvaneciendo hasta OPACIDAD_LEJOS_MIN.
    Ojo con bajarle la intensidad de más: el primer ajuste desvanecía demasiado
    pronto y la línea desaparecía cuando el modelo todavía se veía grande. */
 const CONTORNO_PX_LLENO   = 20;
-const OPACIDAD_LEJOS_MIN  = 0.38; // nunca por debajo de esto mientras haya línea
+/* Ajustado a ojo sobre el Electivire del usuario (3.325 bloques, 1.147 negros),
+   comparando tres caídas a 13 / 10 / 7 px por bloque:
+     0,38 → de lejos las zonas negras quedaban demasiado cargadas de líneas
+     0,20 → equilibrio: el negro se lee negro y los bloques se siguen separando  ← elegido
+     0,10 → de lejos las zonas negras pierden la separación entre bloques
+   De 20 px para arriba no cambia nada: ahí la línea sigue a full. */
+const OPACIDAD_LEJOS_MIN  = 0.20; // nunca por debajo de esto mientras haya línea
 function pixelesPorBloque(objetivo){
   // `objetivo` = el punto al que mira la cámara. En el visor es el centro del
   // orbitado; en el manual, el punto que le pasa positionCameraFixedAngle (que
   // NO es el mismo, porque la cámara sube con las capas).
   const d = camera.position.distanceTo(objetivo || controls.target);
   const altoMundo = 2 * d * Math.tan((camera.fov * Math.PI/180) / 2);
-  if (!(altoMundo > 0)) return 999;
+  // Con el lienzo en 0 (el panel 3D escondido, por ejemplo mientras estás en la
+  // vista 2D) la cuenta daría 0 y el contorno se apagaría solo. Devolvemos null
+  // para que quien llama sepa que este momento no cuenta.
+  if (!(altoMundo > 0) || !(renderer.domElement.height > 0)) return null;
   return (renderer.domElement.height / altoMundo) * voxelSize;
 }
 /* ---- La línea se DESVANECE al alejarse ----
@@ -1381,13 +1438,35 @@ function rampa(v, desde, hasta, valDesde, valHasta){
   return valDesde + (valHasta - valDesde) * t;
 }
 const OPACIDAD_CONTORNO_MAX = 0.85;
+
+/* Lectura del zoom en pantalla (abajo a la izquierda del visor 3D).
+   Muestra cuántos píxeles ocupa UN BLOQUE y qué contorno le toca. Está para poder
+   hablar con números: "a 14 px se ve mal" en vez de "de lejos se ve mal".
+   Se refresca solo cuando cambia el número redondeado, no en cada cuadro. */
+let ultimoZoomMostrado = null;
+function mostrarZoom3D(px, nivel, opacidad){
+  const el = document.getElementById('zoomInfo');
+  if (!el) return;
+  const n = Math.round(px);
+  const clave = n + '|' + nivel + '|' + (opacidad==null ? '' : Math.round(opacidad*100));
+  if (clave === ultimoZoomMostrado) return;
+  ultimoZoomMostrado = clave;
+  const nombres = { real:'contorno completo', simple:'línea simple', nada:'sin línea' };
+  const detalle = nivel
+    ? ' · ' + nombres[nivel] + (opacidad!=null ? ' <i>'+Math.round(opacidad*100)+'%</i>' : '')
+    : '';
+  el.innerHTML = 'zoom <b>' + n + ' px</b> por bloque' + detalle;
+}
+
 let nivelContornoActual = null;
 function actualizarNivelDeContorno(forzar, objetivo){
-  if (!edgeMesh) return;
+  const pxAhora = pixelesPorBloque(objetivo);
+  if (pxAhora === null) return;   // lienzo escondido: no hay nada que decidir
+  if (!edgeMesh){ mostrarZoom3D(pxAhora, null, null); return; }
   // Sin el contorno simple armado (bloques de caja, o contorno apagado) no hay
   // nada que cambiar: el de caja ya son 12 aristas, no se gana nada.
-  if (!edgeMeshLejos){ nivelContornoActual = null; return; }
-  const px = pixelesPorBloque(objetivo);
+  if (!edgeMeshLejos){ nivelContornoActual = null; mostrarZoom3D(pxAhora, null, null); return; }
+  const px = pxAhora;
   /* Histéresis: para SUBIR de nivel hace falta un poco más que para bajar. Sin
      esto, parando la rueda justo en el límite el contorno parpadea entre los dos
      niveles a cada cuadro. El margen es del 15 %. */
@@ -1398,8 +1477,15 @@ function actualizarNivelDeContorno(forzar, objetivo){
   // La opacidad se ajusta SIEMPRE, en cada cuadro: es lo que hace que el
   // desvanecido sea suave y no un salto. Cambiar `material.opacity` es barato,
   // no recompila nada.
-  edgeMesh.material.opacity      = rampa(px, CONTORNO_PX_DETALLE, 70, 0.55, OPACIDAD_CONTORNO_MAX);
+  // El 0,35 va atado a CONTORNO_PX_DETALLE = 14: son 260 aristas por pieza y a
+  // 15 px hay que dejarlas suaves o el negro se vuelve gris. Ver el comentario
+  // de CONTORNO_PX_DETALLE antes de mover cualquiera de los dos.
+  edgeMesh.material.opacity      = rampa(px, CONTORNO_PX_DETALLE, 70, 0.35, OPACIDAD_CONTORNO_MAX);
   edgeMeshLejos.material.opacity = rampa(px, CONTORNO_PX_MINIMO, CONTORNO_PX_LLENO, OPACIDAD_LEJOS_MIN, OPACIDAD_CONTORNO_MAX);
+
+  // Lo que se ve en pantalla: el nivel que toca y con cuánta intensidad
+  mostrarZoom3D(px, nivel, nivel==='real' ? edgeMesh.material.opacity
+                        : (nivel==='simple' ? edgeMeshLejos.material.opacity : null));
 
   if (!forzar && nivel === nivelContornoActual) return;   // el resto solo si cambió
   nivelContornoActual = nivel;
@@ -1957,16 +2043,16 @@ function rebuildMesh3D(opts){
      evita tener que rehacer todo cada vez que movés la rueda. */
   let tmplLejos = null, lejosPositions = null, lejosColors = null, vertsLejos = 0;
   if (esMagic() && contornoLineas){
-    tmplLejos = contornoSimpleTemplate(geo, voxelSize);
+    tmplLejos = contornoSimpleTemplate(voxelSize);
     vertsLejos = tmplLejos.length / 3;
     lejosPositions = new Float32Array(visible.length * tmplLejos.length);
     lejosColors = new Uint8Array(visible.length * vertsLejos * 4);
     const lejosGeo = new THREE.BufferGeometry();
     lejosGeo.setAttribute('position', new THREE.BufferAttribute(lejosPositions, 3));
     lejosGeo.setAttribute('color', new THREE.BufferAttribute(lejosColors, 4, true));
-    edgeMeshLejos = new THREE.LineSegments(lejosGeo, new THREE.LineBasicMaterial({
-      vertexColors:true, transparent:true, opacity:0.85
-    }));
+    edgeMeshLejos = new THREE.LineSegments(lejosGeo, sesgoHaciaLaCamara(
+      new THREE.LineBasicMaterial({ vertexColors:true, transparent:true, opacity:0.85 }),
+      SESGO_CONTORNO_LEJOS));
     edgeMeshLejos.visible = false;   // lo decide actualizarNivelDeContorno()
   }
 
