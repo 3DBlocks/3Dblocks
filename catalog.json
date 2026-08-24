@@ -161,6 +161,15 @@
       "price": 5,
       "thumb": "thumbs/gengar.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/gengar.json"
+    },
+    {
+      "slug": "blastoise",
+      "name": "blastoise",
+      "description": "pokemon agua",
+      "category": "",
+      "price": 10,
+      "thumb": "thumbs/blastoise.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/blastoise.json"
     }
   ]
 }
