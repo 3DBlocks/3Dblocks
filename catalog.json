@@ -211,8 +211,8 @@
       "slug": "picapiedras-dino",
       "name": "picapiedras dino",
       "description": "dibujos 90",
-      "category": "pica piedra",
-      "price": 6,
+      "category": "dino",
+      "price": 5,
       "thumb": "thumbs/picapiedras-dino.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/picapiedras-dino.json"
     }
