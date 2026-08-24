@@ -188,6 +188,15 @@
       "price": 7,
       "thumb": "thumbs/candy.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/candy.json"
+    },
+    {
+      "slug": "coraje",
+      "name": "coraje",
+      "description": "dibujos 90",
+      "category": "coraje",
+      "price": 4,
+      "thumb": "thumbs/coraje.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/coraje.json"
     }
   ]
 }
