@@ -152,6 +152,15 @@
       "price": 5,
       "thumb": "thumbs/raichu-alolan.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/raichu-alolan.json"
+    },
+    {
+      "slug": "gengar",
+      "name": "Gengar",
+      "description": "pokemon",
+      "category": "pokemon",
+      "price": 5,
+      "thumb": "thumbs/gengar.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/gengar.json"
     }
   ]
 }
