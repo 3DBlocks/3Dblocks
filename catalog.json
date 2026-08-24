@@ -143,6 +143,15 @@
       "price": 5,
       "thumb": "thumbs/condorito.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/condorito.json"
+    },
+    {
+      "slug": "raichu-alolan",
+      "name": "raichu alolan",
+      "description": "pokemon",
+      "category": "pokemon",
+      "price": 5,
+      "thumb": "thumbs/raichu-alolan.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/raichu-alolan.json"
     }
   ]
 }
