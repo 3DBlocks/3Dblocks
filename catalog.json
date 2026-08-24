@@ -197,6 +197,15 @@
       "price": 4,
       "thumb": "thumbs/coraje.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/coraje.json"
+    },
+    {
+      "slug": "pedro",
+      "name": "pedro",
+      "description": "dibujos 90",
+      "category": "pica piedra",
+      "price": 6,
+      "thumb": "thumbs/pedro.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/pedro.json"
     }
   ]
 }
