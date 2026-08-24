@@ -206,6 +206,15 @@
       "price": 6,
       "thumb": "thumbs/pedro.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/pedro.json"
+    },
+    {
+      "slug": "picapiedras-dino",
+      "name": "picapiedras dino",
+      "description": "dibujos 90",
+      "category": "pica piedra",
+      "price": 6,
+      "thumb": "thumbs/picapiedras-dino.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/picapiedras-dino.json"
     }
   ]
 }
