@@ -179,6 +179,15 @@
       "price": 7,
       "thumb": "thumbs/pajaro-loco.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/pajaro-loco.json"
+    },
+    {
+      "slug": "candy",
+      "name": "candy",
+      "description": "dibujos 90",
+      "category": "años 90",
+      "price": 7,
+      "thumb": "thumbs/candy.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/candy.json"
     }
   ]
 }
