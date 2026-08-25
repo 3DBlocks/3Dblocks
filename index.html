@@ -450,7 +450,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v54</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v56</small></div>
     </div>
     <div id="modelNameText">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -1501,25 +1501,51 @@ function actualizarNivelDeContorno(forzar, objetivo){
   edgeMeshLejos.visible = encendido && nivel === 'simple';
 }
 
-function contornoTemplate(geo, recortarBase){
+function contornoTemplate(geo, recortarBase, juntas, banda){
   const t = new THREE.EdgesGeometry(geo, 25);
   const a = t.attributes.position.array;
   t.dispose();
-  if (!recortarBase) return a;
-  geo.computeBoundingBox();
-  const yMin = geo.boundingBox.min.y;
-  const eps = Math.max(1e-4, (geo.boundingBox.max.y - yMin) * 0.01);
+  /* `juntas` = posiciones (en X) donde se tocan dos bloques DENTRO de una misma
+     pieza 1x2 / 1x3. Con el Magic Block, la pieza larga se arma repitiendo la
+     malla real una vez por celda, así que el contorno traía también el borde de
+     cada bloque interno: un 1x3 salía con dos rayas negras cruzándolo y en el
+     manual se veía igual que tres 1x1 sueltos. Acá se borran esas rayas.
+     `banda` es cuánto margen a cada lado de la unión se considera "unión"
+     (los dientes sobresalen ~7% de la celda, así que la banda tiene que
+     cubrirlos). */
+  const hayJuntas = !!(juntas && juntas.length && banda > 0);
+  if (!recortarBase && !hayJuntas) return a;
+  let yMin = 0, eps = 0;
+  if (recortarBase){
+    geo.computeBoundingBox();
+    yMin = geo.boundingBox.min.y;
+    eps = Math.max(1e-4, (geo.boundingBox.max.y - yMin) * 0.01);
+  }
+  // ¿En qué unión cae este punto? -1 = en ninguna.
+  const juntaDe = (x)=>{
+    for (let j=0;j<juntas.length;j++) if (Math.abs(x - juntas[j]) <= banda) return j;
+    return -1;
+  };
   const out = [];
   for (let i=0;i<a.length;i+=6){
-    if (a[i+1] < yMin + eps && a[i+4] < yMin + eps) continue; // los dos extremos en la base
+    if (recortarBase && a[i+1] < yMin + eps && a[i+4] < yMin + eps) continue; // los dos extremos en la base
+    if (hayJuntas){
+      // Se borra solo si la línea ENTERA vive dentro de UNA misma unión: eso es
+      // el borde interno. Las líneas largas de los costados van de una unión a
+      // la otra (o de una punta a una unión), así que se conservan — y como
+      // quedan alineadas entre bloque y bloque, se ven como una sola línea que
+      // recorre toda la pieza.
+      const j1 = juntaDe(a[i]), j2 = juntaDe(a[i+3]);
+      if (j1 >= 0 && j1 === j2) continue;
+    }
     for (let k=0;k<6;k++) out.push(a[i+k]);
   }
   return new Float32Array(out);
 }
 /* Replica el contorno de `geo` en cada instancia de `mesh`, con su color.
    colorDe(i) devuelve el color del contorno para la instancia i. */
-function buildEdgesForInstances(geo, mesh, cantidad, colorDe){
-  const tp = contornoTemplate(geo, esMagic());
+function buildEdgesForInstances(geo, mesh, cantidad, colorDe, juntas, banda){
+  const tp = contornoTemplate(geo, esMagic(), juntas, banda);
   const vertsPer = tp.length / 3;
   const pos = new Float32Array(cantidad * tp.length);
   // 4 valores por vértice (color + transparencia), 1 byte cada uno. La
@@ -1930,14 +1956,20 @@ function buildPieceMeshes(visible){
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     scene.add(mesh);
     pieceMeshes.push(mesh);
-    // Contorno de la pieza — también en el manual y el video
+    // Contorno de la pieza — también en el manual y el video.
+    // ⚠️ El contorno se dibuja SOLO por fuera de la pieza: las uniones entre los
+    // bloques de un mismo 1x2 / 1x3 no llevan línea, si no la pieza larga se ve
+    // partida y en el manual parece dos o tres piezas 1x1 pegadas.
+    const juntas = [];
+    for (let j=1; j<len; j++) juntas.push(-voxelSize*len/2 + voxelSize*j);
+    const bandaJunta = voxelSize*0.10; // cubre los dientes, que sobresalen ~7%
     if (usarContornoReal() || (contornoInstrucciones && showMeshTexture)){
       try{
         const tc = new THREE.Color();
         const lineas = buildEdgesForInstances(geo, mesh, list.length, i=>{
           tc.set(cleanColor(list[i][0].color));
           return colorDeContorno(tc);
-        });
+        }, juntas, bandaJunta);
         scene.add(lineas);
         pieceMeshes.push(lineas);
       } catch(err){ console.warn('No se pudo dibujar el contorno real de las piezas:', err); }
@@ -1963,10 +1995,22 @@ function rebuildMesh3D(opts){
   lastVisibleVoxels = visible; // mismos objetos que están en `voxels` — permite pintar por índice de instancia
   if (!visible.length) return;
 
-  // Modo "piezas": dibuja las 1x2 / 1x3 como UNA pieza alargada. Solo se usa al
-  // generar el manual y el video (en el visor normal se edita bloque por bloque,
-  // y ahí hace falta que cada bloque sea una instancia aparte para poder pintarlo).
-  if (renderAsPieces && visible.some(v=>v.pieceSize && v.pieceSize !== '1x1')){
+  /* Modo "piezas": dibuja las 1x2 / 1x3 como UNA pieza alargada, no como dos o
+     tres bloques pegados. La agrupación NO se calcula acá: se lee de `v.piece` y
+     `v.pieceSize`, que es lo mismo que usa el plano 2D. Una sola fuente de datos.
+
+     ¿Cuándo se usa?
+       · siempre que se genera el manual (`renderAsPieces`), como antes;
+       · y ahora también EN EL VISOR 3D, mientras NO estés editando.
+
+     ⚠️ Por qué se apaga al editar: el pintado en 3D encuentra el bloque tocado
+     con `lastVisibleVoxels[hit.instanceId]` sobre `instMesh`, y en modo piezas
+     `instMesh` no existe (el dibujado va por `pieceMeshes`, una instancia por
+     PIEZA y no por bloque). Apagarlo mientras el lápiz está activo deja el
+     editor funcionando exactamente igual que siempre, sin tocarle una línea.
+     Al apagar el lápiz vuelven a verse las piezas armadas. */
+  const verPiezas = renderAsPieces || !paintMode;
+  if (verPiezas && visible.some(v=>v.pieceSize && v.pieceSize !== '1x1')){
     try{
       buildPieceMeshes(visible);
       layerPlaneEdge.position.y = layerPickPlane.position.y = currentLayer*voxelSize + voxelSize*1.001;
@@ -4542,6 +4586,22 @@ function applyPieceGrouping(){
 }
 document.getElementById('regroupPiecesBtn').addEventListener('click', ()=>{ pushUndoSnapshot(); applyPieceGrouping(); });
 
+/* "Piezas a usar" (1x1 / 1x2 / 1x3) se aplica AL INSTANTE, sin tener que apretar
+   "Reagrupar". Antes había que acordarse del botón, y hasta entonces el plano 2D
+   y el visor 3D seguían mostrando la agrupación vieja.
+   NO se agrega lógica nueva: se llama a la misma `applyPieceGrouping()` que usa
+   el botón, con el mismo `pushUndoSnapshot()` delante — así Ctrl+Z deshace el
+   cambio igual que si lo hubieras hecho a mano. La agrupación queda guardada en
+   `v.piece` / `v.pieceSize`, que es lo que leen el plano 2D y el visor 3D: una
+   sola fuente de datos para los dos. */
+['piece1x1','piece1x2','piece1x3'].forEach(id=>{
+  document.getElementById(id).addEventListener('change', ()=>{
+    if (!voxels.length) return;                    // sin modelo no hay nada que reagrupar
+    pushUndoSnapshot();
+    applyPieceGrouping();                          // redibuja el 2D y el 3D
+  });
+});
+
 document.getElementById('revoxelizeBtn').addEventListener('click', async ()=>{
   const tris = lastVoxelizerTris || (lastDaeParsed && lastDaeParsed.tris);
   if (!tris) return;
@@ -4931,7 +4991,11 @@ document.getElementById('paintModeBtn').addEventListener('click', e=>{
   document.getElementById('diagramCanvasWrap').classList.toggle('paint-cursor', paintMode);
   document.getElementById('contextCanvas3d').classList.toggle('paint-cursor', paintMode);
   refreshUsedColorsPanel();
-  setStatus(paintMode ? 'Modo edición activado: tocá (o mantené presionado y arrastrá) sobre el plano 2D o el visor 3D.' : '', paintMode ? 'ok' : '');
+  // El visor 3D muestra las piezas armadas cuando NO estás editando, y vuelve a
+  // bloque por bloque cuando encendés el lápiz (ver el comentario de `verPiezas`
+  // en rebuildMesh3D). Hay que redibujar para que el cambio se vea al instante.
+  rebuildMesh3D();
+  setStatus(paintMode ? 'Modo edición activado: tocá (o mantené presionado y arrastrá) sobre el plano 2D o el visor 3D. Mientras editás, el visor muestra bloque por bloque.' : '', paintMode ? 'ok' : '');
 });
 document.querySelectorAll('.tool-btn').forEach(btn=>{
   btn.addEventListener('click', ()=>{
