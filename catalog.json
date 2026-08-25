@@ -215,6 +215,15 @@
       "price": 5,
       "thumb": "thumbs/picapiedras-dino.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/picapiedras-dino.json"
+    },
+    {
+      "slug": "zoid-blue-lager",
+      "name": "Zoid  blue lager",
+      "description": "zoid",
+      "category": "zoid",
+      "price": 10,
+      "thumb": "thumbs/zoid-blue-lager.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/zoid-blue-lager.json"
     }
   ]
 }
