@@ -450,7 +450,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v56</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v57</small></div>
     </div>
     <div id="modelNameText">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -1444,7 +1444,19 @@ function rampa(v, desde, hasta, valDesde, valHasta){
   const t = Math.max(0, Math.min(1, (v - desde) / (hasta - desde)));
   return valDesde + (valHasta - valDesde) * t;
 }
-const OPACIDAD_CONTORNO_MAX = 0.85;
+/* Piso de la rampa del contorno completo: con 260 aristas por pieza a 15 px, si
+   la línea va fuerte las zonas negras se vuelven grises. Ver CONTORNO_PX_DETALLE.
+   Subido de 0,35 a 0,50 junto con el techo, para que las piezas se distingan
+   mejor sin que el negro deje de leerse negro. */
+const OPACIDAD_CONTORNO_MIN = 0.50;
+/* Piso del contorno cuando el visor dibuja las PIEZAS armadas. Más alto que el
+   de arriba a propósito — ver el comentario en actualizarNivelDeContorno(). */
+const OPACIDAD_PIEZAS_MIN = 0.75;
+/* Peso máximo de la línea de contorno. Es el techo de las dos rampas de
+   distancia y también el valor que usan las líneas del modo piezas.
+   Subido de 0,85 a 1,0 a pedido: con las piezas 1x2/1x3 armadas costaba
+   distinguir dónde terminaba una y empezaba la otra. */
+const OPACIDAD_CONTORNO_MAX = 1.0;
 
 /* Lectura del zoom en pantalla (abajo a la izquierda del visor 3D).
    Muestra cuántos píxeles ocupa UN BLOQUE y qué contorno le toca. Está para poder
@@ -1458,7 +1470,7 @@ function mostrarZoom3D(px, nivel, opacidad){
   const clave = n + '|' + nivel + '|' + (opacidad==null ? '' : Math.round(opacidad*100));
   if (clave === ultimoZoomMostrado) return;
   ultimoZoomMostrado = clave;
-  const nombres = { real:'contorno completo', simple:'línea simple', nada:'sin línea' };
+  const nombres = { real:'contorno completo', simple:'línea simple', nada:'sin línea', piezas:'piezas armadas' };
   const detalle = nivel
     ? ' · ' + nombres[nivel] + (opacidad!=null ? ' <i>'+Math.round(opacidad*100)+'%</i>' : '')
     : '';
@@ -1469,6 +1481,32 @@ let nivelContornoActual = null;
 function actualizarNivelDeContorno(forzar, objetivo){
   const pxAhora = pixelesPorBloque(objetivo);
   if (pxAhora === null) return;   // lienzo escondido: no hay nada que decidir
+
+  /* MODO PIEZAS: acá no hay `edgeMesh` — el contorno son las líneas que arma
+     buildPieceMeshes(), una por cada combinación de largo y orientación.
+     Tenían la opacidad fija, así que se veían igual de cerca que de lejos y de
+     lejos ensuciaban. Ahora siguen la misma rampa que el resto: cuanto más
+     chico el bloque en pantalla, más suave la línea.
+     ⚠️ El piso es MÁS ALTO que el del bloque suelto (0,75 contra 0,50) y no es
+     un capricho: una pieza 1x3 lleva UN contorno en vez de tres, así que hay
+     bastante menos línea en pantalla y no ensucia el color como el otro modo.
+     Con el piso bajo, de lejos las piezas se despintaban y costaba ver dónde
+     terminaba una y empezaba la otra — justo lo contrario de lo que se busca.
+     Medido sobre un muro mitad negro mitad amarillo, a 26 px por bloque:
+       piso 0,50 → línea 86, contraste 61
+       piso 0,75 → línea ~120, contraste ~95 */
+  if (!edgeMesh && pieceMeshes.length){
+    const op = rampa(pxAhora, CONTORNO_PX_DETALLE, 70, OPACIDAD_PIEZAS_MIN, OPACIDAD_CONTORNO_MAX);
+    let hubo = false;
+    for (const m of pieceMeshes){
+      if (!m.isLineSegments) continue;
+      m.material.opacity = op;
+      hubo = true;
+    }
+    mostrarZoom3D(pxAhora, hubo ? 'piezas' : null, hubo ? op : null);
+    return;
+  }
+
   if (!edgeMesh){ mostrarZoom3D(pxAhora, null, null); return; }
   // Sin el contorno simple armado (bloques de caja, o contorno apagado) no hay
   // nada que cambiar: el de caja ya son 12 aristas, no se gana nada.
@@ -1487,7 +1525,7 @@ function actualizarNivelDeContorno(forzar, objetivo){
   // El 0,35 va atado a CONTORNO_PX_DETALLE = 14: son 260 aristas por pieza y a
   // 15 px hay que dejarlas suaves o el negro se vuelve gris. Ver el comentario
   // de CONTORNO_PX_DETALLE antes de mover cualquiera de los dos.
-  edgeMesh.material.opacity      = rampa(px, CONTORNO_PX_DETALLE, 70, 0.35, OPACIDAD_CONTORNO_MAX);
+  edgeMesh.material.opacity      = rampa(px, CONTORNO_PX_DETALLE, 70, OPACIDAD_CONTORNO_MIN, OPACIDAD_CONTORNO_MAX);
   edgeMeshLejos.material.opacity = rampa(px, CONTORNO_PX_MINIMO, CONTORNO_PX_LLENO, OPACIDAD_LEJOS_MIN, OPACIDAD_CONTORNO_MAX);
 
   // Lo que se ve en pantalla: el nivel que toca y con cuánta intensidad
@@ -1574,7 +1612,7 @@ function buildEdgesForInstances(geo, mesh, cantidad, colorDe, juntas, banda){
   g.setAttribute('color', new THREE.BufferAttribute(col,4,true));
   g.computeBoundingSphere();
   return new THREE.LineSegments(g, new THREE.LineBasicMaterial({
-    vertexColors:true, transparent:true, opacity:0.85
+    vertexColors:true, transparent:true, opacity:OPACIDAD_CONTORNO_MAX
   }));
 }
 
@@ -1898,6 +1936,34 @@ const belowLayerColor = new THREE.Color('#9aa4bd');
    Se usa solo para el manual y el video: así una pieza 1x3 se ve como una sola
    pieza larga con 3 botones, tal como la vas a tomar de la bolsita al armar. */
 const pieceMeshes = [];
+/* ¿Este grupo de celdas sigue siendo una pieza de verdad?
+   Al editar (pintar un bloque, borrar otro, deshacer) los datos de agrupación
+   pueden quedar viejos: sobrevive el `v.piece` pero las celdas ya no forman la
+   pieza. Si se dibujaran igual, aparecería una pieza larga de un color que ya no
+   existe, o flotando sobre un hueco.
+   La comprobación se hace ACÁ, al dibujar, y NO al editar: así ninguna ruta de
+   edición — ni las del plano 2D, que no se tocaron — puede dejar el visor
+   mostrando algo falso, y no hace falta acordarse de avisar desde cada una.
+   Es de solo lectura: no cambia ningún dato. */
+function piezaSigueSiendoValida(cells){
+  if (cells.length <= 1) return true;
+  if (cells.length > 3) return false;
+  const c0 = cells[0];
+  const y = Math.round(c0.y);
+  for (const c of cells){
+    if (c.color !== c0.color) return false;       // le pintaron una celda
+    if (Math.round(c.y) !== y) return false;       // quedaron en capas distintas
+  }
+  // Tienen que estar en fila y pegadas, a lo largo de X o de Z
+  const mismaX = cells.every(c => c.x === c0.x);
+  const mismaZ = cells.every(c => c.z === c0.z);
+  if (!mismaX && !mismaZ) return false;
+  const eje = mismaX ? cells.map(c=>c.z) : cells.map(c=>c.x);
+  eje.sort((a,b)=>a-b);
+  for (let i=1;i<eje.length;i++) if (eje[i] !== eje[i-1]+1) return false;  // hay un hueco
+  return true;
+}
+
 function buildPieceMeshes(visible){
   // Junta los bloques por pieza
   const groups = new Map();
@@ -1906,6 +1972,12 @@ function buildPieceMeshes(visible){
     if (!groups.has(id)) groups.set(id, []);
     groups.get(id).push(v);
   });
+  // Las que ya no son una pieza válida se dibujan como bloques sueltos
+  for (const [id, cells] of Array.from(groups)){
+    if (piezaSigueSiendoValida(cells)) continue;
+    groups.delete(id);
+    cells.forEach(c=>{ groups.set('roto:'+c.x+','+Math.round(c.y)+','+c.z, [c]); });
+  }
 
   // Separa por (largo, orientación): cada combinación necesita su propia geometría
   const buckets = new Map(); // "2|x" -> [{cells, color}]
@@ -1938,6 +2010,10 @@ function buildPieceMeshes(visible){
     // manual (donde el material se reemplaza por el plástico con luces).
     if (showMeshTexture && !esMagic() && !contornoInstrucciones) mat.map = getMeshTexture();
     const mesh = new THREE.InstancedMesh(geo, mat, list.length);
+    // Qué bloques forma cada instancia. Sin esto no se puede saber qué bloque
+    // tocaste al hacer clic en el visor, porque acá una instancia es una PIEZA
+    // (de 1, 2 o 3 bloques) y no un bloque. Ver bloqueBajoElCursor().
+    mesh.userData.celdas = list;
     list.forEach((cells,i)=>{
       const xs = cells.map(c=>c.x), zs = cells.map(c=>c.z);
       const cx = (Math.min(...xs) + Math.max(...xs))/2;
@@ -1999,18 +2075,16 @@ function rebuildMesh3D(opts){
      tres bloques pegados. La agrupación NO se calcula acá: se lee de `v.piece` y
      `v.pieceSize`, que es lo mismo que usa el plano 2D. Una sola fuente de datos.
 
-     ¿Cuándo se usa?
-       · siempre que se genera el manual (`renderAsPieces`), como antes;
-       · y ahora también EN EL VISOR 3D, mientras NO estés editando.
+     Se usa SIEMPRE que haya piezas largas: en el manual y en el visor 3D, se
+     esté editando o no.
 
-     ⚠️ Por qué se apaga al editar: el pintado en 3D encuentra el bloque tocado
-     con `lastVisibleVoxels[hit.instanceId]` sobre `instMesh`, y en modo piezas
-     `instMesh` no existe (el dibujado va por `pieceMeshes`, una instancia por
-     PIEZA y no por bloque). Apagarlo mientras el lápiz está activo deja el
-     editor funcionando exactamente igual que siempre, sin tocarle una línea.
-     Al apagar el lápiz vuelven a verse las piezas armadas. */
-  const verPiezas = renderAsPieces || !paintMode;
-  if (verPiezas && visible.some(v=>v.pieceSize && v.pieceSize !== '1x1')){
+     ⚠️ En modo piezas `instMesh` no existe — el dibujado va por `pieceMeshes`,
+     con una instancia por PIEZA y no por bloque — así que el índice de instancia
+     ya no sirve para encontrar un bloque. De eso se encarga
+     `bloqueBajoElCursor()`, que sabe leer los dos modos. Si alguna vez agregás
+     otra herramienta que necesite saber qué bloque tocó el usuario, usá esa
+     función y no `lastVisibleVoxels[hit.instanceId]` a mano. */
+  if (visible.some(v=>v.pieceSize && v.pieceSize !== '1x1')){
     try{
       buildPieceMeshes(visible);
       layerPlaneEdge.position.y = layerPickPlane.position.y = currentLayer*voxelSize + voxelSize*1.001;
@@ -2102,7 +2176,7 @@ function rebuildMesh3D(opts){
     lejosGeo.setAttribute('position', new THREE.BufferAttribute(lejosPositions, 3));
     lejosGeo.setAttribute('color', new THREE.BufferAttribute(lejosColors, 4, true));
     edgeMeshLejos = new THREE.LineSegments(lejosGeo, sesgoHaciaLaCamara(
-      new THREE.LineBasicMaterial({ vertexColors:true, transparent:true, opacity:0.85 }),
+      new THREE.LineBasicMaterial({ vertexColors:true, transparent:true, opacity:OPACIDAD_CONTORNO_MAX }),
       SESGO_CONTORNO_LEJOS));
     edgeMeshLejos.visible = false;   // lo decide actualizarNivelDeContorno()
   }
@@ -2495,7 +2569,7 @@ function drawPrintLayer(ctx, W, H, layer){
    material de plástico brillante — y lo devolvemos todo a como estaba al terminar.
    Usa la orientación/cámara actual, tal como esté el modelo en pantalla. */
 async function generatePresentationRender(){
-  if (!voxels.length || !instMesh){ setStatus('No hay ningún diseño cargado.', 'err'); return; }
+  if (!voxels.length || !hayModeloEnElVisor()){ setStatus('No hay ningún diseño cargado.', 'err'); return; }
   setLoading(true, 'Generando la foto (puede tardar unos segundos)…');
   await new Promise(r=>setTimeout(r, 30));
 
@@ -2535,7 +2609,12 @@ async function generatePresentationRender(){
   // la sombra dura dejaba el hueco pintado de negro total, sin luz que llegara ahí.
   // Con solo la iluminación pareja (ambiente + direccionales, sin oclusión) el
   // plástico sigue viéndose con volumen real, pero sin ese agujero negro feo.
-  const oldMat = instMesh.material;
+  /* Los cuerpos pueden ser UN solo instMesh (bloque por bloque) o VARIOS
+     pieceMeshes (modo piezas). Se guardan los materiales de todos para poder
+     devolverlos al terminar. Antes esto asumía que instMesh existía siempre y
+     reventaba al sacar la foto con las piezas armadas. */
+  const cuerpos = instMesh ? [instMesh] : pieceMeshes.filter(m => m.isInstancedMesh);
+  const matsOriginales = cuerpos.map(m => m.material);
   const realMat = new THREE.MeshPhysicalMaterial({
     roughness: 0.32,        // brillo tipo plástico de juguete, no mate como antes
     metalness: 0.02,
@@ -2543,21 +2622,30 @@ async function generatePresentationRender(){
     clearcoatRoughness: 0.18,
   });
   materialParaInstrucciones(realMat);
-  const wasEdgeVisible = edgeMesh.visible;
-  edgeMesh.visible = false; // el contorno grueso no queda bien en una foto con luces reales
+  // El contorno grueso no queda bien en una foto con luces reales — se apaga el
+  // del modo normal Y el de las piezas, que son objetos distintos.
+  const lineasDePieza = pieceMeshes.filter(m => m.isLineSegments);
+  const wasEdgeVisible = edgeMesh ? edgeMesh.visible : false;
+  if (edgeMesh) edgeMesh.visible = false;
+  const wasLejosVisible = edgeMeshLejos ? edgeMeshLejos.visible : false;
+  if (edgeMeshLejos) edgeMeshLejos.visible = false;
+  const wasLineasVisible = lineasDePieza.map(l => l.visible);
+  lineasDePieza.forEach(l => l.visible = false);
   const wasDarkEdgeVisible = darkEdgeMesh ? darkEdgeMesh.visible : false;
   if (darkEdgeMesh) darkEdgeMesh.visible = false; // la malla blanca tampoco: la foto busca verse realista
-  const wasSeamVisible = seamMesh.visible;
-  seamMesh.visible = false;
+  const wasSeamVisible = seamMesh ? seamMesh.visible : false;
+  if (seamMesh) seamMesh.visible = false;
 
   renderer.render(scene, camera);
   const dataUrl = renderer.domElement.toDataURL('image/png');
 
   // Devolver TODO a como estaba en el visor
-  instMesh.material = oldMat;
+  cuerpos.forEach((m,i)=>{ m.material = matsOriginales[i]; });
   realMat.dispose();
-  edgeMesh.visible = wasEdgeVisible;
-  seamMesh.visible = wasSeamVisible;
+  if (edgeMesh) edgeMesh.visible = wasEdgeVisible;
+  if (edgeMeshLejos) edgeMeshLejos.visible = wasLejosVisible;
+  lineasDePieza.forEach((l,i)=>{ l.visible = wasLineasVisible[i]; });
+  if (seamMesh) seamMesh.visible = wasSeamVisible;
   if (darkEdgeMesh) darkEdgeMesh.visible = wasDarkEdgeVisible;
   ground.visible = wasGroundVisible;
   ground.material.color.copy(wasGroundColor);
@@ -2872,7 +2960,7 @@ document.getElementById('anglePreviewCloseBtn').addEventListener('click', ()=>{
 async function generateInstructionsPDF(){
   if (!voxels.length){ setStatus('No hay ningún diseño cargado para generar instrucciones.', 'err'); return; }
   if (!window.jspdf){ setStatus('No se pudo cargar el generador de PDF. Revisá tu conexión y probá de nuevo.', 'err'); return; }
-  if (!instMesh){ setStatus('Esperá a que termine de cargar el visor 3D y probá de nuevo.', 'err'); return; }
+  if (!hayModeloEnElVisor()){ setStatus('Esperá a que termine de cargar el visor 3D y probá de nuevo.', 'err'); return; }
   setLoading(true, 'Generando instrucciones en 3D (puede tardar, layer por layer)…');
   await new Promise(r=>setTimeout(r, 30));
 
@@ -3311,7 +3399,7 @@ document.getElementById('videoInstructionsBtn').addEventListener('click', genera
 async function generateInstructionsPNGZip(){
   if (!voxels.length){ setStatus('No hay ningún diseño cargado para generar instrucciones.', 'err'); return; }
   if (!window.JSZip){ setStatus('No se pudo cargar el generador de .zip. Revisá tu conexión y probá de nuevo.', 'err'); return; }
-  if (!instMesh){ setStatus('Esperá a que termine de cargar el visor 3D y probá de nuevo.', 'err'); return; }
+  if (!hayModeloEnElVisor()){ setStatus('Esperá a que termine de cargar el visor 3D y probá de nuevo.', 'err'); return; }
   setLoading(true, 'Generando imágenes en 3D (puede tardar, capa por capa)…');
   await new Promise(r=>setTimeout(r, 30));
 
@@ -4498,11 +4586,17 @@ function allowedPieceLengths(){
   return out.sort((a,b)=>b-a); // primero las largas: usan menos piezas
 }
 
+/* Contador de identificadores de pieza. Vive AFUERA de la función a propósito:
+   `groupVoxelsIntoPieces()` también se usa sobre un puñado de bloques sueltos
+   (cuando una pieza larga se parte al editar), y con un contador local esas
+   piezas nuevas se llamarían 'p0', 'p1'… chocando con las que ya existen en el
+   resto del modelo. Dos piezas distintas con el mismo id se dibujan como una
+   sola. Con el contador afuera, cada id es único para siempre. */
+let pieceIdSeq = 0;
 function groupVoxelsIntoPieces(list, lengths){
   const byKey = new Map();
   list.forEach(v=>{ byKey.set(v.x+','+Math.round(v.y)+','+v.z, v); });
   const used = new Set();
-  let pieceId = 0;
   const stats = new Map(); // "1x2" -> cantidad
 
   // Recorrido ordenado para que el resultado sea siempre el mismo
@@ -4529,7 +4623,7 @@ function groupVoxelsIntoPieces(list, lengths){
           cells.push({k:nk, v:nv});
         }
         if (cells.length === len){
-          const id = 'p'+(pieceId++);
+          const id = 'p'+(pieceIdSeq++);
           const label = '1x'+len;
           cells.forEach(({k,v:cv},i)=>{
             used.add(k);
@@ -4544,7 +4638,7 @@ function groupVoxelsIntoPieces(list, lengths){
 
     if (!placed){
       used.add(key);
-      const id = 'p'+(pieceId++);
+      const id = 'p'+(pieceIdSeq++);
       v.piece = id; v.pieceSize = '1x1'; v.pieceIndex = 0;
       stats.set('1x1', (stats.get('1x1')||0)+1);
     }
@@ -5636,6 +5730,65 @@ function cellFrom3DEvent(e, targetObj){
   const hits = paintRaycaster.intersectObject(targetObj);
   return hits.length ? hits[0] : null;
 }
+
+/* ---------------------------- Qué bloque tocaste en el visor 3D ----------------------------
+   El visor dibuja de DOS maneras distintas y hay que saber leer las dos:
+
+     · bloque por bloque → cada instancia de `instMesh` ES un bloque, y el índice
+       de instancia entra directo en `lastVisibleVoxels`. Es lo de siempre.
+     · por piezas        → cada instancia de un `pieceMesh` es una PIEZA de 1, 2 o
+       3 bloques. El índice ya no sirve para encontrar un bloque: hay que mirar
+       CUÁL de las celdas de esa pieza quedó bajo el punto que tocaste.
+
+   Antes solo existía el primer caso, y por eso el visor tenía que volver a
+   bloque por bloque para poder editar. Con esto se puede ver las piezas armadas
+   y editar al mismo tiempo. */
+function bloqueBajoElCursor(e){
+  if (instMesh && lastVisibleVoxels.length){
+    const hit = cellFrom3DEvent(e, instMesh);
+    return hit ? (lastVisibleVoxels[hit.instanceId] || null) : null;
+  }
+  const cuerpos = pieceMeshes.filter(m => m.isInstancedMesh && m.userData.celdas);
+  if (!cuerpos.length) return null;
+  const rect = renderer.domElement.getBoundingClientRect();
+  paintPointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  paintPointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  paintRaycaster.setFromCamera(paintPointer, camera);
+  const hits = paintRaycaster.intersectObjects(cuerpos, false);
+  if (!hits.length) return null;
+  const h = hits[0];
+  const celdas = h.object.userData.celdas[h.instanceId];
+  if (!celdas || !celdas.length) return null;
+  if (celdas.length === 1) return celdas[0];
+  // La celda de la pieza que cayó más cerca del punto tocado
+  const offsetX = (dims.x*voxelSize)/2, offsetZ = (dims.z*voxelSize)/2;
+  let mejor = celdas[0], mejorD = Infinity;
+  for (const c of celdas){
+    const dx = (c.x*voxelSize - offsetX) - h.point.x;
+    const dz = (c.z*voxelSize - offsetZ) - h.point.z;
+    const d = dx*dx + dz*dz;
+    if (d < mejorD){ mejorD = d; mejor = c; }
+  }
+  return mejor;
+}
+
+/* ¿Hay algo dibujado en el visor con lo que se pueda interactuar? */
+function hayModeloEnElVisor(){ return !!instMesh || pieceMeshes.length > 0; }
+
+/* Al editar una celda que forma parte de una pieza larga, la pieza SE PARTE.
+   Una pieza física tiene un solo color y no se le puede sacar un pedazo: si
+   pintás o borrás una de sus celdas, deja de ser esa pieza.
+   Las celdas que quedan se vuelven a agrupar entre ellas — o sea que a un 1x3 al
+   que le sacás una punta le queda un 1x2, y si le sacás el medio le quedan dos
+   1x1. Es una cuenta sobre 2 o 3 bloques: instantánea.
+   (Reagrupar el modelo entero acá costaría ~370 ms con 11.500 bloques, y se
+   notaría en cada pincelada.) */
+function separarPiezaDe(v){
+  if (!v || !v.piece || !v.pieceSize || v.pieceSize === '1x1') return;
+  const hermanas = voxels.filter(o => o.piece === v.piece && o !== v);
+  v.piece = 'p'+(pieceIdSeq++); v.pieceSize = '1x1'; v.pieceIndex = 0;
+  if (hermanas.length) groupVoxelsIntoPieces(hermanas, allowedPieceLengths());
+}
 function apply3DEditAt(e){
   if (activeTool === 'place'){
     const hit = cellFrom3DEvent(e, layerPickPlane);
@@ -5647,14 +5800,15 @@ function apply3DEditAt(e){
   } else if (activeTool === 'replace'){
     return; // "Cambio" solo funciona con un clic, no arrastrando
   } else {
-    if (!instMesh || !lastVisibleVoxels.length) return;
-    const hit = cellFrom3DEvent(e, instMesh);
-    if (!hit){ if (!isDragEditing) setStatus('Tocá directo sobre un bloque.', 'err'); return; }
-    const v = lastVisibleVoxels[hit.instanceId];
-    if (!v) return;
+    if (!hayModeloEnElVisor()) return;
+    const v = bloqueBajoElCursor(e);
+    if (!v){ if (!isDragEditing) setStatus('Tocá directo sobre un bloque.', 'err'); return; }
     const key = v.x+','+v.z;
     if (key === lastEditedCellKey) return;
     lastEditedCellKey = key;
+    // Si el bloque era parte de una pieza larga, la pieza se parte: una pieza
+    // física tiene un solo color y no se le puede sacar un pedazo.
+    separarPiezaDe(v);
     if (activeTool === 'erase'){
       voxels.splice(voxels.indexOf(v), 1);
     } else {
@@ -5696,9 +5850,8 @@ renderer.domElement.addEventListener('pointerup', e=>{
   if (e.button === 2 && rightDown3DXY){
     const moved = Math.hypot(e.clientX-rightDown3DXY.x, e.clientY-rightDown3DXY.y);
     rightDown3DXY = null;
-    if (moved < CLICK_MOVE_THRESHOLD && paintMode && instMesh && lastVisibleVoxels.length){
-      const hit = cellFrom3DEvent(e, instMesh);
-      if (hit) pickColorFromVoxel(lastVisibleVoxels[hit.instanceId]);
+    if (moved < CLICK_MOVE_THRESHOLD && paintMode && hayModeloEnElVisor()){
+      pickColorFromVoxel(bloqueBajoElCursor(e));
     }
     return; // si fue arrastre, dejamos que siga siendo "orbitar" como siempre
   }
@@ -5708,9 +5861,8 @@ renderer.domElement.addEventListener('pointerup', e=>{
     marqueeBox.style.display = 'none';
     if (moved < CLICK_MOVE_THRESHOLD){
       // CLIC simple: selecciona un solo bloque
-      if (instMesh && lastVisibleVoxels.length){
-        const hit = cellFrom3DEvent(e, instMesh);
-        const v = hit ? lastVisibleVoxels[hit.instanceId] : null;
+      if (hayModeloEnElVisor()){
+        const v = bloqueBajoElCursor(e);
         setBoxSelection(v ? new Set([v.x+','+Math.round(v.y)+','+v.z]) : null);
       }
     } else {
@@ -5741,21 +5893,14 @@ renderer.domElement.addEventListener('pointerup', e=>{
     if (activeTool === 'place' || activeTool === 'brush'){
       apply3DEditAt(e);
     } else if (activeTool === 'replace'){
-      if (instMesh && lastVisibleVoxels.length){
-        const hit = cellFrom3DEvent(e, instMesh);
-        if (hit){
-          const v = lastVisibleVoxels[hit.instanceId];
-          if (v){
-            startColorReplaceSelection(v.color);
-          }
-        } else {
-          setStatus('Tocá directo sobre un bloque.', 'err');
-        }
+      if (hayModeloEnElVisor()){
+        const v = bloqueBajoElCursor(e);
+        if (v) startColorReplaceSelection(v.color);
+        else setStatus('Tocá directo sobre un bloque.', 'err');
       }
-    } else if (instMesh && lastVisibleVoxels.length){
-      const hit = cellFrom3DEvent(e, instMesh);
-      if (hit){
-        const v = lastVisibleVoxels[hit.instanceId];
+    } else if (hayModeloEnElVisor()){
+      const v = bloqueBajoElCursor(e);
+      {
         if (v){
           // Si el bloque tocado es de OTRA capa (ej: una capa de abajo mostrada en
           // gris), cambia a esa capa automáticamente antes de seleccionar — antes
@@ -5787,9 +5932,9 @@ renderer.domElement.addEventListener('pointerup', e=>{
               drawLayerDiagram(); rebuildMesh3D(); refreshLayerUI();
             }
           }
+        } else {
+          setStatus('Tocá directo sobre un bloque.', 'err');
         }
-      } else {
-        setStatus('Tocá directo sobre un bloque.', 'err');
       }
     }
   }
