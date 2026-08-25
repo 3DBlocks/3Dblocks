@@ -233,6 +233,15 @@
       "price": 10,
       "thumb": "thumbs/marcos.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/marcos.json"
+    },
+    {
+      "slug": "maestro-haposai",
+      "name": "maestro haposai",
+      "description": "maestro haposai",
+      "category": "maestro haposai",
+      "price": 10,
+      "thumb": "thumbs/maestro-haposai.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/maestro-haposai.json"
     }
   ]
 }
