@@ -450,7 +450,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v51</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v53</small></div>
     </div>
     <div id="modelNameText">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -470,6 +470,7 @@
         <button class="tool-btn" id="toolSelectBtn" data-tool="select" title="Selección: arrastrá un rectángulo (en el plano 2D o en el visor 3D, desde cualquier ángulo) para elegir varios bloques a la vez, y copiarlos o espejarlos">▭</button>
         <button class="tool-btn" id="undoBtn" title="Deshacer (Ctrl+Z)">↩️</button>
         <button class="tool-btn" id="hollowLayerBtn3d" title="Vaciar el interior de la capa que estás viendo (usa el grosor de pared del panel lateral)">🕳️</button>
+        <button class="tool-btn" id="dupLayerBtn" title="Replicar esta capa: copia todos sus bloques a una capa nueva justo arriba, empujando hacia arriba lo que ya estaba">⧉</button>
         <button class="tool-btn" id="renderBtnFloating" title="Generar una foto de presentación con luces e iluminación real">🖼️</button>
         <div id="paletteRow" style="display:none;"></div>
       </div>
@@ -507,7 +508,16 @@
             <button class="btn sm" id="selCopyBtn" title="Copiar (Ctrl+C)">📋 Copiar</button>
             <button class="btn sm" id="selPasteBtn" title="Pegar (Ctrl+V)">📥 Pegar</button>
             <button class="btn sm" id="selMirrorBtn" title="Copia la selección y la espeja en el eje X, pegada al lado — para completar mitades simétricas">🪞 Copiar y Espejo</button>
-            <button class="btn sm" id="selClearBtn" title="Cancelar selección (Esc)">✖</button>
+            <button class="btn sm" id="selDeleteBtn" title="Borrar los bloques seleccionados (tecla Suprimir)">🗑 Borrar</button>
+            <div id="selMoveRow" style="display:grid; grid-template-columns:repeat(3,1fr); gap:3px; margin-top:2px;">
+              <button class="btn sm" id="selMoveUpY" title="Subir (Shift + ↑)">↑Y</button>
+              <button class="btn sm" id="selMoveBack" title="Atrás (↑)">↑</button>
+              <button class="btn sm" id="selMoveDownY" title="Bajar (Shift + ↓)">↓Y</button>
+              <button class="btn sm" id="selMoveLeft" title="Izquierda (←)">←</button>
+              <button class="btn sm" id="selMoveFwd" title="Adelante (↓)">↓</button>
+              <button class="btn sm" id="selMoveRight" title="Derecha (→)">→</button>
+            </div>
+            <button class="btn sm" id="selClearBtn" title="Cancelar selección (Esc)">✖ Cancelar</button>
           </div>
         </div>
       </div>
@@ -628,6 +638,7 @@
       <input class="admin-only" type="range" id="hollowWallSlider" min="0" max="6" step="1" value="4" />
       <button class="btn wide admin-only" id="hollowBtn" style="width:100%; margin-top:8px;" title="Vacía el interior de TODO el modelo, dejando la pared del grosor elegido">🕳️ Vaciar todo el modelo</button>
       <button class="btn wide admin-only" id="hollowLayerBtn" style="width:100%; margin-top:6px;" title="Vacía solo la capa que estás viendo ahora, dejando la pared del grosor elegido">🕳️ Vaciar solo esta capa</button>
+      <button class="btn wide admin-only" id="dupLayerBtnSide" style="width:100%; margin-top:6px;" title="Copia todos los bloques de la capa actual a una capa nueva justo arriba. Lo que estaba más arriba se corre una capa para hacerle lugar.">⧉ Replicar esta capa</button>
     </div>
 
     <div class="section">
@@ -2275,6 +2286,46 @@ document.getElementById('hollowWallSlider').addEventListener('input', e=>{
 });
 document.getElementById('hollowBtn').addEventListener('click', ()=> hollowInteriorBlocks(currentWallThickness(), false));
 document.getElementById('hollowLayerBtn').addEventListener('click', ()=> hollowInteriorBlocks(currentWallThickness(), true));
+
+/* Replica la capa actual: copia TODOS sus bloques (con sus colores) a una capa
+   nueva justo encima. Todo lo que estaba más arriba se corre una capa hacia
+   arriba para hacerle lugar, así no se pisa nada. */
+function duplicateCurrentLayer(){
+  if (!voxels.length){ setStatus('No hay ningún modelo cargado.', 'err'); return; }
+  const capa = currentLayer;
+  const deLaCapa = voxels.filter(v => Math.round(v.y) === capa);
+  if (!deLaCapa.length){ setStatus('La capa ' + (capa+1) + ' está vacía, no hay nada para replicar.', 'err'); return; }
+  pushUndoSnapshot();
+
+  // 1) Empuja hacia arriba todo lo que está por encima, para dejar el hueco libre
+  voxels.forEach(v=>{ if (Math.round(v.y) > capa) v.y = Math.round(v.y) + 1; });
+
+  // 2) Copia los bloques de la capa en el hueco recién liberado
+  const copias = deLaCapa.map(v=>{
+    const nuevo = { x:v.x, y:capa+1, z:v.z, color:v.color };
+    // Si el diseño está agrupado en piezas, la copia lleva su propia identidad
+    // (si no, las dos capas contarían como una sola pieza).
+    if (v.pieceSize){
+      nuevo.pieceSize = v.pieceSize;
+      nuevo.piece = 'dup' + capa + '_' + (v.piece || (v.x+'_'+v.z));
+      if (v.pieceIndex !== undefined) nuevo.pieceIndex = v.pieceIndex;
+    }
+    return nuevo;
+  });
+  voxels.push(...copias);
+
+  dims.y = Math.max(...voxels.map(v=>Math.round(v.y))) + 1;
+  maxLayer = Math.max(0, dims.y-1);
+  goToLayer(capa+1); // te deja parado en la capa nueva
+  drawLayerDiagram(); rebuildMesh3D(); refreshLayerUI();
+  const sd = document.getElementById('statDims');
+  if (sd) sd.textContent = dims.x+'×'+dims.y+'×'+dims.z;
+  const sc = document.getElementById('statCount');
+  if (sc) sc.textContent = String(voxels.length);
+  setStatus('Capa ' + (capa+1) + ' replicada: ' + copias.length + ' bloques copiados a la capa ' + (capa+2) + '. Ctrl+Z para deshacer.', 'ok');
+}
+document.getElementById('dupLayerBtn').addEventListener('click', duplicateCurrentLayer);
+document.getElementById('dupLayerBtnSide').addEventListener('click', duplicateCurrentLayer);
 document.getElementById('hollowLayerBtn3d').addEventListener('click', ()=> hollowInteriorBlocks(currentWallThickness(), true));
 
 document.getElementById('flatBlockBtn').addEventListener('click', e=>{
@@ -5121,6 +5172,13 @@ document.getElementById('selCopyBtn').addEventListener('click', copySelection);
 document.getElementById('selPasteBtn').addEventListener('click', ()=>pasteClipboard());
 document.getElementById('selMirrorBtn').addEventListener('click', copyAndMirror);
 document.getElementById('selClearBtn').addEventListener('click', clearBoxSelection);
+document.getElementById('selDeleteBtn').addEventListener('click', ()=>deleteSelection());
+document.getElementById('selMoveLeft').addEventListener('click', ()=>moveSelection(-1,0,0));
+document.getElementById('selMoveRight').addEventListener('click', ()=>moveSelection(1,0,0));
+document.getElementById('selMoveBack').addEventListener('click', ()=>moveSelection(0,0,-1));
+document.getElementById('selMoveFwd').addEventListener('click', ()=>moveSelection(0,0,1));
+document.getElementById('selMoveUpY').addEventListener('click', ()=>moveSelection(0,1,0));
+document.getElementById('selMoveDownY').addEventListener('click', ()=>moveSelection(0,-1,0));
 window.addEventListener('keydown', e=>{
   if (!paintMode || activeTool !== 'select') return;
   const tag = (document.activeElement && document.activeElement.tagName) || '';
@@ -5128,7 +5186,66 @@ window.addEventListener('keydown', e=>{
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase()==='c'){ e.preventDefault(); copySelection(); }
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase()==='v'){ e.preventDefault(); pasteClipboard(); }
   else if (e.key === 'Escape'){ clearBoxSelection(); }
+  // SUPRIMIR / DELETE: borra los bloques seleccionados, como en Studio 2.0
+  else if (e.key === 'Delete' || e.key === 'Backspace'){
+    e.preventDefault();
+    deleteSelection();
+  }
+  // FLECHAS: mueve la selección de a un bloque. Solas mueven en el plano
+  // horizontal; con Shift, hacia arriba y abajo.
+  else if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){
+    e.preventDefault();
+    if (e.key === 'ArrowLeft')  moveSelection(-1,0,0);
+    if (e.key === 'ArrowRight') moveSelection(1,0,0);
+    if (e.key === 'ArrowUp')    e.shiftKey ? moveSelection(0,1,0) : moveSelection(0,0,-1);
+    if (e.key === 'ArrowDown')  e.shiftKey ? moveSelection(0,-1,0) : moveSelection(0,0,1);
+  }
 });
+
+/* Borra los bloques seleccionados (tecla Suprimir o el botón 🗑). */
+function deleteSelection(){
+  const vs = selectionVoxels();
+  if (!vs.length){ setStatus('No hay ninguna selección para borrar.', 'err'); return; }
+  pushUndoSnapshot();
+  const aBorrar = new Set(vs);
+  const quedan = voxels.filter(v => !aBorrar.has(v));
+  voxels.length = 0; voxels.push(...quedan);
+  clearBoxSelection();
+  drawLayerDiagram(); rebuildMesh3D(); refreshLayerUI();
+  const st = document.getElementById('statCount'); if (st) st.textContent = String(voxels.length);
+  setStatus('Borrados ' + vs.length + ' bloques. Ctrl+Z para deshacer.', 'ok');
+}
+
+/* Mueve los bloques seleccionados. Si en el destino ya hay un bloque, lo pisa. */
+function moveSelection(dx, dy, dz){
+  const vs = selectionVoxels();
+  if (!vs.length) return;
+  pushUndoSnapshot();
+  const enMovimiento = new Set(vs);
+  const destinos = new Set(vs.map(v => (v.x+dx)+','+(Math.round(v.y)+dy)+','+(v.z+dz)));
+  const quedan = voxels.filter(v =>
+    enMovimiento.has(v) || !destinos.has(v.x+','+Math.round(v.y)+','+v.z));
+  voxels.length = 0; voxels.push(...quedan);
+  vs.forEach(v=>{ v.x += dx; v.y = Math.round(v.y) + dy; v.z += dz; });
+
+  // Si algo quedó en negativo, corre TODO el modelo para volver a positivo
+  const minX = Math.min(0, ...voxels.map(v=>v.x));
+  const minY = Math.min(0, ...voxels.map(v=>Math.round(v.y)));
+  const minZ = Math.min(0, ...voxels.map(v=>v.z));
+  if (minX<0 || minY<0 || minZ<0){
+    voxels.forEach(v=>{ v.x-=minX; v.y=Math.round(v.y)-minY; v.z-=minZ; });
+  }
+  dims.x = Math.max(...voxels.map(v=>v.x))+1;
+  dims.y = Math.max(...voxels.map(v=>Math.round(v.y)))+1;
+  dims.z = Math.max(...voxels.map(v=>v.z))+1;
+  maxLayer = Math.max(0, dims.y-1);
+  currentLayer = Math.min(currentLayer, maxLayer);
+
+  setBoxSelection(new Set(vs.map(v => v.x+','+Math.round(v.y)+','+v.z)));
+  drawLayerDiagram(); refreshLayerUI();
+  const sd = document.getElementById('statDims');
+  if (sd) sd.textContent = dims.x+'×'+dims.y+'×'+dims.z;
+}
 
 /* ---------------------------- Selección mágica por color (como Studio 2.0) ----------------------------
    Tocás un bloque y se seleccionan todos los bloques PEGADOS del mismo color en esa
@@ -5564,7 +5681,10 @@ renderer.domElement.addEventListener('pointerup', e=>{
           // Si el bloque tocado es de OTRA capa (ej: una capa de abajo mostrada en
           // gris), cambia a esa capa automáticamente antes de seleccionar — antes
           // esto no hacía nada ni avisaba, y parecía que la herramienta no andaba.
-          if (Math.round(v.y) !== currentLayer) goToLayer(Math.round(v.y));
+          // En vista COMPLETA no se cambia de capa: si saltara, el visor pasaría a
+          // mostrar "de esa capa hacia abajo" y desaparecería todo lo de arriba.
+          // Así podés editar cualquier bloque con el modelo entero a la vista.
+          if (!showFullDesign && Math.round(v.y) !== currentLayer) goToLayer(Math.round(v.y));
           const sel = floodSelectSameColor(v.x, v.z);
           if (sel && sel.size){
             if (activeTool === 'erase'){
