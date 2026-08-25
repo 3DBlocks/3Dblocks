@@ -224,6 +224,15 @@
       "price": 10,
       "thumb": "thumbs/zoid-blue-lager.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/zoid-blue-lager.json"
+    },
+    {
+      "slug": "marcos",
+      "name": "marcos",
+      "description": "serie 80",
+      "category": "marcos y su monito",
+      "price": 10,
+      "thumb": "thumbs/marcos.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/marcos.json"
     }
   ]
 }
