@@ -242,6 +242,15 @@
       "price": 10,
       "thumb": "thumbs/maestro-haposai.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/maestro-haposai.json"
+    },
+    {
+      "slug": "nick",
+      "name": "nick",
+      "description": "zootopia",
+      "category": "nick",
+      "price": 8,
+      "thumb": "thumbs/nick.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/nick.json"
     }
   ]
 }
