@@ -450,7 +450,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v53</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v54</small></div>
     </div>
     <div id="modelNameText">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -2690,6 +2690,17 @@ function adjustStyleForHeavyRender(esVideo){
   return false;
 }
 
+/* Si marcaste 1x2 o 1x3 pero nunca tocaste "Reagrupar", el modelo sigue siendo
+   todo 1x1 y el manual salía con piezas 1x1. Esto lo agrupa solo, justo antes de
+   generar, para que el manual muestre las piezas largas de verdad. */
+function ensurePieceGrouping(){
+  const lengths = allowedPieceLengths();
+  if (!lengths.some(l=>l>1)) return false;          // solo 1x1 elegido: no hay nada que agrupar
+  if (voxels.some(v=>v.pieceSize && v.pieceSize !== '1x1')) return false; // ya está agrupado
+  groupVoxelsIntoPieces(voxels, lengths);
+  return true;
+}
+
 /* ---------------------------- Vista previa rápida del ángulo (una sola foto) ----------------------------
    En vez de tener que generar el manual completo (todas las capas) solo para ver
    si el ángulo quedó bien, esto saca UNA foto del modelo COMPLETO con el mismo
@@ -2750,6 +2761,7 @@ async function quickAnglePreview(previewLayer){
   estiloParaInstrucciones();
   const wasRenderAsPieces = renderAsPieces;
   renderAsPieces = true; // 1x2 y 1x3 se ven como UNA pieza, no como bloques sueltos
+  ensurePieceGrouping();
   const useFullDesign = (previewLayer === 'full');
   const layerNum = useFullDesign ? maxLayer : parseInt(previewLayer, 10);
   showBelowLayers = true;
@@ -2856,6 +2868,7 @@ async function generateInstructionsPDF(){
   estiloParaInstrucciones();
   const wasRenderAsPieces = renderAsPieces;
   renderAsPieces = true; // 1x2 y 1x3 se ven como UNA pieza, no como bloques sueltos
+  ensurePieceGrouping();
   showFullDesign = false; showBelowLayers = true; // capa actual con su color real, las de abajo atenuadas — así se ve qué es nuevo
 
   // Resolución alta SOLO para la captura (no cambia el tamaño visible del panel en
@@ -3133,6 +3146,7 @@ async function generateAssemblyVideo(){
   estiloParaInstrucciones(true);   // true = video
   const wasRenderAsPieces = renderAsPieces;
   renderAsPieces = true; // 1x2 y 1x3 se ven como UNA pieza también en el video
+  ensurePieceGrouping();
   showFullDesign = false; showBelowLayers = true;
 
   const realMat = new THREE.MeshPhysicalMaterial({
@@ -3290,6 +3304,7 @@ async function generateInstructionsPNGZip(){
   estiloParaInstrucciones();
   const wasRenderAsPieces = renderAsPieces;
   renderAsPieces = true; // 1x2 y 1x3 se ven como UNA pieza, no como bloques sueltos
+  ensurePieceGrouping();
   showFullDesign = false; showBelowLayers = true;
 
   const origSize = new THREE.Vector2();
