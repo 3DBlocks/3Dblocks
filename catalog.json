@@ -251,6 +251,15 @@
       "price": 8,
       "thumb": "thumbs/nick.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/nick.json"
+    },
+    {
+      "slug": "goku",
+      "name": "goku",
+      "description": "goku ropa inicial",
+      "category": "goku",
+      "price": 10,
+      "thumb": "thumbs/goku.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/goku.json"
     }
   ]
 }
