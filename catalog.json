@@ -3,9 +3,9 @@
     {
       "slug": "squirtle",
       "name": "squirtle",
-      "description": "pokemon",
+      "description": "pokemon agua",
       "category": "pokemon",
-      "price": 5,
+      "price": 7,
       "thumb": "thumbs/squirtle.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/squirtle.json"
     },
