@@ -361,6 +361,22 @@
   #priceRow{ display:flex; align-items:center; gap:8px; margin-top:8px; }
   #priceInput{ width:80px; padding:7px 9px; border-radius:7px; border:1px solid var(--border); background:var(--panel-2); color:var(--text); font-family:var(--mono); font-size:12px; }
   #qrOverlay{ position:fixed; inset:0; background:rgba(5,7,13,.65); backdrop-filter:blur(2px); z-index:45; display:none; align-items:center; justify-content:center; padding:20px; }
+
+  /* ---------- Controles de marca de agua (dentro de la vista previa) ---------- */
+  .wm-bar{
+    display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:center;
+    background:var(--panel-3); border:1px solid var(--border-soft); border-radius:10px;
+    padding:9px 12px; max-width:92vw;
+  }
+  .wm-bar .wm-lbl{ font-size:11.5px; color:var(--text-dim); }
+  .wm-bar .wm-val{ font-size:11px; color:var(--accent); font-family:var(--mono); min-width:34px; text-align:right; }
+  .wm-bar input[type=range]{ width:88px; }
+  .wm-bar select, .wm-bar input[type=text]{
+    background:var(--panel-2); color:var(--text); border:1px solid var(--border);
+    border-radius:7px; padding:4px 7px; font-size:12px;
+  }
+  .wm-bar input[type=text]{ width:120px; }
+  .wm-sep{ width:1px; height:20px; background:var(--border); margin:0 2px; }
   #qrOverlay.show{ display:flex; }
   #qrModal{ width:340px; max-width:100%; max-height:86vh; overflow-y:auto; background:linear-gradient(180deg, var(--panel), var(--bg-2)); border:1px solid var(--border); border-radius:12px; box-shadow:0 20px 50px rgba(0,0,0,.5); }
   #qrBody{ padding:16px 18px 20px; text-align:center; }
@@ -469,6 +485,7 @@
         <button class="tool-btn" id="toolReplaceBtn" data-tool="replace" title="Tocá un bloque de cualquier color: se resaltan TODOS los bloques de ese color en el modelo entero. Después elegí el color nuevo en la paleta para cambiarlos a todos juntos.">🔁</button>
         <button class="tool-btn" id="toolSelectBtn" data-tool="select" title="Selección: arrastrá un rectángulo (en el plano 2D o en el visor 3D, desde cualquier ángulo) para elegir varios bloques a la vez, y copiarlos o espejarlos">▭</button>
         <button class="tool-btn" id="undoBtn" title="Deshacer (Ctrl+Z)">↩️</button>
+        <button class="tool-btn" id="redoBtn" title="Rehacer (Ctrl+Y o Ctrl+Shift+Z)">↪️</button>
         <button class="tool-btn" id="hollowLayerBtn3d" title="Vaciar el interior de la capa que estás viendo (usa el grosor de pared del panel lateral)">🕳️</button>
         <button class="tool-btn" id="dupLayerBtn" title="Replicar esta capa: copia todos sus bloques a una capa nueva justo arriba, empujando hacia arriba lo que ya estaba">⧉</button>
         <button class="tool-btn" id="renderBtnFloating" title="Generar una foto de presentación con luces e iluminación real">🖼️</button>
@@ -639,6 +656,13 @@
       <button class="btn wide admin-only" id="hollowBtn" style="width:100%; margin-top:8px;" title="Vacía el interior de TODO el modelo, dejando la pared del grosor elegido">🕳️ Vaciar todo el modelo</button>
       <button class="btn wide admin-only" id="hollowLayerBtn" style="width:100%; margin-top:6px;" title="Vacía solo la capa que estás viendo ahora, dejando la pared del grosor elegido">🕳️ Vaciar solo esta capa</button>
       <button class="btn wide admin-only" id="dupLayerBtnSide" style="width:100%; margin-top:6px;" title="Copia todos los bloques de la capa actual a una capa nueva justo arriba. Lo que estaba más arriba se corre una capa para hacerle lugar.">⧉ Replicar esta capa</button>
+
+      <p class="section-title admin-only" style="margin-top:16px;">Revisar que se pueda armar</p>
+      <p class="admin-only" style="font-size:10.5px; color:var(--text-faint); margin:0 0 9px; line-height:1.5;">Busca bloques que quedan al aire: los que no tienen nada debajo (se colocarían sobre nada al llegar esa capa) y las islas sueltas, que ni siquiera están pegadas al resto del diseño. Los marca con borde rojo punteado en el plano 2D.</p>
+      <button class="btn wide admin-only" id="checkSupportBtn" style="width:100%;">🔎 Revisar apoyos</button>
+      <button class="btn wide admin-only" id="gotoProblemBtn" style="width:100%; margin-top:6px; display:none;">➜ Ir al siguiente problema</button>
+      <button class="btn sm ghost admin-only" id="clearProblemsBtn" style="margin-top:6px; display:none;">Quitar las marcas rojas</button>
+      <p id="supportStatus" class="admin-only" style="font-size:11px; color:var(--text-faint); margin:8px 0 0; line-height:1.5;"></p>
     </div>
 
     <div class="section">
@@ -701,17 +725,50 @@
 <!-- Modo PRUEBA (sandbox) — cuando quieras cobrar de verdad, cambiá este client-id por el de "Live" -->
 <script src="https://www.paypal.com/sdk/js?client-id=BAAFIIacFoi0N0oyF5bnWz_JdmGmeOtysRuW2LLN_reSSRzZXV0lY7qIupbZnxrOlYqARywDNtFPbRePS0&currency=USD"></script>
 
-<div id="anglePreviewModal" style="display:none; position:fixed; inset:0; z-index:200; background:rgba(22,24,29,.94); align-items:center; justify-content:center; flex-direction:column; gap:14px; backdrop-filter:blur(3px);">
-  <img id="anglePreviewImg" style="max-width:88vw; max-height:70vh; border-radius:12px; border:2px solid var(--accent); box-shadow:0 10px 40px rgba(0,0,0,.5);" />
+<div id="anglePreviewModal" style="display:none; position:fixed; inset:0; z-index:200; background:rgba(22,24,29,.94); align-items:center; justify-content:center; flex-direction:column; gap:12px; backdrop-filter:blur(3px); padding:16px; overflow-y:auto;">
+  <img id="anglePreviewImg" style="max-width:88vw; max-height:56vh; border-radius:12px; border:2px solid var(--accent); box-shadow:0 10px 40px rgba(0,0,0,.5);" />
   <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:center;">
-    <span style="color:var(--text-dim); font-size:12.5px;">Previsualizando:</span>
+    <button class="btn sm" id="previewPrevBtn" title="Paso anterior (←)">‹ Atrás</button>
     <select id="previewLayerSelect" style="background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:7px; padding:5px 8px; font-size:12.5px;"></select>
+    <button class="btn sm" id="previewNextBtn" title="Paso siguiente (→)">Siguiente ›</button>
     <button class="btn sm" id="previewRefreshBtn">🔄 Actualizar</button>
     <span style="color:var(--text-dim); font-size:12.5px; margin-left:6px;">Zoom:</span>
     <input type="range" id="previewZoomSlider" min="0.8" max="3" step="0.1" value="1.3" style="width:130px;" />
     <span id="previewZoomVal" style="color:var(--accent); font-size:12px; font-family:var(--mono); min-width:30px;">1.3x</span>
     <button class="btn primary" id="anglePreviewCloseBtn">Cerrar</button>
   </div>
+
+  <!-- Marca de agua: se calibra acá y se ve al instante, porque el render 3D
+       queda guardado y solo se vuelve a componer la imagen encima. Lo que se ve
+       acá es exactamente lo que sale en el PDF y en los PNG. -->
+  <div class="wm-bar">
+    <span class="wm-lbl">Marca de agua:</span>
+    <select id="wmMode">
+      <option value="ninguna">Sin marca</option>
+      <option value="texto">Texto</option>
+      <option value="imagen">Imagen</option>
+    </select>
+    <input type="text" id="wmText" value="3DBlock" placeholder="Texto" title="Texto de la marca de agua" />
+    <button class="btn sm" id="wmImageBtn" title="Cargar una imagen (PNG con fondo transparente queda mejor)">🖼️ Imagen…</button>
+    <input type="file" id="wmImageInput" accept="image/*" style="display:none;" />
+    <span class="wm-lbl" id="wmImageName" style="max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
+    <div class="wm-sep"></div>
+    <span class="wm-lbl">Opacidad</span>
+    <input type="range" id="wmOpacity" min="0" max="0.6" step="0.01" value="0.05" />
+    <span class="wm-val" id="wmOpacityVal">5%</span>
+    <span class="wm-lbl">Tamaño</span>
+    <input type="range" id="wmScale" min="0.2" max="3" step="0.05" value="1" />
+    <span class="wm-val" id="wmScaleVal">1.00</span>
+    <span class="wm-lbl">Separación</span>
+    <input type="range" id="wmGap" min="0.05" max="2.5" step="0.05" value="0.6" />
+    <span class="wm-val" id="wmGapVal">0.60</span>
+    <span class="wm-lbl">Ángulo</span>
+    <input type="range" id="wmAngle" min="-90" max="90" step="5" value="30" />
+    <span class="wm-val" id="wmAngleVal">30°</span>
+    <div class="wm-sep"></div>
+    <button class="btn sm ghost" id="wmResetBtn" title="Volver a los valores de fábrica">↺</button>
+  </div>
+  <p style="font-size:10.5px; color:var(--text-faint); margin:0; text-align:center; max-width:640px;">La marca se repite en mosaico por toda la hoja, en diagonal. Los ajustes quedan guardados en este navegador y se aplican al PDF, a los PNG y al video.</p>
 </div>
 <script type="module">
 import * as THREE from "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.js";
@@ -2837,11 +2894,175 @@ function ensurePieceGrouping(){
    En vez de tener que generar el manual completo (todas las capas) solo para ver
    si el ángulo quedó bien, esto saca UNA foto del modelo COMPLETO con el mismo
    material/piso/ángulo que va a usar el manual, y la muestra al toque. */
-/* ---------------------------- Vista previa rápida del ángulo (una sola foto) ----------------------------
-   En vez de tener que generar el manual completo (todas las capas) solo para ver
-   si el ángulo quedó bien, esto saca UNA foto — de cualquier paso puntual que
-   elijas, o del modelo completo — con el mismo material/piso/ángulo que va a usar
-   el manual real, y la muestra al toque, sin descargar nada. */
+/* ---------------------------- Marca de agua ----------------------------
+   Una sola definición para los tres lugares donde sale (PDF, PNG y video), y
+   una sola función que la dibuja. Antes estaba escrita a mano adentro del
+   generador de PDF, con el texto y la opacidad fijos en el código: para
+   cambiarla había que editar el archivo.
+
+   Se dibuja SIEMPRE sobre un canvas 2D, incluso para el PDF. Así lo que ves en
+   la vista previa es exactamente lo que sale impreso, sin dos códigos que se
+   puedan ir separando con el tiempo. */
+const MARCA_DEFAULT = {
+  modo: 'texto',      // 'ninguna' | 'texto' | 'imagen'
+  texto: '3DBlock',
+  opacidad: 0.05,
+  escala: 1,          // tamaño de cada copia
+  separacion: 0.6,    // espacio entre copias, como fracción del tamaño de la copia
+  angulo: 30,         // grados de inclinación del mosaico
+  imagen: null,       // dataURL de la imagen cargada
+};
+const MARCA_KEY = '3dblock.marcaAgua';
+
+function cargarConfigMarca(){
+  try{
+    const guardado = JSON.parse(localStorage.getItem(MARCA_KEY) || 'null');
+    return guardado ? Object.assign({}, MARCA_DEFAULT, guardado) : Object.assign({}, MARCA_DEFAULT);
+  } catch(err){ return Object.assign({}, MARCA_DEFAULT); }
+}
+let marcaAgua = cargarConfigMarca();
+let marcaImagenEl = null; // la imagen ya decodificada y lista para dibujar
+
+function guardarConfigMarca(){
+  try{
+    localStorage.setItem(MARCA_KEY, JSON.stringify(marcaAgua));
+  } catch(err){
+    // Una imagen grande puede no entrar en localStorage. No es grave: la marca
+    // sigue funcionando en esta sesión, solo no se recuerda para la próxima.
+    console.warn('No se pudo guardar la marca de agua (¿imagen muy pesada?)', err);
+  }
+}
+
+function cargarImagenDesdeDataUrl(dataUrl){
+  return new Promise((resolve, reject)=>{
+    const img = new Image();
+    img.onload = ()=>resolve(img);
+    img.onerror = ()=>reject(new Error('No se pudo leer la imagen'));
+    img.src = dataUrl;
+  });
+}
+
+async function prepararImagenMarca(){
+  if (marcaAgua.modo !== 'imagen' || !marcaAgua.imagen){ marcaImagenEl = null; return; }
+  if (marcaImagenEl && marcaImagenEl.src === marcaAgua.imagen) return; // ya está cargada
+  try{ marcaImagenEl = await cargarImagenDesdeDataUrl(marcaAgua.imagen); }
+  catch(err){ marcaImagenEl = null; }
+}
+
+function marcaEstaActiva(){
+  if (marcaAgua.modo === 'ninguna' || marcaAgua.opacidad <= 0) return false;
+  if (marcaAgua.modo === 'texto') return !!(marcaAgua.texto || '').trim();
+  return !!marcaImagenEl;
+}
+
+/* Dibuja el mosaico sobre un contexto 2D de W×H. Gira todo el sistema de
+   coordenadas y recorre un cuadrado más grande que la diagonal de la hoja: así
+   la inclinación nunca deja esquinas vacías, sea cual sea el ángulo. */
+function dibujarMarcaAgua(ctx, W, H){
+  if (!marcaEstaActiva()) return;
+  const base = Math.min(W, H);
+  ctx.save();
+  ctx.globalAlpha = marcaAgua.opacidad;
+  ctx.translate(W/2, H/2);
+  ctx.rotate(marcaAgua.angulo * Math.PI / 180);
+
+  let anchoCopia, altoCopia, dibujarUna;
+  if (marcaAgua.modo === 'texto'){
+    const fs = Math.max(6, base * 0.075 * marcaAgua.escala);
+    ctx.font = '700 ' + fs + 'px Inter, Segoe UI, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#000000';
+    const txt = marcaAgua.texto.trim();
+    anchoCopia = Math.max(10, ctx.measureText(txt).width);
+    altoCopia = fs;
+    dibujarUna = (x, y) => ctx.fillText(txt, x, y);
+  } else {
+    const w = Math.max(10, base * 0.20 * marcaAgua.escala);
+    const rel = (marcaImagenEl.naturalHeight || 1) / (marcaImagenEl.naturalWidth || 1);
+    const h = w * rel;
+    anchoCopia = w; altoCopia = h;
+    dibujarUna = (x, y) => ctx.drawImage(marcaImagenEl, x - w/2, y - h/2, w, h);
+  }
+
+  // El texto es una franja muy baja y ancha; si el paso vertical fuera igual de
+  // proporcional que el horizontal, las líneas quedarían pegadas una encima de
+  // otra. Por eso el texto separa más en vertical que la imagen.
+  const pasoX = Math.max(8, anchoCopia * (1 + marcaAgua.separacion));
+  const pasoY = Math.max(8, altoCopia * (1 + marcaAgua.separacion * (marcaAgua.modo === 'texto' ? 4 : 1.3)));
+  const R = Math.hypot(W, H) / 2 + Math.max(anchoCopia, altoCopia);
+
+  // Tope de seguridad: con separación mínima y tamaño mínimo se podrían pedir
+  // decenas de miles de copias y colgar el navegador un rato largo.
+  const copias = Math.ceil((2*R)/pasoX) * Math.ceil((2*R)/pasoY);
+  const salto = copias > 6000 ? Math.ceil(Math.sqrt(copias / 6000)) : 1;
+
+  let fila = 0;
+  for (let y = -R; y <= R; y += pasoY * salto){
+    const desfase = (fila++ % 2) ? pasoX/2 : 0; // filas alternadas, se ve más parejo
+    for (let x = -R + desfase; x <= R; x += pasoX * salto){
+      dibujarUna(x, y);
+    }
+  }
+  ctx.restore();
+}
+
+/* Pega la marca encima de una imagen ya renderizada (para los PNG y la vista
+   previa). Si no hay marca activa, devuelve la misma imagen sin tocar. */
+async function componerConMarca(dataUrl){
+  await prepararImagenMarca();
+  if (!marcaEstaActiva()) return dataUrl;
+  const img = await cargarImagenDesdeDataUrl(dataUrl);
+  const c = document.createElement('canvas');
+  c.width = img.naturalWidth; c.height = img.naturalHeight;
+  const ctx = c.getContext('2d');
+  ctx.drawImage(img, 0, 0);
+  dibujarMarcaAgua(ctx, c.width, c.height);
+  return c.toDataURL('image/png');
+}
+
+/* Capa de marca del tamaño de la hoja del PDF, con fondo transparente. Se genera
+   UNA vez y se reusa en todas las páginas con el mismo alias, así el archivo no
+   engorda una vez por página. */
+function construirCapaMarcaPagina(pageWmm, pageHmm){
+  if (!marcaEstaActiva()) return null;
+  const escalaPx = 4; // ≈100 dpi: suficiente para una marca clarita, sin inflar el PDF
+  const c = document.createElement('canvas');
+  c.width = Math.round(pageWmm * escalaPx);
+  c.height = Math.round(pageHmm * escalaPx);
+  const ctx = c.getContext('2d');
+  dibujarMarcaAgua(ctx, c.width, c.height);
+  return c.toDataURL('image/png');
+}
+
+/* ---------------------------- Controles de la marca en la vista previa ---------------------------- */
+function refrescarControlesMarca(){
+  document.getElementById('wmMode').value = marcaAgua.modo;
+  document.getElementById('wmText').value = marcaAgua.texto;
+  document.getElementById('wmOpacity').value = marcaAgua.opacidad;
+  document.getElementById('wmScale').value = marcaAgua.escala;
+  document.getElementById('wmGap').value = marcaAgua.separacion;
+  document.getElementById('wmAngle').value = marcaAgua.angulo;
+  document.getElementById('wmOpacityVal').textContent = Math.round(marcaAgua.opacidad*100) + '%';
+  document.getElementById('wmScaleVal').textContent = Number(marcaAgua.escala).toFixed(2);
+  document.getElementById('wmGapVal').textContent = Number(marcaAgua.separacion).toFixed(2);
+  document.getElementById('wmAngleVal').textContent = marcaAgua.angulo + '°';
+  // Solo se muestra lo que aplica a cada modo, para no llenar la barra de
+  // controles que no hacen nada.
+  const esTexto = marcaAgua.modo === 'texto', esImagen = marcaAgua.modo === 'imagen';
+  const hayMarca = marcaAgua.modo !== 'ninguna';
+  document.getElementById('wmText').style.display = esTexto ? '' : 'none';
+  document.getElementById('wmImageBtn').style.display = esImagen ? '' : 'none';
+  document.getElementById('wmImageName').style.display = esImagen ? '' : 'none';
+  document.getElementById('wmImageName').textContent = (esImagen && marcaAgua.imagen) ? '✔ imagen cargada' : (esImagen ? 'ninguna todavía' : '');
+  ['wmOpacity','wmScale','wmGap','wmAngle'].forEach(id=>{
+    const el = document.getElementById(id);
+    el.disabled = !hayMarca;
+    el.style.opacity = hayMarca ? '1' : '.4';
+  });
+}
+refrescarControlesMarca();
+prepararImagenMarca();
+
 async function quickAnglePreview(previewLayer){
   if (!voxels.length){ setStatus('No hay ningún diseño cargado.', 'err'); return; }
 
@@ -2939,9 +3160,21 @@ async function quickAnglePreview(previewLayer){
   refreshLayerUI();
   renderer.render(scene, camera);
 
-  document.getElementById('anglePreviewImg').src = dataUrl;
   document.getElementById('anglePreviewModal').style.display = 'flex';
+  previewRenderCrudo = dataUrl;
+  await actualizarImagenPreview();
   setLoading(false);
+}
+
+/* El render 3D es lo lento; la marca de agua no. Por eso el render queda
+   guardado en `previewRenderCrudo` y mover un control de la marca solo vuelve a
+   componer la imagen — se ve el cambio al instante, sin volver a renderizar. */
+let previewRenderCrudo = null;
+async function actualizarImagenPreview(){
+  if (!previewRenderCrudo) return;
+  const img = document.getElementById('anglePreviewImg');
+  try{ img.src = await componerConMarca(previewRenderCrudo); }
+  catch(err){ img.src = previewRenderCrudo; }
 }
 document.getElementById('quickPreviewBtn').addEventListener('click', ()=>quickAnglePreview());
 document.getElementById('previewLayerSelect').addEventListener('change', e=>quickAnglePreview(e.target.value));
@@ -2955,6 +3188,57 @@ document.getElementById('previewZoomSlider').addEventListener('change', ()=>{
 });
 document.getElementById('anglePreviewCloseBtn').addEventListener('click', ()=>{
   document.getElementById('anglePreviewModal').style.display = 'none';
+});
+
+/* ---------------------------- Navegación paso a paso en la vista previa ----------------------------
+   Antes había que abrir el desplegable y elegir el paso a mano cada vez, que es
+   incomodísimo para revisar un manual de 40 capas. */
+function pasoPreview(delta){
+  const sel = document.getElementById('previewLayerSelect');
+  if (!sel.options.length) return;
+  const i = Math.max(0, sel.selectedIndex) + delta;
+  if (i < 0 || i >= sel.options.length) return; // en los extremos no hace nada
+  sel.selectedIndex = i;
+  quickAnglePreview(sel.value);
+}
+document.getElementById('previewPrevBtn').addEventListener('click', ()=>pasoPreview(-1));
+document.getElementById('previewNextBtn').addEventListener('click', ()=>pasoPreview(1));
+window.addEventListener('keydown', e=>{
+  const modal = document.getElementById('anglePreviewModal');
+  if (modal.style.display !== 'flex') return;
+  const tag = (document.activeElement && document.activeElement.tagName) || '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  if (e.key === 'ArrowLeft'){ e.preventDefault(); e.stopPropagation(); pasoPreview(-1); }
+  else if (e.key === 'ArrowRight'){ e.preventDefault(); e.stopPropagation(); pasoPreview(1); }
+  else if (e.key === 'Escape'){ modal.style.display = 'none'; }
+}, true); // en captura: si no, las flechas también cambian la capa del visor de atrás
+
+/* ---------------------------- Controles de la marca de agua ---------------------------- */
+async function cambiarMarca(cambios, recomponer){
+  Object.assign(marcaAgua, cambios);
+  guardarConfigMarca();
+  await prepararImagenMarca();
+  refrescarControlesMarca();
+  if (recomponer !== false) await actualizarImagenPreview();
+}
+document.getElementById('wmMode').addEventListener('change', e=>cambiarMarca({ modo: e.target.value }));
+document.getElementById('wmText').addEventListener('input', e=>cambiarMarca({ texto: e.target.value }));
+document.getElementById('wmOpacity').addEventListener('input', e=>cambiarMarca({ opacidad: parseFloat(e.target.value) }));
+document.getElementById('wmScale').addEventListener('input', e=>cambiarMarca({ escala: parseFloat(e.target.value) }));
+document.getElementById('wmGap').addEventListener('input', e=>cambiarMarca({ separacion: parseFloat(e.target.value) }));
+document.getElementById('wmAngle').addEventListener('input', e=>cambiarMarca({ angulo: parseInt(e.target.value, 10) }));
+document.getElementById('wmResetBtn').addEventListener('click', ()=>cambiarMarca(Object.assign({}, MARCA_DEFAULT, { imagen: marcaAgua.imagen })));
+document.getElementById('wmImageBtn').addEventListener('click', ()=>document.getElementById('wmImageInput').click());
+document.getElementById('wmImageInput').addEventListener('change', e=>{
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    marcaImagenEl = null; // fuerza a recargar la nueva
+    cambiarMarca({ imagen: reader.result, modo: 'imagen' });
+  };
+  reader.readAsDataURL(file);
+  e.target.value = ''; // permite volver a elegir el mismo archivo
 });
 
 async function generateInstructionsPDF(){
@@ -3119,6 +3403,9 @@ async function generateInstructionsPDF(){
     } catch(e){ /* si falla el QR, la portada igual queda bien */ }
 
     const margin = 8;
+    // Se construye una sola vez, fuera del bucle: es la misma para todas las hojas.
+    await prepararImagenMarca();
+    const capaMarca = construirCapaMarcaPagina(pageW, pageH);
     const imgSize = pageW - margin*2;
 
     for (let layer=0; layer<=maxLayer; layer++){
@@ -3141,20 +3428,10 @@ async function generateInstructionsPDF(){
       doc.text(modelName + ' — Paso ' + (layer+1) + ' de ' + (maxLayer+1), pageW/2, 12, { align:'center' });
       doc.addImage(imgData, 'JPEG', margin, 18, imgSize, imgSize);
 
-      // Marca de agua "3DBlock" repetida por toda la hoja, en el mismo ángulo y
-      // bien clarita — identifica el origen sin estorbar la lectura del manual.
-      if (doc.saveGraphicsState && doc.GState){
-        doc.saveGraphicsState();
-        doc.setGState(new doc.GState({ opacity: 0.05 }));
-      }
-      doc.setTextColor(0,0,0);
-      doc.setFontSize(22);
-      for (let wy = 20; wy < pageH; wy += 52){
-        for (let wx = -10; wx < pageW + 40; wx += 66){
-          doc.text('3DBlock', wx, wy, { angle: 30 });
-        }
-      }
-      if (doc.restoreGraphicsState) doc.restoreGraphicsState();
+      // Marca de agua configurable (se calibra desde ⚡ Vista previa). Es la misma
+      // imagen para todas las páginas y va con alias, así jsPDF la guarda una
+      // sola vez en el archivo en vez de repetirla por página.
+      if (capaMarca) doc.addImage(capaMarca, 'PNG', 0, 0, pageW, pageH, 'marcaAgua3DBlock', 'FAST');
 
       doc.setFontSize(8.5);
       doc.setTextColor(120,130,150);
@@ -3461,7 +3738,7 @@ async function generateInstructionsPNGZip(){
       const instrAngle2 = customInstructionAngle || { elevation: 35, azimuth: 45 };
       positionCameraFixedAngle(stepBox, instrAngle2.elevation, instrAngle2.azimuth, instructionMargin(), focusPointForLayer(stepBox, layer));
       renderer.render(scene, camera);
-      const dataUrl = renderer.domElement.toDataURL('image/png');
+      const dataUrl = await componerConMarca(renderer.domElement.toDataURL('image/png'));
       const base64 = dataUrl.split(',')[1];
       const stepNum = String(layer+1).padStart(pad, '0');
       zip.file(`paso_${stepNum}_de_${maxLayer+1}.png`, base64, { base64: true });
@@ -3624,6 +3901,21 @@ function drawLayerDiagram(){
     diagCtx.restore();
   }
 
+  // Marcas de la revisión de apoyos: borde rojo punteado sobre los bloques que
+  // quedarían al aire. Va después de las piezas para que quede siempre arriba.
+  if (problemCells && problemCells.size){
+    diagCtx.save();
+    diagCtx.strokeStyle = '#ff5a4d';
+    diagCtx.lineWidth = Math.max(2, cell*0.11);
+    diagCtx.setLineDash([Math.max(3, cell*0.24), Math.max(2, cell*0.16)]);
+    here.forEach((color, k)=>{
+      const [x,z] = k.split(',').map(Number);
+      if (!problemCells.has(x+','+currentLayer+','+z)) return;
+      diagCtx.strokeRect(ox+x*cell+1.5, oy+z*cell+1.5, cell-3, cell-3);
+    });
+    diagCtx.restore();
+  }
+
   // axis labels
   diagCtx.fillStyle = '#545e78';
   diagCtx.font = '10px ' + getComputedStyle(document.body).fontFamily;
@@ -3748,6 +4040,9 @@ function worldBoxFromVoxelList(list){
 
 /* ---------------------------- Deshacer (Ctrl+Z) ---------------------------- */
 let undoStack = [];
+/* Celdas marcadas por la revisión de apoyos ("x,y,z"), o null si todavía no se
+   revisó nada. El plano 2D las dibuja con borde rojo punteado. */
+let problemCells = null;
 let undoPendingGesture = false; // true = todavía no se guardó una foto para este clic/arrastre en curso
 function maybeSnapshotForGesture(){
   if (!undoPendingGesture) return;
@@ -3756,40 +4051,198 @@ function maybeSnapshotForGesture(){
 }
 const MAX_UNDO = 30; // límite para no acumular memoria de más
 
-function pushUndoSnapshot(){
-  undoStack.push({
-    voxels: voxels.map(v=>({x:v.x, y:v.y, z:v.z, color:v.color})),
+/* Pila de REHACER. Se llena solo cuando deshacés, y se vacía apenas hacés un
+   cambio nuevo — igual que en cualquier editor: si volvés atrás y después
+   dibujás algo distinto, la rama vieja ya no tiene a dónde volver. */
+let redoStack = [];
+
+/* Foto del estado actual del diseño. La usan las dos pilas, así que vive en una
+   sola función: si algún día se guarda algo más (por ejemplo el tamaño de pieza),
+   se agrega acá y deshacer y rehacer lo respetan los dos. */
+function snapshotDelModelo(){
+  return {
+    voxels: voxels.map(v=>({x:v.x, y:v.y, z:v.z, color:v.color, piece:v.piece, pieceSize:v.pieceSize, pieceIndex:v.pieceIndex})),
     dims: {x:dims.x, y:dims.y, z:dims.z},
-  });
-  if (undoStack.length > MAX_UNDO) undoStack.shift();
+  };
 }
 
-function undo(){
-  if (!undoStack.length){ setStatus('No hay ninguna acción para deshacer.', 'err'); return; }
-  const snap = undoStack.pop();
+function restaurarSnapshot(snap){
   voxels.length = 0; voxels.push(...snap.voxels);
   dims.x = snap.dims.x; dims.y = snap.dims.y; dims.z = snap.dims.z;
   magicSelection = null; replaceSourceColor = null;
+  problemCells = null; // las marcas rojas dejan de valer: el diseño cambió
   maxLayer = Math.max(0, dims.y-1);
   currentLayer = Math.min(currentLayer, maxLayer);
   drawLayerDiagram(); rebuildMesh3D(); refreshLayerUI();
   document.getElementById('statDims').textContent = `${dims.x}×${dims.y}×${dims.z}`;
   document.getElementById('statCount').textContent = `${voxels.length}`;
+  actualizarBotonesUndoRedo();
+}
+
+function actualizarBotonesUndoRedo(){
+  const u = document.getElementById('undoBtn'), r = document.getElementById('redoBtn');
+  if (u) u.style.opacity = undoStack.length ? '1' : '.35';
+  if (r) r.style.opacity = redoStack.length ? '1' : '.35';
+}
+
+function pushUndoSnapshot(){
+  undoStack.push(snapshotDelModelo());
+  if (undoStack.length > MAX_UNDO) undoStack.shift();
+  redoStack.length = 0; // cambio nuevo: la rama de rehacer ya no aplica
+  actualizarBotonesUndoRedo();
+}
+
+function undo(){
+  if (!undoStack.length){ setStatus('No hay ninguna acción para deshacer.', 'err'); return; }
+  redoStack.push(snapshotDelModelo());
+  if (redoStack.length > MAX_UNDO) redoStack.shift();
+  restaurarSnapshot(undoStack.pop());
   setStatus('Se deshizo la última acción. (' + undoStack.length + ' pasos más para atrás)', 'ok');
 }
+
+function redo(){
+  if (!redoStack.length){ setStatus('No hay nada para rehacer.', 'err'); return; }
+  undoStack.push(snapshotDelModelo());
+  if (undoStack.length > MAX_UNDO) undoStack.shift();
+  restaurarSnapshot(redoStack.pop());
+  setStatus('Se rehízo la acción. (' + redoStack.length + ' más para adelante)', 'ok');
+}
+
 document.getElementById('undoBtn').addEventListener('click', undo);
+document.getElementById('redoBtn').addEventListener('click', redo);
 window.addEventListener('keydown', e=>{
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z'){
-    const tag = (document.activeElement && document.activeElement.tagName) || '';
-    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-    e.preventDefault();
-    undo();
+  const tag = (document.activeElement && document.activeElement.tagName) || '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+  if (!(e.ctrlKey || e.metaKey)) return;
+  const k = e.key.toLowerCase();
+  if (k === 'z' && !e.shiftKey){ e.preventDefault(); undo(); }
+  else if (k === 'y' || (k === 'z' && e.shiftKey)){ e.preventDefault(); redo(); }
+});
+
+/* ---------------------------- Revisión de apoyos ----------------------------
+   Un diseño puede verse perfecto en pantalla y ser imposible de armar en la mesa.
+   Dos problemas distintos, con gravedad distinta:
+
+   1) VOLADIZO: el bloque no tiene nada justo debajo. Al llegar a su capa habría
+      que dejarlo flotando en el aire. Puede estar igual pegado al diseño (colgando
+      de un bloque de arriba), así que no siempre es un error — pero sí obliga a
+      armar fuera del orden de capas, que es justo lo que el manual promete.
+
+   2) ISLA SUELTA: un grupo de bloques que no está unido al resto por ningún lado.
+      Eso sí es imposible: se caería solo. Casi siempre queda de un borrado o de
+      un voxelizado con resolución muy alta.
+
+   La unión entre bloques es SOLO vertical (arriba/abajo, que es como encastran
+   de verdad) más los bloques que comparten una misma pieza larga 1x2/1x3, que
+   van rígidos entre sí. Dos bloques lado a lado en la misma capa NO se sostienen
+   uno al otro, por más que en pantalla se vean pegados. */
+function analizarApoyos(){
+  if (!voxels.length) return null;
+  const clave = v => v.x+','+Math.round(v.y)+','+v.z;
+  const porClave = new Map();
+  voxels.forEach(v => porClave.set(clave(v), v));
+  const baseY = Math.min(...voxels.map(v=>Math.round(v.y)));
+
+  // --- Voladizos, razonando por PIEZA: si un extremo de una 1x3 se apoya, la
+  //     pieza entera se apoya. Por eso no alcanza con mirar bloque por bloque.
+  const piezaApoyada = new Map();
+  voxels.forEach(v=>{
+    const y = Math.round(v.y);
+    const pid = v.piece || clave(v);
+    const apoyado = (y === baseY) || porClave.has(v.x+','+(y-1)+','+v.z);
+    if (apoyado || !piezaApoyada.has(pid)) piezaApoyada.set(pid, apoyado || !!piezaApoyada.get(pid));
+  });
+  const voladizos = voxels.filter(v => !piezaApoyada.get(v.piece || clave(v)));
+
+  // --- Islas: se camina el diseño desde la capa de abajo. Todo lo que no se
+  //     alcanza caminando está suelto.
+  const porPieza = new Map();
+  voxels.forEach(v=>{
+    const pid = v.piece || clave(v);
+    if (!porPieza.has(pid)) porPieza.set(pid, []);
+    porPieza.get(pid).push(v);
+  });
+  const visitados = new Set();
+  const cola = voxels.filter(v => Math.round(v.y) === baseY);
+  cola.forEach(v => visitados.add(clave(v)));
+  while (cola.length){
+    const v = cola.pop();
+    const y = Math.round(v.y);
+    const vecinos = [];
+    [y-1, y+1].forEach(ny=>{
+      const nv = porClave.get(v.x+','+ny+','+v.z);
+      if (nv) vecinos.push(nv);
+    });
+    (porPieza.get(v.piece || clave(v)) || []).forEach(nv => vecinos.push(nv));
+    vecinos.forEach(nv=>{
+      const k = clave(nv);
+      if (visitados.has(k)) return;
+      visitados.add(k);
+      cola.push(nv);
+    });
   }
+  const islas = voxels.filter(v => !visitados.has(clave(v)));
+
+  const marcados = new Set();
+  voladizos.forEach(v => marcados.add(clave(v)));
+  islas.forEach(v => marcados.add(clave(v)));
+  const capas = Array.from(new Set(Array.from(marcados).map(k => Number(k.split(',')[1])))).sort((a,b)=>a-b);
+
+  return { voladizos, islas, marcados, capas };
+}
+
+function ejecutarRevisionApoyos(){
+  const estado = document.getElementById('supportStatus');
+  const btnIr = document.getElementById('gotoProblemBtn');
+  const btnLimpiar = document.getElementById('clearProblemsBtn');
+  if (!voxels.length){ setStatus('No hay ningún modelo cargado.', 'err'); return; }
+
+  const r = analizarApoyos();
+  problemCells = r.marcados.size ? r.marcados : null;
+  drawLayerDiagram();
+
+  if (!r.marcados.size){
+    estado.innerHTML = '<span style="color:var(--accent-2);">Todo en orden: cada bloque se apoya en algo y no hay islas sueltas.</span>';
+    btnIr.style.display = 'none';
+    btnLimpiar.style.display = 'none';
+    setStatus('Revisión de apoyos: el diseño se puede armar capa por capa sin problemas.', 'ok');
+    return;
+  }
+
+  const partes = [];
+  if (r.voladizos.length) partes.push('<b>' + r.voladizos.length + '</b> bloque(s) al aire, sin nada debajo');
+  if (r.islas.length) partes.push('<b style="color:var(--danger);">' + r.islas.length + '</b> en islas sueltas, no pegadas al resto');
+  const lista = r.capas.slice(0, 12).join(', ') + (r.capas.length > 12 ? '…' : '');
+  estado.innerHTML = partes.join('<br/>') + '<br/>Capas afectadas: ' + lista;
+  btnIr.style.display = '';
+  btnLimpiar.style.display = '';
+  setStatus('Revisión de apoyos: ' + r.marcados.size + ' bloque(s) marcados en ' + r.capas.length + ' capa(s).',
+            r.islas.length ? 'err' : 'ok');
+}
+
+/* Salta a la próxima capa con problemas, dando la vuelta al llegar al final. */
+function irAlSiguienteProblema(){
+  if (!problemCells || !problemCells.size) return;
+  const capas = Array.from(new Set(Array.from(problemCells).map(k => Number(k.split(',')[1])))).sort((a,b)=>a-b);
+  const siguiente = capas.find(l => l > currentLayer);
+  goToLayer(siguiente === undefined ? capas[0] : siguiente);
+  setStatus('Capa ' + currentLayer + ': los bloques con problema van marcados en rojo punteado.', 'ok');
+}
+
+document.getElementById('checkSupportBtn').addEventListener('click', ejecutarRevisionApoyos);
+document.getElementById('gotoProblemBtn').addEventListener('click', irAlSiguienteProblema);
+document.getElementById('clearProblemsBtn').addEventListener('click', ()=>{
+  problemCells = null;
+  drawLayerDiagram();
+  document.getElementById('supportStatus').textContent = '';
+  document.getElementById('gotoProblemBtn').style.display = 'none';
+  document.getElementById('clearProblemsBtn').style.display = 'none';
 });
 
 function setVoxels(list, opts){
   opts = opts || {};
   voxels = list;
+  problemCells = null; // modelo nuevo: las marcas viejas ya no significan nada
   const box = boundsOf(voxels);
   dims = {
     x: Math.round(box.max.x-box.min.x)+1,
@@ -4504,7 +4957,8 @@ async function handleFile(file){
   setLoading(true, 'Procesando ' + file.name + '…');
   document.getElementById('voxelizeSection').style.display = 'none';
   savedFileHandle = null; // un modelo nuevo no debe pisar el archivo guardado del anterior
-  undoStack = []; undoPendingGesture = false; // ni tiene sentido "deshacer" hacia un modelo distinto
+  undoStack = []; redoStack = []; undoPendingGesture = false; // ni tiene sentido "deshacer" hacia un modelo distinto
+  problemCells = null;
   try{
     if (ext==='vox'){
       const buf = await file.arrayBuffer();
@@ -6395,6 +6849,7 @@ voxelSize = 1;
 waitForAuth().then(async () => {
   const loaded = await tryLoadModelFromUrl();
   if (!loaded) setVoxels(buildDemoTree());
+  actualizarBotonesUndoRedo(); // arrancan atenuados: todavía no hay nada que deshacer
   setTimeout(onResize, 30);
 });
 </script>
