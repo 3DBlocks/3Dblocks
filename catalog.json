@@ -260,6 +260,15 @@
       "price": 10,
       "thumb": "thumbs/goku.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/goku.json"
+    },
+    {
+      "slug": "wason",
+      "name": "wason",
+      "description": "wason",
+      "category": "wason",
+      "price": 5,
+      "thumb": "thumbs/wason.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/wason.json"
     }
   ]
 }
