@@ -278,6 +278,15 @@
       "price": 10,
       "thumb": "thumbs/mega-lucario.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/mega-lucario.json"
+    },
+    {
+      "slug": "jolteon",
+      "name": "jolteon",
+      "description": "pokemon",
+      "category": "pokemon",
+      "price": 10,
+      "thumb": "thumbs/jolteon.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/jolteon.json"
     }
   ]
 }
