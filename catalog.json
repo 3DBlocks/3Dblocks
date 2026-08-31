@@ -269,6 +269,15 @@
       "price": 5,
       "thumb": "thumbs/wason.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/wason.json"
+    },
+    {
+      "slug": "mega-lucario",
+      "name": "mega lucario",
+      "description": "pokemon",
+      "category": "pokemon",
+      "price": 10,
+      "thumb": "thumbs/mega-lucario.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/mega-lucario.json"
     }
   ]
 }
