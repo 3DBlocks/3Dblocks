@@ -287,6 +287,15 @@
       "price": 10,
       "thumb": "thumbs/jolteon.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/jolteon.json"
+    },
+    {
+      "slug": "tinker",
+      "name": "TINKER",
+      "description": "dota 2",
+      "category": "dota 2",
+      "price": 19,
+      "thumb": "thumbs/tinker.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/tinker.json"
     }
   ]
 }
