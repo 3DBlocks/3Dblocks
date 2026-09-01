@@ -466,7 +466,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v58</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v59</small></div>
     </div>
     <div id="modelNameText">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -3089,35 +3089,120 @@ function dibujarMarcaAgua(ctx, W, H){
   ctx.restore();
 }
 
-/* Arma la HOJA para la vista previa y los PNG: el render va centrado con un
-   margen alrededor, la marca de agua se dibuja sobre toda la hoja y después se
-   borra del rectángulo del render. Así la marca rodea el diseño sin taparlo,
-   que es exactamente lo que hace el PDF — la vista previa y los PNG usan esto
-   para que lo que ves sea lo que se imprime.
+/* ---------------------------- Silueta del modelo ----------------------------
+   Para que la marca de agua llegue hasta el borde REAL de la figura y no hasta
+   un cuadro, hay que saber qué píxeles del render son modelo y cuáles son
+   fondo. No alcanza con "todo lo blanco es fondo": un bloque blanco del diseño
+   también es casi blanco y quedaría tapado por la marca.
 
-   Sin margen no habría dónde ponerla: en una foto recortada al ras del modelo,
-   "alrededor" no existe. */
-const MARGEN_HOJA = 0.11; // 11% del lado, a cada costado
-async function componerHojaConMarca(dataUrl){
+   Lo que sí distingue al fondo es que está CONECTADO con el borde de la imagen.
+   Así que se entra desde los cuatro bordes y se avanza por los píxeles de color
+   de fondo hasta chocar con el modelo. Todo lo que no se alcanza desde afuera
+   es modelo — incluidos los bloques blancos de adentro, porque están rodeados
+   de píxeles oscuros. */
+function esPixelDeFondo(d, p){
+  // El fondo del manual es liso; el modelo, aun en blanco, viene sombreado.
+  // 246 deja pasar el degradado suave del fondo sin comerse las piezas claras.
+  return d[p] >= 246 && d[p+1] >= 246 && d[p+2] >= 246;
+}
+function siluetaDelRender(img, halo){
+  const w = img.naturalWidth, h = img.naturalHeight;
+  const tmp = document.createElement('canvas');
+  tmp.width = w; tmp.height = h;
+  const tctx = tmp.getContext('2d', { willReadFrequently: true });
+  tctx.drawImage(img, 0, 0);
+  const datos = tctx.getImageData(0, 0, w, h);
+  const d = datos.data;
+
+  // Recorrido desde los bordes. Pila propia en vez de recursión: con imágenes de
+  // 1500x1500 una recursión se pasa de profundidad y revienta.
+  const afuera = new Uint8Array(w*h);
+  const pila = [];
+  const meter = (x, y) => {
+    if (x < 0 || y < 0 || x >= w || y >= h) return;
+    const idx = y*w + x;
+    if (afuera[idx]) return;
+    if (!esPixelDeFondo(d, idx*4)) return;
+    afuera[idx] = 1;
+    pila.push(idx);
+  };
+  for (let x = 0; x < w; x++){ meter(x, 0); meter(x, h-1); }
+  for (let y = 0; y < h; y++){ meter(0, y); meter(w-1, y); }
+  while (pila.length){
+    const idx = pila.pop();
+    const x = idx % w, y = (idx - x) / w;
+    meter(x+1, y); meter(x-1, y); meter(x, y+1); meter(x, y-1);
+  }
+
+  // Máscara: opaca donde hay modelo, transparente donde hay fondo.
+  const mascara = tctx.createImageData(w, h);
+  const md = mascara.data;
+  for (let i = 0; i < w*h; i++){
+    if (!afuera[i]) md[i*4+3] = 255; // el color no importa: solo se usa el alfa
+  }
+  const cm = document.createElement('canvas');
+  cm.width = w; cm.height = h;
+  const cmctx = cm.getContext('2d');
+  cmctx.putImageData(mascara, 0, 0);
+
+  // Halo: se engorda la silueta dibujándola corrida en varias direcciones, para
+  // que la marca no quede rozando el borde de los bloques. Es mucho más barato
+  // que engordarla píxel por píxel y a esta escala se ve igual.
+  if (halo > 0){
+    const cg = document.createElement('canvas');
+    cg.width = w; cg.height = h;
+    const cgctx = cg.getContext('2d');
+    const pasos = 16;
+    for (let r = halo; r > 0; r -= Math.max(1, halo/2)){
+      for (let k = 0; k < pasos; k++){
+        const a = (k/pasos) * Math.PI * 2;
+        cgctx.drawImage(cm, Math.cos(a)*r, Math.sin(a)*r);
+      }
+    }
+    cgctx.drawImage(cm, 0, 0);
+    return cg;
+  }
+  return cm;
+}
+
+/* Arma la HOJA para la vista previa, los PNG y las fotos del PDF: el render va
+   sobre el fondo, la marca de agua cubre TODO y después se borra de la silueta
+   del modelo. Así la marca llega hasta el contorno mismo de la figura en vez de
+   detenerse en un rectángulo blanco, y no queda nada encima del diseño.
+
+   `margen` agrega borde alrededor del render (para los PNG sueltos, que si no
+   quedan al ras); en el PDF va en 0 porque la hoja ya trae su propio margen. */
+const MARGEN_HOJA = 0.04; // 4% del lado, a cada costado
+async function componerHojaConMarca(dataUrl, opciones){
+  opciones = opciones || {};
   await prepararImagenMarca();
-  if (!marcaEstaActiva()) return dataUrl; // sin marca no hace falta agrandar nada
+  if (!marcaEstaActiva()) return dataUrl; // sin marca no hay nada que componer
   const img = await cargarImagenDesdeDataUrl(dataUrl);
-  const m = Math.round(Math.min(img.naturalWidth, img.naturalHeight) * MARGEN_HOJA);
-  const c = document.createElement('canvas');
-  c.width = img.naturalWidth + m*2;
-  c.height = img.naturalHeight + m*2;
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = COLOR_FONDO_MANUAL;
-  ctx.fillRect(0, 0, c.width, c.height);
-  dibujarMarcaAgua(ctx, c.width, c.height);
-  const respiro = Math.round(m * 0.12);
-  ctx.clearRect(m - respiro, m - respiro, img.naturalWidth + respiro*2, img.naturalHeight + respiro*2);
-  // El clearRect deja ese rectángulo transparente; se vuelve a pintar el fondo
-  // antes de poner el render, para que no quede un agujero en el PNG.
-  ctx.fillStyle = COLOR_FONDO_MANUAL;
-  ctx.fillRect(m - respiro, m - respiro, img.naturalWidth + respiro*2, img.naturalHeight + respiro*2);
-  ctx.drawImage(img, m, m);
-  return c.toDataURL('image/png');
+  const lado = Math.min(img.naturalWidth, img.naturalHeight);
+  const m = Math.round(lado * (opciones.margen !== undefined ? opciones.margen : MARGEN_HOJA));
+  const W = img.naturalWidth + m*2, H = img.naturalHeight + m*2;
+
+  const hoja = document.createElement('canvas');
+  hoja.width = W; hoja.height = H;
+  const hctx = hoja.getContext('2d');
+  hctx.fillStyle = COLOR_FONDO_MANUAL;
+  hctx.fillRect(0, 0, W, H);
+  hctx.drawImage(img, m, m);
+
+  // La marca se dibuja aparte para poder recortarle la silueta antes de pegarla.
+  const capa = document.createElement('canvas');
+  capa.width = W; capa.height = H;
+  const cctx = capa.getContext('2d');
+  dibujarMarcaAgua(cctx, W, H);
+
+  const halo = Math.max(2, Math.round(lado * 0.012));
+  const silueta = siluetaDelRender(img, halo);
+  cctx.globalCompositeOperation = 'destination-out';
+  cctx.drawImage(silueta, m, m);
+  cctx.globalCompositeOperation = 'source-over';
+
+  hctx.drawImage(capa, 0, 0);
+  return hoja.toDataURL(opciones.formato || 'image/png', opciones.calidad);
 }
 
 /* Capa de marca del tamaño de la hoja del PDF, con fondo transparente. Se genera
@@ -3214,7 +3299,11 @@ async function quickAnglePreview(previewLayer){
   const wasGroundVisible = ground.visible;
   const wasGroundColor = ground.material.color.clone();
   const wasGroundScale = ground.scale.clone();
-  ground.visible = true;
+  // El piso queda APAGADO en lo que lleva marca de agua: es del mismo color
+  // que el fondo, así que no se ve, pero al estar iluminado sale con un tono
+  // apenas distinto y el detector de silueta lo tomaría como parte del
+  // modelo, dejando un disco enorme sin marca alrededor de la figura.
+  ground.visible = false;
   ground.material.color.copy(studioColor);
   ground.scale.setScalar(Math.max(1, maxDim*3/40));
 
@@ -3425,7 +3514,11 @@ async function generateInstructionsPDF(){
   const wasGroundVisible = ground.visible;
   const wasGroundColor = ground.material.color.clone();
   const wasGroundScale = ground.scale.clone();
-  ground.visible = true;
+  // El piso queda APAGADO en lo que lleva marca de agua: es del mismo color
+  // que el fondo, así que no se ve, pero al estar iluminado sale con un tono
+  // apenas distinto y el detector de silueta lo tomaría como parte del
+  // modelo, dejando un disco enorme sin marca alrededor de la figura.
+  ground.visible = false;
   ground.material.color.copy(studioColor);
   ground.scale.setScalar(Math.max(1, maxDimForGround*3/40));
   const realMat = new THREE.MeshPhysicalMaterial({
@@ -3586,7 +3679,14 @@ async function generateInstructionsPDF(){
       // en modelos altos, la capa nueva quedaba muy arriba y se veía de canto.
       positionCameraFixedAngle(stepBox, instrAngle.elevation, instrAngle.azimuth, instructionMargin(), focusPointForLayer(stepBox, layer));
       renderer.render(scene, camera);
-      const imgData = renderer.domElement.toDataURL('image/jpeg', 0.9);
+      // La foto del paso lleva la marca de agua ya recortada a la silueta del
+      // modelo: alrededor de la figura sí, encima nunca. Se parte del PNG porque
+      // el JPEG ensucia el blanco del fondo y confundiría al detector de silueta;
+      // la salida vuelve a ser JPEG para no inflar el PDF.
+      const imgData = marcaEstaActiva()
+        ? await componerHojaConMarca(renderer.domElement.toDataURL('image/png'),
+                                     { margen: 0, formato: 'image/jpeg', calidad: 0.9 })
+        : renderer.domElement.toDataURL('image/jpeg', 0.9);
 
       doc.addPage();
       doc.setFontSize(14);
@@ -3868,7 +3968,11 @@ async function generateInstructionsPNGZip(){
   const wasGroundVisible = ground.visible;
   const wasGroundColor = ground.material.color.clone();
   const wasGroundScale = ground.scale.clone();
-  ground.visible = true;
+  // El piso queda APAGADO en lo que lleva marca de agua: es del mismo color
+  // que el fondo, así que no se ve, pero al estar iluminado sale con un tono
+  // apenas distinto y el detector de silueta lo tomaría como parte del
+  // modelo, dejando un disco enorme sin marca alrededor de la figura.
+  ground.visible = false;
   ground.material.color.copy(studioColor);
   ground.scale.setScalar(Math.max(1, maxDimForGround*3/40));
   const realMat = new THREE.MeshPhysicalMaterial({
