@@ -466,7 +466,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v57</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v58</small></div>
     </div>
     <div id="modelNameText">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -499,6 +499,14 @@
           <button class="btn sm" id="printInstructionsBtn" title="Descargar un PDF con todas las capas, listo para imprimir">🖨️ Imprimir instrucciones</button>
           <button class="btn sm" id="printInstructionsPngBtn" title="Descargar las instrucciones como imágenes PNG (un archivo .zip) — mucho más liviano que el PDF, sin perder nitidez">🖼️ Instrucciones en PNG (.zip)</button>
           <button class="btn sm" id="videoInstructionsBtn" title="Genera un video del armado: el modelo se va construyendo capa por capa, girando lentamente">🎬 Video de armado</button>
+        </div>
+        <div id="rangoPasosRow" class="admin-only" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:11px; color:var(--text-dim); margin-top:6px;">
+          <span>Generar del paso</span>
+          <input type="number" id="pasoDesde" min="1" value="1" style="width:60px; background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:3px 5px; font-size:11px;" />
+          <span>al</span>
+          <input type="number" id="pasoHasta" min="1" style="width:60px; background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:3px 5px; font-size:11px;" />
+          <button class="btn sm ghost" id="rangoTodoBtn" style="padding:2px 8px; font-size:10.5px;">Todos</button>
+          <span id="rangoInfo" style="color:var(--text-faint);"></span>
         </div>
         <div id="diagramSub">Coloca <b id="diagramCount">0</b> bloques nuevos en esta capa. Los bloques atenuados ya están colocados debajo.</div>
       </div>
@@ -612,6 +620,9 @@
         <div class="fmt-row"><span class="fmt-badge">.VOX</span><span class="fmt-badge">.DAE</span><span class="fmt-badge">.JSON</span><span class="fmt-badge admin-only">.OBJ</span><span class="fmt-badge admin-only">.STL</span><span class="fmt-badge admin-only">.3MF</span></div>
       </div>
       <input id="fileInput" type="file" accept=".vox,.dae,.json,.obj,.stl,.3mf" />
+      <button class="btn wide admin-only" id="mergeFileBtn" style="width:100%; margin-top:8px;">➕ Unir otro diseño al actual</button>
+      <input id="mergeFileInput" type="file" accept=".vox,.dae,.json,.obj,.stl,.3mf" style="display:none;" />
+      <p class="admin-only" style="font-size:10.5px; color:var(--text-faint); margin:6px 0 0; line-height:1.5;">Carga un segundo archivo SIN borrar el que ya está: lo coloca al lado, apoyado en el piso, y lo deja seleccionado para que lo acomodes con la herramienta de mover. Desde ahí los dos son un solo diseño y se pintan juntos. Ctrl+Z deshace la unión.</p>
       <div id="statusMsg"></div>
     </div>
 
@@ -916,8 +927,11 @@ const COLOR_FONDO_MANUAL = '#ffffff';
    una cámara ortográfica de verdad obligaría a rehacer el zoom, el encuadre del
    manual y el cálculo de detalle del contorno; esto da el mismo resultado
    práctico sin tocar nada de eso. */
-const FOV_NORMAL = 42, FOV_PLANA = 8;
-let vistaPlana = false;
+const FOV_NORMAL = 42, FOV_PLANA = 4;
+/* Arranca en plana: es el modo en el que el bloque que ves es el que tocás, y
+   era lo que molestaba al seleccionar celdas en vertical. Se recuerda la
+   elección para la próxima vez. */
+let vistaPlana = (localStorage.getItem('3dblock.vistaPlana') !== '0');
 const camera = new THREE.PerspectiveCamera(FOV_NORMAL, Math.max(1,host.clientWidth) / Math.max(1,host.clientHeight), 0.1, 2000);
 /* Cuánto hay que alejar la cámara para que, con el campo de visión actual, el
    modelo se siga viendo del mismo tamaño que con el de siempre. */
@@ -1072,7 +1086,11 @@ class SimpleOrbitControls {
     this.camera = camera; this.dom = dom;
     this.target = new THREE.Vector3(0, 1.2, 0);
     this.radius = 12; this.azimuth = Math.PI*0.28; this.polar = Math.PI*0.36;
-    this.minPolar = 0.15; this.maxPolar = Math.PI*0.49;
+    // El tope de abajo estaba en 0.49π: la cámara no podía pasar del horizonte,
+    // así que era imposible ver el diseño desde abajo. Ahora llega casi al polo
+    // sur; los 0.15 de margen a cada lado evitan el punto exacto donde la cámara
+    // queda alineada con su propio eje y la vista se tumba de golpe.
+    this.minPolar = 0.15; this.maxPolar = Math.PI - 0.15;
     this.minRadius = 2.5; this.maxRadius = 60;
     this.autoRotate = false; this.autoRotateSpeed = 0.35;
     this.damping = 0.14;
@@ -1210,6 +1228,7 @@ window.addEventListener('keydown', e=>{
 function aplicarVistaPlana(activar){
   const antes = factorEncuadreFov();
   vistaPlana = activar;
+  localStorage.setItem('3dblock.vistaPlana', activar ? '1' : '0');
   camera.fov = activar ? FOV_PLANA : FOV_NORMAL;
   camera.updateProjectionMatrix();
   const k = factorEncuadreFov() / antes;
@@ -3070,17 +3089,34 @@ function dibujarMarcaAgua(ctx, W, H){
   ctx.restore();
 }
 
-/* Pega la marca encima de una imagen ya renderizada (para los PNG y la vista
-   previa). Si no hay marca activa, devuelve la misma imagen sin tocar. */
-async function componerConMarca(dataUrl){
+/* Arma la HOJA para la vista previa y los PNG: el render va centrado con un
+   margen alrededor, la marca de agua se dibuja sobre toda la hoja y después se
+   borra del rectángulo del render. Así la marca rodea el diseño sin taparlo,
+   que es exactamente lo que hace el PDF — la vista previa y los PNG usan esto
+   para que lo que ves sea lo que se imprime.
+
+   Sin margen no habría dónde ponerla: en una foto recortada al ras del modelo,
+   "alrededor" no existe. */
+const MARGEN_HOJA = 0.11; // 11% del lado, a cada costado
+async function componerHojaConMarca(dataUrl){
   await prepararImagenMarca();
-  if (!marcaEstaActiva()) return dataUrl;
+  if (!marcaEstaActiva()) return dataUrl; // sin marca no hace falta agrandar nada
   const img = await cargarImagenDesdeDataUrl(dataUrl);
+  const m = Math.round(Math.min(img.naturalWidth, img.naturalHeight) * MARGEN_HOJA);
   const c = document.createElement('canvas');
-  c.width = img.naturalWidth; c.height = img.naturalHeight;
+  c.width = img.naturalWidth + m*2;
+  c.height = img.naturalHeight + m*2;
   const ctx = c.getContext('2d');
-  ctx.drawImage(img, 0, 0);
+  ctx.fillStyle = COLOR_FONDO_MANUAL;
+  ctx.fillRect(0, 0, c.width, c.height);
   dibujarMarcaAgua(ctx, c.width, c.height);
+  const respiro = Math.round(m * 0.12);
+  ctx.clearRect(m - respiro, m - respiro, img.naturalWidth + respiro*2, img.naturalHeight + respiro*2);
+  // El clearRect deja ese rectángulo transparente; se vuelve a pintar el fondo
+  // antes de poner el render, para que no quede un agujero en el PNG.
+  ctx.fillStyle = COLOR_FONDO_MANUAL;
+  ctx.fillRect(m - respiro, m - respiro, img.naturalWidth + respiro*2, img.naturalHeight + respiro*2);
+  ctx.drawImage(img, m, m);
   return c.toDataURL('image/png');
 }
 
@@ -3246,7 +3282,7 @@ let previewRenderCrudo = null;
 async function actualizarImagenPreview(){
   if (!previewRenderCrudo) return;
   const img = document.getElementById('anglePreviewImg');
-  try{ img.src = await componerConMarca(previewRenderCrudo); }
+  try{ img.src = await componerHojaConMarca(previewRenderCrudo); }
   catch(err){ img.src = previewRenderCrudo; }
 }
 document.getElementById('quickPreviewBtn').addEventListener('click', ()=>quickAnglePreview());
@@ -3312,6 +3348,50 @@ document.getElementById('wmImageInput').addEventListener('change', e=>{
   };
   reader.readAsDataURL(file);
   e.target.value = ''; // permite volver a elegir el mismo archivo
+});
+
+/* ---------------------------- Rango de pasos (manual en partes) ----------------------------
+   Un modelo alto da un PDF larguísimo y un video de varios minutos, y el
+   navegador se queda sin memoria antes de terminar. Con esto se genera por
+   tramos: primero del paso 1 al 40, después del 41 al 80, y se juntan después.
+
+   OJO con lo que esto NO arregla: cada paso dibuja TODO lo que va debajo, así
+   que la parte 2 sigue teniendo el modelo casi entero en pantalla. Partir el
+   manual baja el tiempo, el peso del archivo y la cantidad de páginas, pero no
+   baja la cantidad de bloques por foto — el tope de bloques sigue siendo el
+   mismo. */
+function rangoPasos(){
+  const dDesde = document.getElementById('pasoDesde');
+  const dHasta = document.getElementById('pasoHasta');
+  let desde = parseInt(dDesde.value, 10); if (!(desde >= 1)) desde = 1;
+  let hasta = parseInt(dHasta.value, 10); if (!(hasta >= 1)) hasta = maxLayer+1;
+  desde = Math.min(desde, maxLayer+1);
+  hasta = Math.max(desde, Math.min(hasta, maxLayer+1));
+  return { desde: desde-1, hasta: hasta-1, parcial: (desde-1) > 0 || (hasta-1) < maxLayer };
+}
+/* Sufijo para el nombre del archivo cuando NO es el manual completo, así las
+   partes no se pisan en la carpeta de descargas. */
+function sufijoRango(){
+  const r = rangoPasos();
+  return r.parcial ? '_pasos_' + (r.desde+1) + '-' + (r.hasta+1) : '';
+}
+function refrescarRangoPasos(){
+  const dDesde = document.getElementById('pasoDesde');
+  const dHasta = document.getElementById('pasoHasta');
+  if (!dDesde) return;
+  dDesde.max = maxLayer+1; dHasta.max = maxLayer+1;
+  if (!dHasta.value || parseInt(dHasta.value,10) > maxLayer+1) dHasta.value = maxLayer+1;
+  const r = rangoPasos();
+  const cuantos = r.hasta - r.desde + 1;
+  document.getElementById('rangoInfo').textContent =
+    r.parcial ? '(' + cuantos + ' de ' + (maxLayer+1) + ' pasos)' : '(los ' + (maxLayer+1) + ' pasos)';
+}
+document.getElementById('pasoDesde').addEventListener('input', refrescarRangoPasos);
+document.getElementById('pasoHasta').addEventListener('input', refrescarRangoPasos);
+document.getElementById('rangoTodoBtn').addEventListener('click', ()=>{
+  document.getElementById('pasoDesde').value = 1;
+  document.getElementById('pasoHasta').value = maxLayer+1;
+  refrescarRangoPasos();
 });
 
 async function generateInstructionsPDF(){
@@ -3386,6 +3466,16 @@ async function generateInstructionsPDF(){
     doc.setFontSize(10.5);
     doc.setTextColor(180,186,204);
     doc.text(voxels.length + ' bloques · ' + (maxLayer+1) + ' capas', pageW/2, 44, { align:'center' });
+    // Si es un tramo y no el manual entero, la portada lo dice: si no, dos partes
+    // impresas quedan indistinguibles una vez apiladas en la mesa.
+    {
+      const rPortada = rangoPasos();
+      if (rPortada.parcial){
+        doc.setFontSize(12);
+        doc.setTextColor(242,177,52);
+        doc.text('Pasos ' + (rPortada.desde+1) + ' a ' + (rPortada.hasta+1) + ' de ' + (maxLayer+1), pageW/2, 52, { align:'center' });
+      }
+    }
 
     // Dos fotos del modelo terminado, desde ángulos distintos: el punto medio
     // entre las vistas 1 y 2 (frente/atrás), y el punto medio entre 3 y 1
@@ -3482,8 +3572,9 @@ async function generateInstructionsPDF(){
     // La imagen del paso va en (margin, 18) con lado imgSize: ese rectángulo
     // queda libre de marca de agua para no estorbar la lectura del armado.
     const capaMarca = construirCapaMarcaPagina(pageW, pageH, { x: margin, y: 18, w: imgSize, h: imgSize });
+    const rango = rangoPasos();
 
-    for (let layer=0; layer<=maxLayer; layer++){
+    for (let layer=rango.desde; layer<=rango.hasta; layer++){
       currentLayer = layer;
       rebuildMesh3D({ instrucciones:true }); // con showFullDesign=false y showBelowLayers=true: esta capa a color, las de abajo gris
       materialParaInstrucciones(realMat);
@@ -3551,7 +3642,7 @@ async function generateInstructionsPDF(){
     }
 
     const baseName = modelName.replace(/[^\w\-]+/g,'_') || 'diseno';
-    doc.save(baseName + '_instrucciones.pdf');
+    doc.save(baseName + '_instrucciones' + sufijoRango() + '.pdf');
     setStatus('Instrucciones descargadas: ' + baseName + '_instrucciones.pdf', 'ok');
   } catch(err){
     console.error(err);
@@ -3652,12 +3743,13 @@ async function generateAssemblyVideo(){
     recorder.start();
 
     const ang = customInstructionAngle || { elevation: 35, azimuth: 45 };
-    const totalFrames = (maxLayer+1) * framesPerLayer;
+    const rango = rangoPasos();
+    const totalFrames = (rango.hasta - rango.desde + 1) * framesPerLayer;
     let frame = 0;
     const offX = (dims.x*voxelSize)/2, offZ = (dims.z*voxelSize)/2;
     const growDummy = new THREE.Object3D();
 
-    for (let layer=0; layer<=maxLayer; layer++){
+    for (let layer=rango.desde; layer<=rango.hasta; layer++){
       currentLayer = layer;
       rebuildMesh3D({ instrucciones:true });
       materialParaInstrucciones(realMat);
@@ -3716,7 +3808,7 @@ async function generateAssemblyVideo(){
     const a = document.createElement('a');
     const modelName = (document.getElementById('modelNameText').textContent || 'diseno').trim();
     const baseName = modelName.replace(/[^\w\-]+/g,'_') || 'diseno';
-    a.href = url; a.download = baseName + '_armado.webm';
+    a.href = url; a.download = baseName + '_armado' + sufijoRango() + '.webm';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
     setStatus('Video descargado: ' + baseName + '_armado.webm', 'ok');
@@ -3802,8 +3894,9 @@ async function generateInstructionsPNGZip(){
     const modelName = (document.getElementById('modelNameText').textContent || 'Diseño 3DBlock').trim();
     const baseName = modelName.replace(/[^\w\-]+/g,'_') || 'diseno';
     const pad = String(maxLayer+1).length;
+    const rango = rangoPasos();
 
-    for (let layer=0; layer<=maxLayer; layer++){
+    for (let layer=rango.desde; layer<=rango.hasta; layer++){
       currentLayer = layer;
       rebuildMesh3D({ instrucciones:true });
       materialParaInstrucciones(realMat);
@@ -3813,7 +3906,7 @@ async function generateInstructionsPNGZip(){
       const instrAngle2 = customInstructionAngle || { elevation: 35, azimuth: 45 };
       positionCameraFixedAngle(stepBox, instrAngle2.elevation, instrAngle2.azimuth, instructionMargin(), focusPointForLayer(stepBox, layer));
       renderer.render(scene, camera);
-      const dataUrl = await componerConMarca(renderer.domElement.toDataURL('image/png'));
+      const dataUrl = await componerHojaConMarca(renderer.domElement.toDataURL('image/png'));
       const base64 = dataUrl.split(',')[1];
       const stepNum = String(layer+1).padStart(pad, '0');
       zip.file(`paso_${stepNum}_de_${maxLayer+1}.png`, base64, { base64: true });
@@ -3822,7 +3915,7 @@ async function generateInstructionsPNGZip(){
     const blob = await zip.generateAsync({ type: 'blob' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = baseName + '_instrucciones_png.zip';
+    a.href = url; a.download = baseName + '_instrucciones_png' + sufijoRango() + '.zip';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
     setStatus('Instrucciones descargadas: ' + baseName + '_instrucciones_png.zip (' + (maxLayer+1) + ' imágenes)', 'ok');
@@ -4063,6 +4156,7 @@ function highlightTrack(){
 
 /* ---------------------------- UI de capa ---------------------------- */
 function refreshLayerUI(){
+  if (typeof refrescarRangoPasos === 'function') refrescarRangoPasos(); // el tope del rango depende del modelo cargado
   document.getElementById('layerBigNum').textContent = currentLayer;
   document.getElementById('layerNowTxt').textContent = currentLayer;
   document.getElementById('layerMaxTxt').textContent = maxLayer;
@@ -4314,7 +4408,42 @@ document.getElementById('clearProblemsBtn').addEventListener('click', ()=>{
   document.getElementById('clearProblemsBtn').style.display = 'none';
 });
 
+/* ---------------------------- Unir dos diseños ----------------------------
+   Todos los importadores terminan llamando a setVoxels(), que REEMPLAZA lo que
+   había. Para unir sin tocar los seis importadores, se levanta esta bandera
+   justo antes de importar: setVoxels la ve, junta las dos listas y sigue como
+   siempre. Así el .vox, el .3mf, el .json y los demás quedan soportados de una,
+   sin código repetido en cada uno.
+
+   El segundo diseño se apoya en el piso y se pone AL LADO del primero, con un
+   hueco de 2 bloques: apilarlos automáticamente o mezclarlos en el mismo lugar
+   obligaría a adivinar qué querías, y moverlo después es un arrastre. */
+let anexarProximoModelo = false;
+const HUECO_ENTRE_DISENOS = 2;
+
+function anexarModelo(nuevos){
+  if (!nuevos || !nuevos.length) return;
+  const bNuevo = boundsOf(nuevos);
+  const bActual = boundsOf(voxels);
+  const corrimiento = Math.round(bActual.max.x) + 1 + HUECO_ENTRE_DISENOS;
+  const movidos = nuevos.map(v => ({
+    x: Math.round(v.x - bNuevo.min.x) + corrimiento,
+    y: Math.round(v.y - bNuevo.min.y),   // los dos apoyados en el piso
+    z: Math.round(v.z - bNuevo.min.z),
+    color: v.color,
+  }));
+  setVoxels(voxels.concat(movidos));
+  // Quedan seleccionados: así se acomodan directo con la herramienta de mover,
+  // sin tener que volver a marcarlos uno por uno.
+  setBoxSelection(new Set(movidos.map(v => v.x+','+v.y+','+v.z)));
+  setStatus('Diseños unidos: ' + movidos.length + ' bloques agregados al lado del actual, ya seleccionados para que los muevas donde quieras.', 'ok');
+}
+
 function setVoxels(list, opts){
+  if (anexarProximoModelo){
+    anexarProximoModelo = false;
+    if (voxels.length) return anexarModelo(list); // si no había nada, se carga normal
+  }
   opts = opts || {};
   voxels = list;
   problemCells = null; // modelo nuevo: las marcas viejas ya no significan nada
@@ -5027,13 +5156,20 @@ const statusEl = document.getElementById('statusMsg');
 function setStatus(msg,kind){ statusEl.className = kind||''; statusEl.textContent = msg; }
 function setLoading(on,text){ document.getElementById('loadingOverlay').classList.toggle('show',on); if (text) document.getElementById('loadingText').textContent = text; }
 
-async function handleFile(file){
+async function handleFile(file, anexar){
   const ext = file.name.split('.').pop().toLowerCase();
-  setLoading(true, 'Procesando ' + file.name + '…');
+  setLoading(true, (anexar ? 'Uniendo ' : 'Procesando ') + file.name + '…');
   document.getElementById('voxelizeSection').style.display = 'none';
-  savedFileHandle = null; // un modelo nuevo no debe pisar el archivo guardado del anterior
-  undoStack = []; redoStack = []; undoPendingGesture = false; // ni tiene sentido "deshacer" hacia un modelo distinto
-  problemCells = null;
+  if (anexar){
+    // Unir NO es cargar otro modelo: hay que poder volver atrás con Ctrl+Z, así
+    // que se guarda una foto del diseño actual en vez de vaciar el historial.
+    pushUndoSnapshot();
+    anexarProximoModelo = true;
+  } else {
+    savedFileHandle = null; // un modelo nuevo no debe pisar el archivo guardado del anterior
+    undoStack = []; redoStack = []; undoPendingGesture = false; // ni tiene sentido "deshacer" hacia un modelo distinto
+    problemCells = null;
+  }
   try{
     if (ext==='vox'){
       const buf = await file.arrayBuffer();
@@ -5346,6 +5482,23 @@ const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
 dropzone.addEventListener('click', ()=> fileInput.click());
 fileInput.addEventListener('change', e=>{ if (e.target.files[0]) handleFile(e.target.files[0]); });
+
+/* Unir: usa el mismo importador, solo que en modo anexar. El nombre del modelo
+   pasa a ser "A + B" para que después se sepa de dónde salió el archivo. */
+const mergeFileInput = document.getElementById('mergeFileInput');
+document.getElementById('mergeFileBtn').addEventListener('click', ()=>{
+  if (!voxels.length){ setStatus('Primero cargá un diseño; después unís el segundo.', 'err'); return; }
+  mergeFileInput.click();
+});
+mergeFileInput.addEventListener('change', async e=>{
+  const file = e.target.files[0];
+  e.target.value = ''; // permite volver a elegir el mismo archivo
+  if (!file) return;
+  const etiqueta = document.getElementById('modelNameText');
+  const nombreAntes = etiqueta.textContent;
+  await handleFile(file, true);
+  etiqueta.textContent = nombreAntes + ' + ' + file.name;
+});
 ['dragenter','dragover'].forEach(ev=> dropzone.addEventListener(ev, e=>{ e.preventDefault(); dropzone.classList.add('drag'); }));
 ['dragleave','drop'].forEach(ev=> dropzone.addEventListener(ev, e=>{ e.preventDefault(); dropzone.classList.remove('drag'); }));
 dropzone.addEventListener('drop', e=>{ const f=e.dataTransfer.files[0]; if (f) handleFile(f); });
@@ -6955,6 +7108,15 @@ requestAnimationFrame(loop);
 voxelSize = 1;
 waitForAuth().then(async () => {
   const loaded = await tryLoadModelFromUrl();
+  // La vista plana tiene que quedar puesta ANTES de encuadrar: el encuadre
+  // depende del ángulo de visión, y si se aplicara después el modelo arrancaría
+  // con un tamaño distinto del que corresponde.
+  if (vistaPlana){
+    camera.fov = FOV_PLANA;
+    camera.updateProjectionMatrix();
+    const btnPlana = document.getElementById('flatViewBtn');
+    if (btnPlana){ btnPlana.textContent = 'Plana'; btnPlana.classList.add('primary'); }
+  }
   if (!loaded) setVoxels(buildDemoTree());
   actualizarBotonesUndoRedo(); // arrancan atenuados: todavía no hay nada que deshacer
   setTimeout(onResize, 30);
