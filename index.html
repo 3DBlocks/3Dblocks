@@ -466,7 +466,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v60</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v61</small></div>
     </div>
     <div id="modelNameText">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -2702,6 +2702,62 @@ function drawPrintLayer(ctx, W, H, layer){
   });
 }
 
+/* ---------------------------- Estudio fotográfico para el render ----------------------------
+   Medido sobre un render de Studio 2.0: fondo gris neutro 147,147,147 parejo y
+   la figura con un brillo medio de 113. El nuestro daba 198 sobre fondo blanco
+   — de ahí que los colores se vieran lavados: no era el color de los bloques,
+   era la exposición. */
+const COLOR_FONDO_RENDER = '#939393';
+
+/* Ciclorama: gris parejo con una subida de luz muy suave detrás del modelo, como
+   una tela de fondo iluminada. Sin línea de horizonte, porque no hay piso. */
+let _texturaCiclorama = null;
+function fondoCicloramaTextura(){
+  if (_texturaCiclorama) return _texturaCiclorama;
+  const c = document.createElement('canvas');
+  c.width = 8; c.height = 256;
+  const ctx = c.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, 0, 256);
+  g.addColorStop(0.00, '#8a8a8a');
+  g.addColorStop(0.45, '#9a9a9a');
+  g.addColorStop(1.00, '#868686');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 8, 256);
+  _texturaCiclorama = new THREE.CanvasTexture(c);
+  if ('colorSpace' in _texturaCiclorama) _texturaCiclorama.colorSpace = THREE.SRGBColorSpace;
+  return _texturaCiclorama;
+}
+
+function guardarLuces(){
+  return {
+    hemiColor: hemi.color.clone(), hemiGround: hemi.groundColor.clone(), hemiInt: hemi.intensity,
+    ambInt: ambient.intensity,
+    keyInt: key.intensity, keyColor: key.color.clone(), keyPos: key.position.clone(),
+    rimInt: rim.intensity, rimColor: rim.color.clone(), rimPos: rim.position.clone(),
+    fillInt: fillPt.intensity,
+  };
+}
+function lucesDeEstudio(){
+  // Cielo neutro en vez de azul, y menos relleno: el relleno alto es lo que
+  // borraba las sombras propias de los bloques y aplanaba la figura.
+  hemi.color.set(0xffffff); hemi.groundColor.set(0x9a9a9a); hemi.intensity = 0.42;
+  ambient.intensity = 0.30;
+  // Luz principal desde arriba a la izquierda y algo al frente, como la foto de
+  // Studio: marca el volumen de cada bloque sin quemar las caras claras.
+  key.color.set(0xffffff); key.intensity = 1.55; key.position.set(-5, 9, 7);
+  // Contraluz neutro (antes era verdoso y teñía los bordes) para despegar la
+  // figura del fondo gris.
+  rim.color.set(0xffffff); rim.intensity = 0.42; rim.position.set(6, 5, -7);
+  fillPt.intensity = 0; // el punto ámbar amarilleaba un lado
+}
+function restaurarLuces(g){
+  hemi.color.copy(g.hemiColor); hemi.groundColor.copy(g.hemiGround); hemi.intensity = g.hemiInt;
+  ambient.intensity = g.ambInt;
+  key.intensity = g.keyInt; key.color.copy(g.keyColor); key.position.copy(g.keyPos);
+  rim.intensity = g.rimInt; rim.color.copy(g.rimColor); rim.position.copy(g.rimPos);
+  fillPt.intensity = g.fillInt;
+}
+
 /* ---------------------------- Foto de presentación (con luces e iluminación real) ----------------------------
    El visor normal usa un material plano a propósito (para que nunca aparezca una
    sombra rara entre bloques). Para esta foto armamos un "estudio fotográfico"
@@ -2730,20 +2786,34 @@ async function generatePresentationRender(){
   const wasGridVisible = grid.visible;
   grid.visible = false;
   const wasBg = scene.background;
-  const studioColor = new THREE.Color(COLOR_FONDO_MANUAL);
-  scene.background = studioColor;
+  // Ciclorama gris neutro, como el de Studio: medido sobre una foto suya, su
+  // fondo es 147,147,147 parejo. El blanco del manual acá no sirve — sobre
+  // blanco todo se lava y los colores pierden fuerza.
+  const studioColor = new THREE.Color(COLOR_FONDO_RENDER);
+  scene.background = fondoCicloramaTextura();
   const wasFog = scene.fog;
   scene.fog = null;
 
   const box = centeredBounds();
   const sizeV = new THREE.Vector3(); box.getSize(sizeV);
   const maxDim = Math.max(sizeV.x, sizeV.y, sizeV.z, 1);
+  // El piso queda APAGADO: su borde circular se veía como una línea de horizonte
+  // curva cruzando la foto, y en el render de Studio no hay piso ninguno.
   const wasGroundVisible = ground.visible;
   const wasGroundColor = ground.material.color.clone();
   const wasGroundScale = ground.scale.clone();
-  ground.visible = true;
-  ground.material.color.copy(studioColor);
-  ground.scale.setScalar(Math.max(1, maxDim*3/40)); // agranda el piso circular según el tamaño del modelo
+  ground.visible = false;
+
+  // Ayudas de pantalla afuera: el rectángulo ámbar de la capa actual salía
+  // dibujado en el piso de la foto.
+  const wasLayerEdgeVisible = layerPlaneEdge.visible; layerPlaneEdge.visible = false;
+  const wasSelBoxVisible = selectionBoxHelper.visible; selectionBoxHelper.visible = false;
+
+  // Luces de estudio: las del visor tienen un cielo azulado y un contraluz
+  // verdoso que quedan bien en pantalla pero tiñen la foto y la aplanan. Acá se
+  // pasan a luz neutra con más contraste y se devuelven al terminar.
+  const luces = guardarLuces();
+  lucesDeEstudio();
 
   // Sin sombras proyectadas: con modelos vaciados por dentro ("Vaciar interior"),
   // la sombra dura dejaba el hueco pintado de negro total, sin luz que llegara ahí.
@@ -2776,8 +2846,44 @@ async function generatePresentationRender(){
   const wasSeamVisible = seamMesh ? seamMesh.visible : false;
   if (seamMesh) seamMesh.visible = false;
 
+  // --- Encuadre de la foto ---
+  // Antes salía con el tamaño y la proporción del panel del visor: en una
+  // pantalla ancha daba una foto panorámica con la figura chiquita en el medio y
+  // muchísimo gris al costado (2,51 de proporción, contra 1,36 del render de
+  // Studio). Ahora se saca siempre en 4:3 y la cámara se acomoda para que el
+  // modelo llene el cuadro, respetando la orientación que le diste en pantalla.
+  const origSizeR = new THREE.Vector2();
+  renderer.getSize(origSizeR);
+  const origAspectR = camera.aspect;
+  const origCamPos = camera.position.clone();
+  const origCamQuat = camera.quaternion.clone();
+  renderer.setSize(1600, 1200, false);
+  camera.aspect = 4/3;
+  {
+    // El ángulo actual del orbitador, pasado a los grados que espera el encuadre.
+    const elevacion = 90 - (controls._po * 180/Math.PI);
+    const azimut = controls._az * 180/Math.PI;
+    positionCameraFixedAngle(box, elevacion, azimut, 1.15, box.getCenter(new THREE.Vector3()));
+  }
+
+  // OJO: encuadrar recalcula el nivel de detalle del contorno, y eso vuelve a
+  // encender las líneas si el usuario las tenía activadas en el visor — con lo
+  // que la foto salía con la malla dibujada encima. Se apagan DESPUÉS de mover
+  // la cámara, que es lo último que las toca.
+  if (edgeMesh) edgeMesh.visible = false;
+  if (edgeMeshLejos) edgeMeshLejos.visible = false;
+  lineasDePieza.forEach(l => l.visible = false);
+  if (darkEdgeMesh) darkEdgeMesh.visible = false;
+  if (seamMesh) seamMesh.visible = false;
+
   renderer.render(scene, camera);
   const dataUrl = renderer.domElement.toDataURL('image/png');
+
+  renderer.setSize(origSizeR.x, origSizeR.y, false);
+  camera.aspect = origAspectR;
+  camera.position.copy(origCamPos);
+  camera.quaternion.copy(origCamQuat);
+  camera.updateProjectionMatrix();
 
   // Devolver TODO a como estaba en el visor
   cuerpos.forEach((m,i)=>{ m.material = matsOriginales[i]; });
@@ -2790,6 +2896,9 @@ async function generatePresentationRender(){
   ground.visible = wasGroundVisible;
   ground.material.color.copy(wasGroundColor);
   ground.scale.copy(wasGroundScale);
+  layerPlaneEdge.visible = wasLayerEdgeVisible;
+  selectionBoxHelper.visible = wasSelBoxVisible;
+  restaurarLuces(luces);
   scene.background = wasBg;
   scene.fog = wasFog;
   axesHelper.visible = wasAxesVisible;
