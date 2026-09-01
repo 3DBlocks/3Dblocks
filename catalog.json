@@ -296,6 +296,15 @@
       "price": 19,
       "thumb": "thumbs/tinker.png",
       "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/tinker.json"
+    },
+    {
+      "slug": "totodile",
+      "name": "TOTODILE",
+      "description": "POKEMON",
+      "category": "pokemon",
+      "price": 10,
+      "thumb": "thumbs/totodile.png",
+      "src": "https://raw.githubusercontent.com/3DBlocks/3Dblocks/refs/heads/main/designs/totodile.json"
     }
   ]
 }
