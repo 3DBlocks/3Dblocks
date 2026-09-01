@@ -466,7 +466,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v59</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v60</small></div>
     </div>
     <div id="modelNameText">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -3288,6 +3288,11 @@ async function quickAnglePreview(previewLayer){
   const wasCamPos = camera.position.clone();
   const wasAxesVisible = axesHelper.visible; axesHelper.visible = false;
   const wasGridVisible = grid.visible; grid.visible = false;
+  // El rectángulo ámbar que marca la capa actual y el recuadro celeste de la
+  // selección son ayudas de PANTALLA: en el manual solo ensucian la foto, y el
+  // celeste además aparecía siempre que hubiera algo seleccionado al generar.
+  const wasLayerEdgeVisible = layerPlaneEdge.visible; layerPlaneEdge.visible = false;
+  const wasSelBoxVisible = selectionBoxHelper.visible; selectionBoxHelper.visible = false;
   const wasBg = scene.background;
   const studioColor = new THREE.Color(COLOR_FONDO_MANUAL);
   scene.background = studioColor;
@@ -3348,6 +3353,8 @@ async function quickAnglePreview(previewLayer){
   scene.fog = wasFog;
   axesHelper.visible = wasAxesVisible;
   grid.visible = wasGridVisible;
+  layerPlaneEdge.visible = wasLayerEdgeVisible;
+  selectionBoxHelper.visible = wasSelBoxVisible;
   showFullDesign = wasFullDesign; showBelowLayers = wasShowBelow; currentLayer = wasCurrentLayer; flatBlockMode = wasFlatBlockMode; blockStyle = wasBlockStyle;
   renderAsPieces = wasRenderAsPieces;
   renderer.setSize(origSize.x, origSize.y, false);
@@ -3499,6 +3506,11 @@ async function generateInstructionsPDF(){
 
   const wasAxesVisible = axesHelper.visible; axesHelper.visible = false;
   const wasGridVisible = grid.visible; grid.visible = false;
+  // El rectángulo ámbar que marca la capa actual y el recuadro celeste de la
+  // selección son ayudas de PANTALLA: en el manual solo ensucian la foto, y el
+  // celeste además aparecía siempre que hubiera algo seleccionado al generar.
+  const wasLayerEdgeVisible = layerPlaneEdge.visible; layerPlaneEdge.visible = false;
+  const wasSelBoxVisible = selectionBoxHelper.visible; selectionBoxHelper.visible = false;
   const wasBg = scene.background;
   const studioColor = new THREE.Color(COLOR_FONDO_MANUAL);
   scene.background = studioColor;
@@ -3757,6 +3769,8 @@ async function generateInstructionsPDF(){
     scene.fog = wasFog;
     axesHelper.visible = wasAxesVisible;
     grid.visible = wasGridVisible;
+    layerPlaneEdge.visible = wasLayerEdgeVisible;
+    selectionBoxHelper.visible = wasSelBoxVisible;
     currentLayer = wasCurrentLayer; showFullDesign = wasFullDesign; showBelowLayers = wasShowBelow;
     flatBlockMode = wasFlatBlockMode; blockStyle = wasBlockStyle;
     renderAsPieces = wasRenderAsPieces;
@@ -3801,6 +3815,11 @@ async function generateAssemblyVideo(){
   const wasCamPos = camera.position.clone();
   const wasAxesVisible = axesHelper.visible; axesHelper.visible = false;
   const wasGridVisible = grid.visible; grid.visible = false;
+  // El rectángulo ámbar que marca la capa actual y el recuadro celeste de la
+  // selección son ayudas de PANTALLA: en el manual solo ensucian la foto, y el
+  // celeste además aparecía siempre que hubiera algo seleccionado al generar.
+  const wasLayerEdgeVisible = layerPlaneEdge.visible; layerPlaneEdge.visible = false;
+  const wasSelBoxVisible = selectionBoxHelper.visible; selectionBoxHelper.visible = false;
   const wasBg = scene.background;
   const studioColor = new THREE.Color(COLOR_FONDO_MANUAL);
   scene.background = studioColor;
@@ -3925,6 +3944,8 @@ async function generateAssemblyVideo(){
     scene.fog = wasFog;
     axesHelper.visible = wasAxesVisible;
     grid.visible = wasGridVisible;
+    layerPlaneEdge.visible = wasLayerEdgeVisible;
+    selectionBoxHelper.visible = wasSelBoxVisible;
     currentLayer = wasCurrentLayer; showFullDesign = wasFullDesign; showBelowLayers = wasShowBelow;
     flatBlockMode = wasFlatBlockMode; blockStyle = wasBlockStyle;
     renderAsPieces = wasRenderAsPieces;
@@ -3955,6 +3976,11 @@ async function generateInstructionsPNGZip(){
 
   const wasAxesVisible = axesHelper.visible; axesHelper.visible = false;
   const wasGridVisible = grid.visible; grid.visible = false;
+  // El rectángulo ámbar que marca la capa actual y el recuadro celeste de la
+  // selección son ayudas de PANTALLA: en el manual solo ensucian la foto, y el
+  // celeste además aparecía siempre que hubiera algo seleccionado al generar.
+  const wasLayerEdgeVisible = layerPlaneEdge.visible; layerPlaneEdge.visible = false;
+  const wasSelBoxVisible = selectionBoxHelper.visible; selectionBoxHelper.visible = false;
   const wasBg = scene.background;
   const studioColor = new THREE.Color(COLOR_FONDO_MANUAL);
   scene.background = studioColor;
@@ -4035,6 +4061,8 @@ async function generateInstructionsPNGZip(){
     scene.fog = wasFog;
     axesHelper.visible = wasAxesVisible;
     grid.visible = wasGridVisible;
+    layerPlaneEdge.visible = wasLayerEdgeVisible;
+    selectionBoxHelper.visible = wasSelBoxVisible;
     currentLayer = wasCurrentLayer; showFullDesign = wasFullDesign; showBelowLayers = wasShowBelow;
     flatBlockMode = wasFlatBlockMode; blockStyle = wasBlockStyle;
     renderAsPieces = wasRenderAsPieces;
