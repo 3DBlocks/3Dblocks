@@ -466,7 +466,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v65</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v66</small></div>
     </div>
     <div id="modelNameText">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -619,9 +619,9 @@
         <div class="dz-text"><b>Arrastra un archivo</b> o haz clic para elegir</div>
         <div class="fmt-row"><span class="fmt-badge">.VOX</span><span class="fmt-badge">.DAE</span><span class="fmt-badge">.JSON</span><span class="fmt-badge admin-only">.OBJ</span><span class="fmt-badge admin-only">.STL</span><span class="fmt-badge admin-only">.3MF</span><span class="fmt-badge admin-only">.GLB</span></div>
       </div>
-      <input id="fileInput" type="file" accept=".vox,.dae,.json,.obj,.stl,.3mf,.glb,.gltf" />
+      <input id="fileInput" type="file" accept=".vox,.dae,.json,.obj,.stl,.3mf,.glb,.gltf,.bin" multiple />
       <button class="btn wide admin-only" id="mergeFileBtn" style="width:100%; margin-top:8px;">➕ Unir otro diseño al actual</button>
-      <input id="mergeFileInput" type="file" accept=".vox,.dae,.json,.obj,.stl,.3mf,.glb,.gltf" style="display:none;" />
+      <input id="mergeFileInput" type="file" accept=".vox,.dae,.json,.obj,.stl,.3mf,.glb,.gltf,.bin" multiple style="display:none;" />
       <p class="admin-only" style="font-size:10.5px; color:var(--text-faint); margin:6px 0 0; line-height:1.5;">Carga un segundo archivo SIN borrar el que ya está: lo coloca al lado, apoyado en el piso, y lo deja seleccionado para que lo acomodes con la herramienta de mover. Desde ahí los dos son un solo diseño y se pintan juntos. Ctrl+Z deshace la unión.</p>
       <div id="statusMsg"></div>
     </div>
@@ -5668,7 +5668,7 @@ const GLTF_COMPONENTES = {
   5126: { array: Float32Array, bytes: 4, tope: 1 },
 };
 
-function parseGlb(arrayBuffer){
+function parseGlb(arrayBuffer, acompanantes){
   const vista = new DataView(arrayBuffer);
   let json = null, binario = null;
 
@@ -5704,11 +5704,21 @@ function parseGlb(arrayBuffer){
       return binario;
     }
     const m = /^data:[^;]*;base64,(.*)$/.exec(b.uri);
-    if (!m) throw new Error('Este .gltf guarda la geometría en un archivo aparte (' + b.uri + '). Exportalo como .glb, que lleva todo en un solo archivo.');
-    const cruda = atob(m[1]);
-    const bytes = new Uint8Array(cruda.length);
-    for (let k = 0; k < cruda.length; k++) bytes[k] = cruda.charCodeAt(k);
-    return bytes;
+    if (m){
+      const cruda = atob(m[1]);
+      const bytes = new Uint8Array(cruda.length);
+      for (let k = 0; k < cruda.length; k++) bytes[k] = cruda.charCodeAt(k);
+      return bytes;
+    }
+    // Archivo aparte (el típico scene.bin de un .gltf exportado). Se busca entre
+    // los que el usuario seleccionó junto con el .gltf. Se compara solo el
+    // nombre, sin la carpeta: el navegador no da rutas completas.
+    const nombre = decodeURIComponent(b.uri).split(/[\\/]/).pop().toLowerCase();
+    const extra = acompanantes && acompanantes.get(nombre);
+    if (extra) return extra;
+    const err = new Error('Este .gltf guarda la geometría en un archivo aparte (' + b.uri + '). Volvé a elegir y seleccioná los DOS archivos juntos: el .gltf y el ' + b.uri + '. También podés exportarlo como .glb, que lleva todo en uno.');
+    err.faltaArchivo = b.uri;
+    throw err;
   });
 
   /* Lee un accesor: devuelve un array plano con sus números ya desempaquetados.
@@ -5918,7 +5928,7 @@ const statusEl = document.getElementById('statusMsg');
 function setStatus(msg,kind){ statusEl.className = kind||''; statusEl.textContent = msg; }
 function setLoading(on,text){ document.getElementById('loadingOverlay').classList.toggle('show',on); if (text) document.getElementById('loadingText').textContent = text; }
 
-async function handleFile(file, anexar){
+async function handleFile(file, anexar, acompanantes){
   const ext = file.name.split('.').pop().toLowerCase();
   setLoading(true, (anexar ? 'Uniendo ' : 'Procesando ') + file.name + '…');
   document.getElementById('voxelizeSection').style.display = 'none';
@@ -5971,7 +5981,7 @@ async function handleFile(file, anexar){
     } else if (ext==='obj' || ext==='stl' || ext==='glb' || ext==='gltf'){
       if (ext==='obj')      lastVoxelizerTris = parseObjTriangles(await file.text());
       else if (ext==='stl') lastVoxelizerTris = parseStlBuffer(await file.arrayBuffer());
-      else                  lastVoxelizerTris = parseGlb(await file.arrayBuffer());
+      else                  lastVoxelizerTris = parseGlb(await file.arrayBuffer(), acompanantes);
       lastDaeParsed = null;
       const res = parseInt(document.getElementById('resSlider').value,10);
       const {list} = voxelizeTriangles(lastVoxelizerTris, res);
@@ -6245,7 +6255,35 @@ function shiftVoxels(dx, dy, dz){
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
 dropzone.addEventListener('click', ()=> fileInput.click());
-fileInput.addEventListener('change', e=>{ if (e.target.files[0]) handleFile(e.target.files[0]); });
+/* Un .gltf exportado desde Blender u otro programa 3D suele venir acompañado de
+   un .bin con la geometría. El navegador no puede leer archivos que el usuario
+   no eligió, así que se aceptan varios a la vez: el modelo es el principal y
+   todo lo demás queda a mano por si el .gltf lo pide. */
+function separarArchivos(lista){
+  const archivos = Array.from(lista || []);
+  const esModelo = f => /\.(vox|dae|json|obj|stl|3mf|glb|gltf)$/i.test(f.name);
+  const principal = archivos.find(esModelo) || archivos[0] || null;
+  const acompanantes = new Map();
+  return { principal, archivos, acompanantes };
+}
+/* Los acompañantes se leen enteros a memoria; solo se hace si el modelo puede
+   necesitarlos, para no cargar de gusto un .bin de 200 MB. */
+async function leerAcompanantes(archivos, principal){
+  const mapa = new Map();
+  for (const f of archivos){
+    if (f === principal) continue;
+    mapa.set(f.name.toLowerCase(), new Uint8Array(await f.arrayBuffer()));
+  }
+  return mapa;
+}
+async function cargarSeleccion(lista, anexar){
+  const { principal, archivos } = separarArchivos(lista);
+  if (!principal) return;
+  const necesitaExtras = /\.gltf$/i.test(principal.name) && archivos.length > 1;
+  const acompanantes = necesitaExtras ? await leerAcompanantes(archivos, principal) : null;
+  return handleFile(principal, anexar, acompanantes);
+}
+fileInput.addEventListener('change', e=>{ cargarSeleccion(e.target.files); });
 
 /* Unir: usa el mismo importador, solo que en modo anexar. El nombre del modelo
    pasa a ser "A + B" para que después se sepa de dónde salió el archivo. */
@@ -6255,17 +6293,18 @@ document.getElementById('mergeFileBtn').addEventListener('click', ()=>{
   mergeFileInput.click();
 });
 mergeFileInput.addEventListener('change', async e=>{
-  const file = e.target.files[0];
-  e.target.value = ''; // permite volver a elegir el mismo archivo
-  if (!file) return;
+  const lista = e.target.files;
+  const { principal } = separarArchivos(lista);
+  if (!principal){ e.target.value = ''; return; }
   const etiqueta = document.getElementById('modelNameText');
   const nombreAntes = etiqueta.textContent;
-  await handleFile(file, true);
-  etiqueta.textContent = nombreAntes + ' + ' + file.name;
+  await cargarSeleccion(lista, true);
+  etiqueta.textContent = nombreAntes + ' + ' + principal.name;
+  e.target.value = ''; // permite volver a elegir el mismo archivo
 });
 ['dragenter','dragover'].forEach(ev=> dropzone.addEventListener(ev, e=>{ e.preventDefault(); dropzone.classList.add('drag'); }));
 ['dragleave','drop'].forEach(ev=> dropzone.addEventListener(ev, e=>{ e.preventDefault(); dropzone.classList.remove('drag'); }));
-dropzone.addEventListener('drop', e=>{ const f=e.dataTransfer.files[0]; if (f) handleFile(f); });
+dropzone.addEventListener('drop', e=>{ cargarSeleccion(e.dataTransfer.files); });
 
 /* ---------------------------- Stepper / reproducción ---------------------------- */
 document.getElementById('prevBtn').addEventListener('click', ()=> goToLayer(currentLayer-1));
