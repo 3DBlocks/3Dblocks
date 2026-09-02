@@ -51,7 +51,16 @@
   .brand-blocks span:nth-child(8){ background:var(--accent-2-dim); }
   .brand-title{ font-size:13.5px; font-weight:800; letter-spacing:0.13em; }
   .brand-title small{ display:block; font-size:9px; font-weight:500; letter-spacing:.06em; color:var(--text-faint); text-transform:none; margin-top:1px; }
-  #modelNameText{ font-size:11.5px; color:var(--text-dim); font-family:var(--mono); }
+  #modelNameText{
+    font-size:11.5px; color:var(--text-dim); font-family:var(--mono);
+    padding:2px 6px; border-radius:6px; border:1px solid transparent; cursor:text;
+    max-width:38vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  #modelNameText:hover{ border-color:var(--border); }
+  #modelNameText:focus{
+    outline:none; border-color:var(--accent); color:var(--text);
+    background:var(--panel-2); overflow:visible; text-overflow:clip;
+  }
 
   button{ font-family:var(--sans); cursor:pointer; }
   a.btn{ text-decoration:none; }
@@ -78,9 +87,31 @@
      Ojo: por eso el borde ahora es `border-top` y el degradado va al revés. */
   #layerStrip{
     flex-shrink:0; padding:7px 16px 6px; border-top:1px solid var(--border-soft);
-    background: linear-gradient(0deg, var(--panel), var(--bg-2)); z-index:15;
+    background: linear-gradient(0deg, var(--panel), var(--bg-2)); z-index:15; position:relative;
   }
   #stepperRow{ display:flex; align-items:center; justify-content:center; gap:10px; }
+
+  /* ---------- Barra inferior compacta ----------
+     La barra normal ocupa cuatro filas (pasos, vistas, tira de capas y números),
+     que en pantallas bajas se come la mitad del visor. En modo compacto todo eso
+     entra en UNA sola fila: los mismos botones, sin las etiquetas largas ni la
+     línea de estadísticas. */
+  #layerStrip.compacto{ display:flex; flex-direction:row; align-items:center; gap:10px; padding:5px 12px; }
+  #layerStrip.compacto #stepperRow{ gap:6px; flex-shrink:0; }
+  #layerStrip.compacto #viewSwitchRow{ margin-top:0 !important; flex-shrink:0; }
+  #layerStrip.compacto #strataTrack{ margin:0; flex:1 1 auto; min-width:60px; max-width:none; }
+  #layerStrip.compacto #layerMeta{ display:none; }
+  #layerStrip.compacto #layerBigNum{ font-size:15px; }
+  #layerStrip.compacto #layerOfTxt{ display:none; }
+  #layerStrip.compacto #layerCenter{ min-width:26px; }
+  #layerStrip.compacto .stepBtn{ padding:5px 9px; font-size:11px; }
+  #layerStrip.compacto #orientRow .btn{ padding:3px 6px; font-size:10px; }
+  #compactStripBtn{
+    position:absolute; right:10px; top:-13px; z-index:16;
+    background:var(--panel-2); color:var(--text-dim); border:1px solid var(--border);
+    border-radius:7px; padding:1px 9px; font-size:10.5px; cursor:pointer; line-height:1.6;
+  }
+  #compactStripBtn:hover{ color:var(--accent); border-color:var(--accent); }
   .stepBtn{
     min-width:76px; height:34px; padding:0 14px; border-radius:9px; background:var(--panel-2); border:1px solid var(--border);
     color:var(--text); font-size:13px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:6px; flex-shrink:0;
@@ -466,9 +497,9 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v67</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v68</small></div>
     </div>
-    <div id="modelNameText">Árbol de ejemplo</div>
+    <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
     <button class="btn icon" id="logoutBtn" title="Cerrar sesión" style="display:none;">⎋</button>
     <button class="btn icon" id="openSidebarBtn" title="Importar y ajustes">⚙︎ <span style="display:inline-block">Importar</span></button>
@@ -571,6 +602,7 @@
   </div>
 
   <div id="layerStrip">
+    <button id="compactStripBtn" title="Achica la barra a una sola fila para dejarle más alto al visor">▾ Compactar</button>
     <div id="stepperRow">
       <button class="stepBtn" id="prevBtn" title="Capa anterior (←)">‹ Atrás</button>
       <div id="layerCenter">
@@ -985,6 +1017,14 @@ const COLOR_FONDO_MANUAL = '#ffffff';
    una cámara ortográfica de verdad obligaría a rehacer el zoom, el encuadre del
    manual y el cálculo de detalle del contorno; esto da el mismo resultado
    práctico sin tocar nada de eso. */
+/* Los atajos de teclado no deben dispararse mientras se escribe. El nombre del
+   diseño es un div editable, no un <input>, así que mirar solo la etiqueta no
+   alcanza: escribir una "z" ahí habría deshecho la última acción. */
+function esCampoEditable(){
+  const el = document.activeElement;
+  return !!(el && el.isContentEditable);
+}
+
 const FOV_NORMAL = 42, FOV_PLANA = 4;
 /* Arranca en plana: es el modo en el que el bloque que ves es el que tocás, y
    era lo que molestaba al seleccionar celdas en vertical. Se recuerda la
@@ -1272,7 +1312,7 @@ window.addEventListener('keydown', e=>{
   const preset = VIEW_PRESETS[e.key];
   if (!preset) return;
   const tag = (document.activeElement && document.activeElement.tagName) || '';
-  if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || esCampoEditable()) return;
   controls.azimuth = preset.azimuth;
   controls.polar = preset.polar;
   const el = document.getElementById('viewIndicatorLabel');
@@ -1311,7 +1351,7 @@ document.getElementById('flatViewBtn').addEventListener('click', ()=>aplicarVist
 window.addEventListener('keydown', e=>{
   if (e.key !== '7') return;
   const tag = (document.activeElement && document.activeElement.tagName) || '';
-  if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || esCampoEditable()) return;
   aplicarVistaPlana(!vistaPlana);
 });
 
@@ -3850,7 +3890,7 @@ window.addEventListener('keydown', e=>{
   const modal = document.getElementById('anglePreviewModal');
   if (modal.style.display !== 'flex') return;
   const tag = (document.activeElement && document.activeElement.tagName) || '';
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || esCampoEditable() || tag === 'SELECT') return;
   if (e.key === 'ArrowLeft'){ e.preventDefault(); e.stopPropagation(); pasoPreview(-1); }
   else if (e.key === 'ArrowRight'){ e.preventDefault(); e.stopPropagation(); pasoPreview(1); }
   else if (e.key === 'Escape'){ modal.style.display = 'none'; }
@@ -4733,9 +4773,53 @@ function highlightTrack(){
 }
 
 /* ---------------------------- UI de capa ---------------------------- */
+/* ---------------------------- Barra inferior compacta ----------------------------
+   El estado se recuerda: si trabajás siempre en pantalla baja, no hay que
+   compactarla en cada sesión. Al cambiar hay que avisarle al visor que su alto
+   cambió, o el render sigue dibujando con el tamaño viejo y sale estirado. */
+function aplicarBarraCompacta(compacta){
+  const strip = document.getElementById('layerStrip');
+  strip.classList.toggle('compacto', compacta);
+  const btn = document.getElementById('compactStripBtn');
+  btn.textContent = compacta ? '▴ Ampliar' : '▾ Compactar';
+  localStorage.setItem('3dblock.barraCompacta', compacta ? '1' : '0');
+  setTimeout(onResize, 20); // el canvas 3D tiene que recalcular su alto
+}
+document.getElementById('compactStripBtn').addEventListener('click', ()=>{
+  aplicarBarraCompacta(!document.getElementById('layerStrip').classList.contains('compacto'));
+});
+aplicarBarraCompacta(localStorage.getItem('3dblock.barraCompacta') === '1');
+
+/* ---------------------------- Nombre del diseño, editable ----------------------------
+   Es el nombre que sale en la portada del manual y el que se usa para armar el
+   nombre de los archivos que descargás, así que poder corregirlo evita quedar
+   con cosas como "Gyarados1_Multicolor_AMS_Bambu_Lab_X1C_3mf_con_colores_del_3mf_.json". */
+(function nombreEditable(){
+  const el = document.getElementById('modelNameText');
+  let anterior = el.textContent;
+  el.addEventListener('focus', ()=>{ anterior = el.textContent; });
+  el.addEventListener('keydown', e=>{
+    // Sin esto, Enter mete un salto de línea dentro del nombre y las flechas
+    // del teclado cambiarían de capa mientras escribís.
+    if (e.key === 'Enter'){ e.preventDefault(); el.blur(); }
+    else if (e.key === 'Escape'){ e.preventDefault(); el.textContent = anterior; el.blur(); }
+    e.stopPropagation();
+  });
+  el.addEventListener('paste', e=>{
+    // Pegar desde otro lado puede traer formato y saltos de línea: se limpia.
+    e.preventDefault();
+    const txt = (e.clipboardData || window.clipboardData).getData('text').replace(/\s+/g, ' ').trim();
+    document.execCommand('insertText', false, txt);
+  });
+  el.addEventListener('blur', ()=>{
+    const limpio = el.textContent.replace(/\s+/g, ' ').trim();
+    el.textContent = limpio || anterior || 'Diseño sin nombre';
+    if (el.textContent !== anterior) setStatus('Nombre del diseño: ' + el.textContent, 'ok');
+  });
+})();
+
 function refreshLayerUI(){
-  if (typeof refrescarRangoPasos === 'function') refrescarRangoPasos(); // el tope del rango depende del modelo cargado
-  document.getElementById('layerBigNum').textContent = currentLayer;
+  if (typeof refrescarRangoPasos === 'function') refrescarRangoPasos(); // el tope del rango depende del modelo cargado  document.getElementById('layerBigNum').textContent = currentLayer;
   document.getElementById('layerNowTxt').textContent = currentLayer;
   document.getElementById('layerMaxTxt').textContent = maxLayer;
   document.getElementById('prevBtn').disabled = currentLayer <= 0;
@@ -4859,7 +4943,7 @@ document.getElementById('undoBtn').addEventListener('click', undo);
 document.getElementById('redoBtn').addEventListener('click', redo);
 window.addEventListener('keydown', e=>{
   const tag = (document.activeElement && document.activeElement.tagName) || '';
-  if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || esCampoEditable()) return;
   if (!(e.ctrlKey || e.metaKey)) return;
   const k = e.key.toLowerCase();
   if (k === 'z' && !e.shiftKey){ e.preventDefault(); undo(); }
@@ -6944,7 +7028,7 @@ document.getElementById('selMoveDownY').addEventListener('click', ()=>moveSelect
 window.addEventListener('keydown', e=>{
   if (!paintMode || activeTool !== 'select') return;
   const tag = (document.activeElement && document.activeElement.tagName) || '';
-  if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || esCampoEditable()) return;
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase()==='c'){ e.preventDefault(); copySelection(); }
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase()==='v'){ e.preventDefault(); pasteClipboard(); }
   else if (e.key === 'Escape'){ clearBoxSelection(); }
@@ -7976,7 +8060,7 @@ window.addEventListener('resize', onResize);
 const keysHeld = {};
 window.addEventListener('keydown', e=>{
   const tag = (document.activeElement && document.activeElement.tagName) || '';
-  if (tag === 'INPUT' || tag === 'TEXTAREA') return; // no interferir si están escribiendo/eligiendo color
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || esCampoEditable()) return; // no interferir si están escribiendo/eligiendo color
   const k = e.key.toLowerCase();
   if (['a','d','w','s'].includes(k)) keysHeld[k] = true;
 });
