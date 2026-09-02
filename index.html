@@ -515,7 +515,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v71</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v72</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -2939,19 +2939,38 @@ function encuadrarModeloEnCuadro(box, elevacionGrados, azimutGrados, holgura, ob
   for (const x of [box.min.x, box.max.x])
     for (const y of [box.min.y, box.max.y])
       for (const z of [box.min.z, box.max.z]) esquinas.push(new THREE.Vector3(x,y,z));
+  // Radio desde el punto al que se mira hasta la esquina más lejana: si se mira
+  // a la capa de abajo de una figura alta, el radio es casi su altura entera.
+  let radioMax = 0;
+  esquinas.forEach(e => { radioMax = Math.max(radioMax, e.distanceTo(centro)); });
 
   const colocar = d => {
     camera.position.copy(centro).addScaledVector(dir, d);
     camera.lookAt(centro);
+    // Los planos de recorte se ajustan a ESTA distancia en cada paso. Antes se
+    // fijaban recién al final, así que la búsqueda medía con los planos de la
+    // llamada anterior: al acercarse, partes del modelo caían fuera de ese rango
+    // y la proyección devolvía valores sin sentido — de ahí que el zoom saltara
+    // de 233% a 2024% entre dos posiciones seguidas.
+    camera.near = Math.max(0.01, d * 0.005);
+    camera.far = d + radioMax * 4 + 10;
     camera.updateMatrixWorld();
     camera.updateProjectionMatrix();
   };
   // Cuánto del cuadro ocupa el modelo a esa distancia: 1 = justo tocando el
   // borde, más de 1 = se corta.
+  /* Devuelve cuánto ocupa el modelo y si alguna esquina quedó DETRÁS de la
+     cámara. Lo segundo importa al acercar mucho: una esquina detrás proyecta
+     coordenadas absurdas y la medición deja de significar nada. */
+  let esquinaDetras = false;
   const ocupacion = d => {
     colocar(d);
     let m = 0;
+    esquinaDetras = false;
+    const pos = camera.position, dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
     for (const e of esquinas){
+      if (e.clone().sub(pos).dot(dir) <= camera.near) esquinaDetras = true;
       const p = e.clone().project(camera);
       m = Math.max(m, Math.abs(p.x), Math.abs(p.y));
     }
@@ -2960,18 +2979,35 @@ function encuadrarModeloEnCuadro(box, elevacionGrados, azimutGrados, holgura, ob
 
   const medioV = (camera.fov * Math.PI/180) / 2;
   const medioH = Math.atan(Math.tan(medioV) * camera.aspect);
-  // Radio desde el punto al que se mira hasta la esquina más lejana: si se mira
-  // a la capa de abajo de una figura alta, el radio es casi su altura entera.
-  let radio = 0;
-  esquinas.forEach(e => { radio = Math.max(radio, e.distanceTo(centro)); });
-  let d = radio / Math.sin(Math.min(medioV, medioH)); // arranque seguro
-  for (let i = 0; i < 3; i++){
-    const propuesta = d * ocupacion(d) * holgura;
-    if (ocupacion(propuesta) <= 1) d = propuesta; else break;
+  /* Búsqueda de la distancia por bisección.
+
+     Cuanto más cerca está la cámara, más ocupa el modelo: la relación es
+     monótona, y eso es justo lo que necesita una bisección. Antes esto era un
+     ajuste por aproximaciones sucesivas (multiplicar la distancia por lo que
+     faltaba) y a distancias cortas se volvía loco: la ocupación se dispara de
+     forma brutal cerca del modelo, así que el paso calculado se pasaba de largo
+     y quedaba rebotando entre 31 y 62 sin converger nunca. Con bisección eso no
+     puede pasar: cada vuelta parte el intervalo al medio y se acerca al valor
+     buscado, siempre.
+
+     `cerca` nunca entra en la esfera que envuelve al modelo, así que no hay
+     esquinas detrás de la cámara y la medición siempre significa algo. */
+  const ocupacionBuscada = 1 / holgura;
+  let cerca = radioMax * 1.02;
+  let lejos = radioMax / Math.sin(Math.min(medioV, medioH));
+  // Si se pidió mucho aire, puede que ni esa distancia alcance: se aleja hasta
+  // que el modelo ocupe menos de lo buscado.
+  let guardia = 0;
+  while (ocupacion(lejos) > ocupacionBuscada && guardia++ < 20) lejos *= 1.6;
+  for (let i = 0; i < 24; i++){
+    const medio = (cerca + lejos) / 2;
+    if (ocupacion(medio) > ocupacionBuscada) cerca = medio; else lejos = medio;
   }
+  // Se toma el extremo lejano: garantiza que el modelo no ocupe MÁS de lo pedido.
+  let d = lejos;
   colocar(d);
-  camera.near = Math.max(0.05, d*0.02);
-  camera.far = d + size.length()*4;
+  camera.near = Math.max(0.01, d*0.005);
+  camera.far = d + radioMax*4 + 10;
   camera.updateProjectionMatrix();
 }
 
