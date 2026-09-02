@@ -515,7 +515,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v72</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v73</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -3682,17 +3682,36 @@ function esPixelDeFondo(d, p){
   // 246 deja pasar el degradado suave del fondo sin comerse las piezas claras.
   return d[p] >= 246 && d[p+1] >= 246 && d[p+2] >= 246;
 }
-function siluetaDelRender(img, halo){
-  const w = img.naturalWidth, h = img.naturalHeight;
+function medidasDe(fuente){
+  return { w: fuente.naturalWidth || fuente.width, h: fuente.naturalHeight || fuente.height };
+}
+
+/* Devuelve la silueta del modelo como un canvas opaco donde hay bloques y
+   transparente donde hay fondo.
+
+   Se trabaja sobre una copia REDUCIDA (unos 520 px de lado). Recorrer el fondo
+   píxel por píxel sobre una imagen de 1500x1875 son casi tres millones de
+   casillas por página; a 520 px son treinta veces menos. La silueta sale con el
+   borde un poco más basto, pero da igual: después se le agrega un halo que la
+   engorda bastante más que ese error, y encima se vuelve a escalar al dibujarla. */
+const LADO_SILUETA = 520;
+function siluetaDelRender(fuente, haloRelativo){
+  const orig = medidasDe(fuente);
+  const escala = Math.min(1, LADO_SILUETA / Math.max(orig.w, orig.h));
+  const w = Math.max(2, Math.round(orig.w * escala));
+  const h = Math.max(2, Math.round(orig.h * escala));
+
   const tmp = document.createElement('canvas');
   tmp.width = w; tmp.height = h;
   const tctx = tmp.getContext('2d', { willReadFrequently: true });
-  tctx.drawImage(img, 0, 0);
-  const datos = tctx.getImageData(0, 0, w, h);
-  const d = datos.data;
+  // Sin suavizado: al achicar con interpolación, los píxeles del borde se mezclan
+  // con el fondo y el blanco puro deja de ser blanco puro.
+  tctx.imageSmoothingEnabled = false;
+  tctx.drawImage(fuente, 0, 0, w, h);
+  const d = tctx.getImageData(0, 0, w, h).data;
 
-  // Recorrido desde los bordes. Pila propia en vez de recursión: con imágenes de
-  // 1500x1500 una recursión se pasa de profundidad y revienta.
+  // Recorrido desde los bordes. Pila propia en vez de recursión: una recursión
+  // se pasaría de profundidad y reventaría.
   const afuera = new Uint8Array(w*h);
   const pila = [];
   const meter = (x, y) => {
@@ -3711,7 +3730,6 @@ function siluetaDelRender(img, halo){
     meter(x+1, y); meter(x-1, y); meter(x, y+1); meter(x, y-1);
   }
 
-  // Máscara: opaca donde hay modelo, transparente donde hay fondo.
   const mascara = tctx.createImageData(w, h);
   const md = mascara.data;
   for (let i = 0; i < w*h; i++){
@@ -3719,27 +3737,23 @@ function siluetaDelRender(img, halo){
   }
   const cm = document.createElement('canvas');
   cm.width = w; cm.height = h;
-  const cmctx = cm.getContext('2d');
-  cmctx.putImageData(mascara, 0, 0);
+  cm.getContext('2d').putImageData(mascara, 0, 0);
 
   // Halo: se engorda la silueta dibujándola corrida en varias direcciones, para
-  // que la marca no quede rozando el borde de los bloques. Es mucho más barato
-  // que engordarla píxel por píxel y a esta escala se ve igual.
-  if (halo > 0){
-    const cg = document.createElement('canvas');
-    cg.width = w; cg.height = h;
-    const cgctx = cg.getContext('2d');
-    const pasos = 16;
-    for (let r = halo; r > 0; r -= Math.max(1, halo/2)){
-      for (let k = 0; k < pasos; k++){
-        const a = (k/pasos) * Math.PI * 2;
-        cgctx.drawImage(cm, Math.cos(a)*r, Math.sin(a)*r);
-      }
+  // que la marca no quede rozando el borde de los bloques.
+  const halo = Math.max(1, Math.round(Math.min(w, h) * haloRelativo));
+  const cg = document.createElement('canvas');
+  cg.width = w; cg.height = h;
+  const cgctx = cg.getContext('2d');
+  const pasos = 16;
+  for (let r = halo; r > 0; r -= Math.max(1, halo/2)){
+    for (let k = 0; k < pasos; k++){
+      const a = (k/pasos) * Math.PI * 2;
+      cgctx.drawImage(cm, Math.cos(a)*r, Math.sin(a)*r);
     }
-    cgctx.drawImage(cm, 0, 0);
-    return cg;
   }
-  return cm;
+  cgctx.drawImage(cm, 0, 0);
+  return cg;
 }
 
 /* Arma la HOJA para la vista previa, los PNG y las fotos del PDF: el render va
@@ -3750,14 +3764,22 @@ function siluetaDelRender(img, halo){
    `margen` agrega borde alrededor del render (para los PNG sueltos, que si no
    quedan al ras); en el PDF va en 0 porque la hoja ya trae su propio margen. */
 const MARGEN_HOJA = 0.04; // 4% del lado, a cada costado
-async function componerHojaConMarca(dataUrl, opciones){
+async function componerHojaConMarca(fuente, opciones){
   opciones = opciones || {};
   await prepararImagenMarca();
-  if (!marcaEstaActiva()) return dataUrl; // sin marca no hay nada que componer
-  const img = await cargarImagenDesdeDataUrl(dataUrl);
-  const lado = Math.min(img.naturalWidth, img.naturalHeight);
+  if (!marcaEstaActiva()){
+    // Sin marca no hay nada que componer: si vino un canvas, se lo convierte acá.
+    return (typeof fuente === 'string') ? fuente : fuente.toDataURL(opciones.formato || 'image/png', opciones.calidad);
+  }
+  // Se acepta un canvas directamente. Antes había que pasarle SIEMPRE un PNG en
+  // texto, así que por cada página se codificaba el render a PNG y se lo volvía
+  // a decodificar — dos operaciones caras sobre casi tres millones de píxeles,
+  // solo para terminar dibujándolo en otro canvas.
+  const img = (typeof fuente === 'string') ? await cargarImagenDesdeDataUrl(fuente) : fuente;
+  const med = medidasDe(img);
+  const lado = Math.min(med.w, med.h);
   const m = Math.round(lado * (opciones.margen !== undefined ? opciones.margen : MARGEN_HOJA));
-  const W = img.naturalWidth + m*2, H = img.naturalHeight + m*2;
+  const W = med.w + m*2, H = med.h + m*2;
 
   const hoja = document.createElement('canvas');
   hoja.width = W; hoja.height = H;
@@ -3772,10 +3794,10 @@ async function componerHojaConMarca(dataUrl, opciones){
   const cctx = capa.getContext('2d');
   dibujarMarcaAgua(cctx, W, H);
 
-  const halo = Math.max(2, Math.round(lado * 0.012));
-  const silueta = siluetaDelRender(img, halo);
+  const silueta = siluetaDelRender(img, 0.012);
   cctx.globalCompositeOperation = 'destination-out';
-  cctx.drawImage(silueta, m, m);
+  // La silueta viene reducida: se estira al tamaño real del render al borrarla.
+  cctx.drawImage(silueta, m, m, med.w, med.h);
   cctx.globalCompositeOperation = 'source-over';
 
   hctx.drawImage(capa, 0, 0);
@@ -4325,7 +4347,7 @@ async function generateInstructionsPDF(){
       // el JPEG ensucia el blanco del fondo y confundiría al detector de silueta;
       // la salida vuelve a ser JPEG para no inflar el PDF.
       const imgData = marcaEstaActiva()
-        ? await componerHojaConMarca(renderer.domElement.toDataURL('image/png'),
+        ? await componerHojaConMarca(renderer.domElement,
                                      { margen: 0, formato: 'image/jpeg', calidad: 0.9 })
         : renderer.domElement.toDataURL('image/jpeg', 0.9);
 
@@ -4665,7 +4687,7 @@ async function generateInstructionsPNGZip(){
       const instrAngle2 = customInstructionAngle || { elevation: 35, azimuth: 45 };
       encuadrarInstruccion(stepBox, instrAngle2.elevation, instrAngle2.azimuth, focusPointForLayer(stepBox, layer));
       renderer.render(scene, camera);
-      const dataUrl = await componerHojaConMarca(renderer.domElement.toDataURL('image/png'));
+      const dataUrl = await componerHojaConMarca(renderer.domElement);
       const base64 = dataUrl.split(',')[1];
       const stepNum = String(layer+1).padStart(pad, '0');
       zip.file(`paso_${stepNum}_de_${maxLayer+1}.png`, base64, { base64: true });
