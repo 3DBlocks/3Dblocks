@@ -3,31 +3,32 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>3DBlock · Guía de armado por capas</title>
+<title>RenzoD'sing · Guía de armado por capas</title>
 <link rel="manifest" href="manifest.json" />
 <link rel="icon" href="icon-192.png" />
 <link rel="apple-touch-icon" href="icon-192.png" />
 <meta name="theme-color" content="#16181d" />
 <style>
   :root{
-    /* Paleta neutra tipo software profesional (grises reales, sin tinte azulado),
-       con un acento ámbar más sobrio — se ve más serio y cansa menos la vista en
-       sesiones largas de trabajo. */
-    --bg: #16181d;
-    --bg-2: #1b1e24;
-    --panel: #1e2128;
-    --panel-2: #262a33;
-    --panel-3: #1a1d23;
-    --border: #343945;
-    --border-soft: #2a2e37;
-    --text: #e6e8ec;
-    --text-dim: #a0a6b2;
-    --text-faint: #6e7683;
-    --accent: #e0a33a;
-    --accent-dim: #6b5423;
-    --accent-2: #3fb9a4;
-    --accent-2-dim: #1c5049;
-    --danger: #e0655c;
+    /* Paleta futurista: azul de noche muy profundo con acento cian y un
+       secundario violeta. Los fondos siguen siendo oscuros y de bajo contraste
+       entre sí para no cansar la vista en sesiones largas; el brillo se reserva
+       para lo que hay que mirar. */
+    --bg: #080b13;
+    --bg-2: #0c1120;
+    --panel: #111729;
+    --panel-2: #19203a;
+    --panel-3: #0b1020;
+    --border: #263257;
+    --border-soft: #1a2340;
+    --text: #e9edfa;
+    --text-dim: #98a4c4;
+    --text-faint: #616d8e;
+    --accent: #34dff5;
+    --accent-dim: #0e4a58;
+    --accent-2: #a271ff;
+    --accent-2-dim: #3a2568;
+    --danger: #ff5f7d;
     --mono: 'SFMono-Regular', 'JetBrains Mono', Consolas, 'Liberation Mono', Menlo, monospace;
     --sans: 'Inter', ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   }
@@ -44,12 +45,16 @@
     padding:6px 14px; border-bottom:1px solid var(--border-soft); background:var(--panel-3); flex-shrink:0; z-index:20;
   }
   .brand-mark{ display:flex; align-items:center; gap:9px; }
-  .brand-blocks{ display:grid; grid-template-columns:repeat(3,6px); grid-template-rows:repeat(3,6px); gap:2px; }
-  .brand-blocks span{ background:var(--accent); display:block; }
-  .brand-blocks span:nth-child(2){ background:var(--accent-2); }
-  .brand-blocks span:nth-child(5){ background:var(--text-dim); }
-  .brand-blocks span:nth-child(8){ background:var(--accent-2-dim); }
-  .brand-title{ font-size:13.5px; font-weight:800; letter-spacing:0.13em; }
+  /* El logo es un bloque en vista isométrica con sus tachones y un destello:
+     dice "bloque" y "magia" sin necesidad de texto, y al ser SVG con los colores
+     tomados del tema, cambia solo si algún día se cambia la paleta. */
+  .brand-logo{ width:27px; height:27px; display:block; filter:drop-shadow(0 0 6px rgba(52,223,245,.35)); }
+  .brand-title{
+    font-size:13.5px; font-weight:800; letter-spacing:0.13em;
+    background:linear-gradient(92deg, var(--accent), var(--accent-2));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .brand-title small{ color:var(--text-faint); }
   .brand-title small{ display:block; font-size:9px; font-weight:500; letter-spacing:.06em; color:var(--text-faint); text-transform:none; margin-top:1px; }
   #modelNameText{
     font-size:11.5px; color:var(--text-dim); font-family:var(--mono);
@@ -487,8 +492,19 @@
   <div id="loginOverlay">
     <div id="loginCard">
       <div class="brand-mark" style="justify-content:center; margin-bottom:16px;">
-        <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-        <div class="brand-title" style="font-size:19px;">3DBLOCK</div>
+        <svg class="brand-logo" viewBox="0 0 32 32" aria-hidden="true">
+        <!-- caras del bloque en isométrica: arriba, izquierda y derecha -->
+        <path d="M16 5 L28 12 L16 19 L4 12 Z" fill="var(--accent)"/>
+        <path d="M4 12 L16 19 L16 28 L4 21 Z" fill="var(--accent-2-dim)"/>
+        <path d="M28 12 L16 19 L16 28 L28 21 Z" fill="var(--accent-2)"/>
+        <!-- tachones -->
+        <ellipse cx="11" cy="11" rx="2.6" ry="1.5" fill="var(--panel)" opacity=".55"/>
+        <ellipse cx="21" cy="11" rx="2.6" ry="1.5" fill="var(--panel)" opacity=".55"/>
+        <ellipse cx="16" cy="14.5" rx="2.6" ry="1.5" fill="var(--panel)" opacity=".55"/>
+        <!-- destello: la parte "magic" -->
+        <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
+      </svg>
+        <div class="brand-title" style="font-size:19px;">RENZOD'SING</div>
       </div>
       <p id="loginTitle">Iniciá sesión para ver este diseño</p>
       <button class="btn primary" id="googleLoginBtn" style="width:100%; gap:10px; padding:12px;">
@@ -502,8 +518,19 @@
   <div id="payOverlay" class="hide">
     <div id="payCard">
       <div class="brand-mark" style="justify-content:center; margin-bottom:12px;">
-        <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-        <div class="brand-title" style="font-size:19px;">3DBLOCK</div>
+        <svg class="brand-logo" viewBox="0 0 32 32" aria-hidden="true">
+        <!-- caras del bloque en isométrica: arriba, izquierda y derecha -->
+        <path d="M16 5 L28 12 L16 19 L4 12 Z" fill="var(--accent)"/>
+        <path d="M4 12 L16 19 L16 28 L4 21 Z" fill="var(--accent-2-dim)"/>
+        <path d="M28 12 L16 19 L16 28 L28 21 Z" fill="var(--accent-2)"/>
+        <!-- tachones -->
+        <ellipse cx="11" cy="11" rx="2.6" ry="1.5" fill="var(--panel)" opacity=".55"/>
+        <ellipse cx="21" cy="11" rx="2.6" ry="1.5" fill="var(--panel)" opacity=".55"/>
+        <ellipse cx="16" cy="14.5" rx="2.6" ry="1.5" fill="var(--panel)" opacity=".55"/>
+        <!-- destello: la parte "magic" -->
+        <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
+      </svg>
+        <div class="brand-title" style="font-size:19px;">RENZOD'SING</div>
       </div>
       <p id="payTitle" style="font-size:14px; color:var(--text); font-weight:700; margin:0 0 4px;">Este diseño es de pago</p>
       <p style="font-size:11.5px; color:var(--text-faint); margin:0 0 16px;">Pagá una vez para desbloquearlo con tu cuenta. Modo de prueba: usá una cuenta sandbox de PayPal, no se cobra dinero real.</p>
@@ -514,8 +541,19 @@
 
   <div id="idBar">
     <div class="brand-mark">
-      <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v77</small></div>
+      <svg class="brand-logo" viewBox="0 0 32 32" aria-hidden="true">
+        <!-- caras del bloque en isométrica: arriba, izquierda y derecha -->
+        <path d="M16 5 L28 12 L16 19 L4 12 Z" fill="var(--accent)"/>
+        <path d="M4 12 L16 19 L16 28 L4 21 Z" fill="var(--accent-2-dim)"/>
+        <path d="M28 12 L16 19 L16 28 L28 21 Z" fill="var(--accent-2)"/>
+        <!-- tachones -->
+        <ellipse cx="11" cy="11" rx="2.6" ry="1.5" fill="var(--panel)" opacity=".55"/>
+        <ellipse cx="21" cy="11" rx="2.6" ry="1.5" fill="var(--panel)" opacity=".55"/>
+        <ellipse cx="16" cy="14.5" rx="2.6" ry="1.5" fill="var(--panel)" opacity=".55"/>
+        <!-- destello: la parte "magic" -->
+        <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
+      </svg>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v80</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -835,7 +873,7 @@
       <button class="btn" id="demoBtn" style="width:100%;">↺ Cargar modelo de ejemplo</button>
     </div>
 
-    <p class="footer-note">3DBlock renderiza todo con cubos — no usa esferas ni "beads". Los archivos se procesan en tu navegador; nada se sube a un servidor.</p>
+    <p class="footer-note">RenzoD'sing renderiza todo con cubos — no usa esferas ni "beads". Los archivos se procesan en tu navegador; nada se sube a un servidor.</p>
   </aside>
 
   <div id="qrOverlay">
@@ -864,6 +902,14 @@
     <span style="color:var(--text-dim); font-size:12.5px; margin-left:6px;">Zoom:</span>
     <input type="range" id="previewZoomSlider" min="0.8" max="3" step="0.1" value="1.3" style="width:130px;" />
     <span id="previewZoomVal" style="color:var(--accent); font-size:12px; font-family:var(--mono); min-width:30px;">1.3x</span>
+    <span style="color:var(--text-dim); font-size:12.5px; margin-left:6px;">Bloque:</span>
+    <select id="bloqueManualSel" title="Si el manual no llega a generarse, probá con Simple: es el que menos trabajo le da al navegador." style="background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:7px; padding:5px 8px; font-size:12.5px;">
+      <option value="auto">Automático</option>
+      <option value="magic2">Real (704 caras)</option>
+      <option value="magic">Real anterior (472)</option>
+      <option value="muesca">Con muesca (419)</option>
+      <option value="simple">Simple (12) — el más liviano</option>
+    </select>
     <button class="btn primary" id="anglePreviewCloseBtn">Cerrar</button>
   </div>
 
@@ -877,7 +923,7 @@
       <option value="texto">Texto</option>
       <option value="imagen">Imagen</option>
     </select>
-    <input type="text" id="wmText" value="3DBlock" placeholder="Texto" title="Texto de la marca de agua" />
+    <input type="text" id="wmText" placeholder="Texto" title="Texto de la marca de agua" />
     <button class="btn sm" id="wmImageBtn" title="Cargar una imagen (PNG con fondo transparente queda mejor)">🖼️ Imagen…</button>
     <input type="file" id="wmImageInput" accept="image/*" style="display:none;" />
     <span class="wm-lbl" id="wmImageName" style="max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
@@ -895,9 +941,12 @@
     <input type="range" id="wmAngle" min="-90" max="90" step="5" value="30" />
     <span class="wm-val" id="wmAngleVal">30°</span>
     <div class="wm-sep"></div>
-    <label style="display:flex; align-items:center; gap:5px; font-size:11px; color:var(--text-dim); cursor:pointer;" title="Recorta la marca siguiendo el contorno del modelo en vez de un recuadro. Se ve mejor, pero procesa cada página y en manuales largos puede tardar bastante más.">
-      <input type="checkbox" id="wmSilueta" /> Recortar al contorno (más lento)
-    </label>
+    <span class="wm-lbl">Hueco:</span>
+    <select id="wmRecorte" title="Dónde dejar de dibujar la marca para no tapar el diseño">
+      <option value="ninguno">Ninguno — mosaico parejo</option>
+      <option value="rectangulo">Recuadro de la foto</option>
+      <option value="contorno">Contorno del modelo (lento)</option>
+    </select>
     <button class="btn sm ghost" id="wmResetBtn" title="Volver a los valores de fábrica">↺</button>
   </div>
   <p style="font-size:10.5px; color:var(--text-faint); margin:0; text-align:center; max-width:640px;">La marca se repite en mosaico por toda la hoja, en diagonal. Los ajustes quedan guardados en este navegador y se aplican al PDF, a los PNG y al video.</p>
@@ -1187,7 +1236,7 @@ const LAYER_PLANE_MARGIN = 1;    // celdas de margen del rectángulo que se ve
 const LAYER_PICK_MARGIN  = 40;   // celdas de margen del plano invisible de clic
 const layerPlaneEdge = new THREE.LineSegments(
   new THREE.EdgesGeometry(new THREE.PlaneGeometry(1, 1)),
-  new THREE.LineBasicMaterial({ color:0xf2b134, transparent:true, opacity:0.55 })
+  new THREE.LineBasicMaterial({ color:0x34dff5, transparent:true, opacity:0.55 }) // cian del tema, no el ámbar viejo
 );
 layerPlaneEdge.rotation.x = -Math.PI/2;
 scene.add(layerPlaneEdge);
@@ -3495,7 +3544,29 @@ function contornoParaInstrucciones(){
    Lo único que puede bajarlo es adjustStyleForHeavyRender(): si el modelo tiene
    demasiados bloques para dibujarlos una y otra vez, cae al bloque con muesca y
    avisa por pantalla. */
+/* Qué bloque usar al generar el manual. En automático elige el real y baja de
+   categoría solo si el modelo pasa el tope. Pero el tope estaba puesto por
+   cantidad de bloques, y lo que importa de verdad son las CARAS: el bloque real
+   tiene 704 caras, así que 8.500 bloques son seis millones de triángulos en una
+   sola foto. Según la placa de video, eso puede tardar minutos o directamente
+   trabar la pestaña antes de la primera página.
+
+   Por eso ahora se puede forzar a mano. Es también la forma de saber si el
+   cuelgue es por la geometría: si en "simple" genera y en "real" no, ya está
+   identificado. */
+const BLOQUE_MANUAL_KEY = '3dblock.bloqueManual';
+let bloqueManual = localStorage.getItem(BLOQUE_MANUAL_KEY) || 'auto';
+const CARAS_POR_ESTILO = { simple: 12, muesca: 419, magic: 472, magic2: 704 };
+
 function estiloParaInstrucciones(esVideo){
+  if (bloqueManual !== 'auto'){
+    blockStyle = bloqueManual;
+    if (blockStyle === 'simple') renderAsPieces = false;
+    flatBlockMode = (blockStyle === 'simple');
+    const caras = (voxels.length * (CARAS_POR_ESTILO[blockStyle] || 12) / 1e6).toFixed(1);
+    setStatus('Manual con bloque "' + blockStyle + '": unos ' + caras + ' millones de caras por foto.', 'ok');
+    return;
+  }
   blockStyle = 'magic2';
   adjustStyleForHeavyRender(esVideo);
   flatBlockMode = (blockStyle === 'simple');
@@ -3548,10 +3619,25 @@ function ensurePieceGrouping(){
    Se dibuja SIEMPRE sobre un canvas 2D, incluso para el PDF. Así lo que ves en
    la vista previa es exactamente lo que sale impreso, sin dos códigos que se
    puedan ir separando con el tiempo. */
+/* Nombre de la marca. Va en una constante porque aparece en la portada del
+   manual, en el encabezado de cada hoja, en la marca de agua y en los diálogos
+   de guardar: cambiarlo en un solo lugar evita que queden restos del anterior.
+   Ojo con las comillas: el apóstrofo obliga a usar comillas dobles acá. */
+const MARCA_NOMBRE = "RenzoD'sing";
+
 const MARCA_DEFAULT = {
-  silueta: false,   // recorte fino a la forma del modelo: lindo pero caro (ver abajo)
+  /* Dónde se le hace hueco a la marca para no tapar el diseño:
+     'ninguno'    — no se le hace ninguno. El mosaico queda parejo por toda la
+                    hoja y el diseño se dibuja encima. Es lo que mejor se ve y lo
+                    más rápido, porque no hay nada que analizar.
+     'rectangulo' — se borra el recuadro entero de la foto. Con figuras que
+                    ocupan casi todo el cuadro, deja un panel blanco enorme.
+     'contorno'   — sigue la silueta real del modelo. Es el más prolijo de los
+                    dos que hacen hueco, pero hay que recorrer los píxeles de
+                    cada página. */
+  recorte: 'ninguno',
   modo: 'texto',      // 'ninguna' | 'texto' | 'imagen'
-  texto: '3DBlock',
+  texto: MARCA_NOMBRE,
   opacidad: 0.05,
   escala: 1,          // tamaño de cada copia
   separacion: 0.6,    // espacio entre copias, como fracción del tamaño de la copia
@@ -3563,7 +3649,12 @@ const MARCA_KEY = '3dblock.marcaAgua';
 function cargarConfigMarca(){
   try{
     const guardado = JSON.parse(localStorage.getItem(MARCA_KEY) || 'null');
-    return guardado ? Object.assign({}, MARCA_DEFAULT, guardado) : Object.assign({}, MARCA_DEFAULT);
+    const cfg = guardado ? Object.assign({}, MARCA_DEFAULT, guardado) : Object.assign({}, MARCA_DEFAULT);
+    // Antes esto era un sí/no llamado `silueta`. Se traduce al modo nuevo para
+    // que a nadie se le cambie el comportamiento de golpe.
+    if (guardado && cfg.recorte === undefined) cfg.recorte = guardado.silueta ? 'contorno' : 'rectangulo';
+    delete cfg.silueta;
+    return cfg;
   } catch(err){ return Object.assign({}, MARCA_DEFAULT); }
 }
 let marcaAgua = cargarConfigMarca();
@@ -3793,7 +3884,7 @@ async function componerHojaConMarca(fuente, opciones){
 
   /* Cómo se le hace el hueco a la marca para que no tape el diseño.
 
-     Por silueta (marcaAgua.silueta): sigue el contorno real del modelo. Se ve
+     Por contorno: sigue la silueta real del modelo. Se ve
      mejor, pero hay que recorrer los píxeles de CADA página, y en manuales
      largos eso hace que el navegador se arrastre. Va apagado por defecto.
 
@@ -3801,16 +3892,18 @@ async function componerHojaConMarca(fuente, opciones){
      operaciones de dibujo en vez de un análisis de imagen; la marca queda en el
      margen de la hoja en vez de pegada al contorno, pero tampoco toca el
      diseño y el manual se genera a la velocidad de siempre. */
-  cctx.globalCompositeOperation = 'destination-out';
-  if (marcaAgua.silueta){
-    const silueta = siluetaDelRender(img, 0.012);
-    cctx.drawImage(silueta, m, m, med.w, med.h); // viene reducida: se estira acá
-  } else {
-    const respiro = Math.max(2, Math.round(m * 0.12));
-    cctx.fillStyle = '#000';
-    cctx.fillRect(m - respiro, m - respiro, med.w + respiro*2, med.h + respiro*2);
+  if (marcaAgua.recorte !== 'ninguno'){
+    cctx.globalCompositeOperation = 'destination-out';
+    if (marcaAgua.recorte === 'contorno'){
+      const silueta = siluetaDelRender(img, 0.012);
+      cctx.drawImage(silueta, m, m, med.w, med.h); // viene reducida: se estira acá
+    } else {
+      const respiro = Math.max(2, Math.round(m * 0.12));
+      cctx.fillStyle = '#000';
+      cctx.fillRect(m - respiro, m - respiro, med.w + respiro*2, med.h + respiro*2);
+    }
+    cctx.globalCompositeOperation = 'source-over';
   }
-  cctx.globalCompositeOperation = 'source-over';
 
   hctx.drawImage(capa, 0, 0);
   return hoja.toDataURL(opciones.formato || 'image/png', opciones.calidad);
@@ -3831,7 +3924,7 @@ function construirCapaMarcaPagina(pageWmm, pageHmm, huecoMm){
   // así que la marca se borra de ese rectángulo y queda solo alrededor. Se hace
   // recortando después de dibujar (y no dibujando alrededor) para que el mosaico
   // no se corra ni cambie de posición según el tamaño del hueco.
-  if (huecoMm){
+  if (huecoMm && marcaAgua.recorte !== 'ninguno'){
     const m = 1.5 * escalaPx; // respiro para que la marca no roce el borde de la imagen
     ctx.clearRect(huecoMm.x*escalaPx - m, huecoMm.y*escalaPx - m,
                   huecoMm.w*escalaPx + m*2, huecoMm.h*escalaPx + m*2);
@@ -3842,7 +3935,7 @@ function construirCapaMarcaPagina(pageWmm, pageHmm, huecoMm){
 /* ---------------------------- Controles de la marca en la vista previa ---------------------------- */
 function refrescarControlesMarca(){
   document.getElementById('wmMode').value = marcaAgua.modo;
-  document.getElementById('wmSilueta').checked = !!marcaAgua.silueta;
+  document.getElementById('wmRecorte').value = marcaAgua.recorte;
   document.getElementById('wmText').value = marcaAgua.texto;
   document.getElementById('wmOpacity').value = marcaAgua.opacidad;
   document.getElementById('wmScale').value = marcaAgua.escala;
@@ -4020,6 +4113,17 @@ function pasoPreview(delta){
 }
 /* Cambiar la orientación cambia la forma del hueco, así que hay que volver a
    sacar la foto: si no, se seguiría viendo la vista previa con la forma vieja. */
+(function bloqueManualUI(){
+  const sel = document.getElementById('bloqueManualSel');
+  sel.value = bloqueManual;
+  sel.addEventListener('change', e=>{
+    bloqueManual = e.target.value;
+    localStorage.setItem(BLOQUE_MANUAL_KEY, bloqueManual);
+    const layerSel = document.getElementById('previewLayerSelect');
+    if (layerSel && layerSel.options.length) quickAnglePreview(layerSel.value);
+  });
+})();
+
 document.getElementById('previewPrevBtn').addEventListener('click', ()=>pasoPreview(-1));
 document.getElementById('previewNextBtn').addEventListener('click', ()=>pasoPreview(1));
 window.addEventListener('keydown', e=>{
@@ -4041,7 +4145,7 @@ async function cambiarMarca(cambios, recomponer){
   if (recomponer !== false) await actualizarImagenPreview();
 }
 document.getElementById('wmMode').addEventListener('change', e=>cambiarMarca({ modo: e.target.value }));
-document.getElementById('wmSilueta').addEventListener('change', e=>cambiarMarca({ silueta: e.target.checked }));
+document.getElementById('wmRecorte').addEventListener('change', e=>cambiarMarca({ recorte: e.target.value }));
 document.getElementById('wmText').addEventListener('input', e=>cambiarMarca({ texto: e.target.value }));
 document.getElementById('wmOpacity').addEventListener('input', e=>cambiarMarca({ opacidad: parseFloat(e.target.value) }));
 document.getElementById('wmScale').addEventListener('input', e=>cambiarMarca({ escala: parseFloat(e.target.value) }));
@@ -4154,6 +4258,10 @@ async function generateInstructionsPDF(){
 
   const wasFlatBlockMode = flatBlockMode;
   const wasBlockStyle = blockStyle;
+  // Carteles por etapa: sin esto, todo lo que pasa antes de la primera página
+  // ocurre bajo el mismo mensaje y no hay forma de saber en cuál se traba.
+  setLoading(true, 'Preparando el modelo…');
+  await new Promise(r=>setTimeout(r, 0));
   estiloParaInstrucciones();
   const wasRenderAsPieces = renderAsPieces;
   renderAsPieces = true; // 1x2 y 1x3 se ven como UNA pieza, no como bloques sueltos
@@ -4175,14 +4283,14 @@ async function generateInstructionsPDF(){
        una hoja alta: acostada aprovecha los 297 mm a lo ancho. */
     const doc = new jsPDF({ unit:'mm', format:'a4', orientation:'portrait' });
     const pageW = 210, pageH = 297;
-    const modelName = (document.getElementById('modelNameText').textContent || 'Diseño 3DBlock').trim();
+    const modelName = (document.getElementById('modelNameText').textContent || ('Diseño ' + MARCA_NOMBRE)).trim();
 
     // ---- Portada ----
     doc.setFillColor(8,11,19);
     doc.rect(0,0,pageW,pageH,'F');
     doc.setTextColor(242,177,52);
     doc.setFontSize(28);
-    doc.text('3DBLOCK', pageW/2, 24, { align:'center' });
+    doc.text(MARCA_NOMBRE.toUpperCase(), pageW/2, 24, { align:'center' });
     doc.setTextColor(255,255,255);
     doc.setFontSize(17);
     doc.text(modelName, pageW/2, 36, { align:'center' });
@@ -4212,6 +4320,8 @@ async function generateInstructionsPDF(){
     rebuildMesh3D({ instrucciones:true });
     materialParaInstrucciones(realMat);
     contornoParaInstrucciones();
+    setLoading(true, 'Armando la portada…');
+    await new Promise(r=>setTimeout(r, 0));
     const coverBox = centeredBounds();
     // Las dos fotos se reparten el ancho disponible en vez de medir 88 mm fijos,
     // que en hoja acostada dejaban media hoja vacía.
@@ -4339,7 +4449,7 @@ async function generateInstructionsPDF(){
       // manual y ya trae el hueco del recuadro—, así que acá no hay nada que
       // hacer: la foto sale directa del visor. Esto es lo que devuelve la
       // generación a la velocidad de antes.
-      const imgData = (marcaEstaActiva() && marcaAgua.silueta)
+      const imgData = (marcaEstaActiva() && marcaAgua.recorte === 'contorno')
         ? await componerHojaConMarca(renderer.domElement,
                                      { margen: 0, formato: 'image/jpeg', calidad: 0.9 })
         : renderer.domElement.toDataURL('image/jpeg', 0.9);
@@ -4672,7 +4782,7 @@ async function generateInstructionsPNGZip(){
 
   try{
     const zip = new JSZip();
-    const modelName = (document.getElementById('modelNameText').textContent || 'Diseño 3DBlock').trim();
+    const modelName = (document.getElementById('modelNameText').textContent || ('Diseño ' + MARCA_NOMBRE)).trim();
     const baseName = modelName.replace(/[^\w\-]+/g,'_') || 'diseno';
     const pad = String(maxLayer+1).length;
     const rango = rangoPasos();
@@ -7350,7 +7460,7 @@ function drawSelectionOverlay(){
   const x0 = Math.min(boxSelectStart.gx, boxSelectCurrent.gx), x1 = Math.max(boxSelectStart.gx, boxSelectCurrent.gx);
   const z0 = Math.min(boxSelectStart.gz, boxSelectCurrent.gz), z1 = Math.max(boxSelectStart.gz, boxSelectCurrent.gz);
   diagCtx.save();
-  diagCtx.strokeStyle = '#f2b134';
+  diagCtx.strokeStyle = '#34dff5'; // recuadro de selección, en el cian del tema
   diagCtx.lineWidth = 2;
   diagCtx.setLineDash([6,4]);
   diagCtx.strokeRect(ox+x0*cell, oy+z0*cell, (x1-x0+1)*cell, (z1-z0+1)*cell);
@@ -7847,7 +7957,7 @@ document.getElementById('saveBtn').addEventListener('click', async ()=>{
       if (!savedFileHandle){
         savedFileHandle = await window.showSaveFilePicker({
           suggestedName: baseName + '.json',
-          types: [{ description: 'Diseño 3DBlock', accept: {'application/json': ['.json']} }]
+          types: [{ description: 'Diseño ' + MARCA_NOMBRE, accept: {'application/json': ['.json']} }]
         });
       }
       const writable = await savedFileHandle.createWritable();
