@@ -515,7 +515,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v73</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v74</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -3701,8 +3701,7 @@ function siluetaDelRender(fuente, haloRelativo){
   const w = Math.max(2, Math.round(orig.w * escala));
   const h = Math.max(2, Math.round(orig.h * escala));
 
-  const tmp = document.createElement('canvas');
-  tmp.width = w; tmp.height = h;
+  const tmp = lienzo('silueta', w, h);
   const tctx = tmp.getContext('2d', { willReadFrequently: true });
   // Sin suavizado: al achicar con interpolación, los píxeles del borde se mezclan
   // con el fondo y el blanco puro deja de ser blanco puro.
@@ -3735,15 +3734,13 @@ function siluetaDelRender(fuente, haloRelativo){
   for (let i = 0; i < w*h; i++){
     if (!afuera[i]) md[i*4+3] = 255; // el color no importa: solo se usa el alfa
   }
-  const cm = document.createElement('canvas');
-  cm.width = w; cm.height = h;
+  const cm = lienzo('mascara', w, h);
   cm.getContext('2d').putImageData(mascara, 0, 0);
 
   // Halo: se engorda la silueta dibujándola corrida en varias direcciones, para
   // que la marca no quede rozando el borde de los bloques.
   const halo = Math.max(1, Math.round(Math.min(w, h) * haloRelativo));
-  const cg = document.createElement('canvas');
-  cg.width = w; cg.height = h;
+  const cg = lienzo('halo', w, h);
   const cgctx = cg.getContext('2d');
   const pasos = 16;
   for (let r = halo; r > 0; r -= Math.max(1, halo/2)){
@@ -3764,6 +3761,22 @@ function siluetaDelRender(fuente, haloRelativo){
    `margen` agrega borde alrededor del render (para los PNG sueltos, que si no
    quedan al ras); en el PDF va en 0 porque la hoja ya trae su propio margen. */
 const MARGEN_HOJA = 0.04; // 4% del lado, a cada costado
+
+/* Lienzos reutilizables. Cada página del manual creaba cinco lienzos nuevos, y
+   los dos grandes son de unos 1620x1995 — o sea 13 MB cada uno. Con 49 páginas
+   eso son cientos de megas de basura esperando que el navegador la limpie, y
+   mientras tanto la pestaña se arrastra o se cuelga. Reusando los mismos, la
+   memoria queda constante sin importar cuántas páginas tenga el manual. */
+const _lienzos = {};
+function lienzo(nombre, w, h){
+  let c = _lienzos[nombre];
+  if (!c){ c = _lienzos[nombre] = document.createElement('canvas'); }
+  if (c.width !== w || c.height !== h){ c.width = w; c.height = h; }
+  const ctx = c.getContext('2d', { willReadFrequently: nombre === 'silueta' });
+  ctx.clearRect(0, 0, w, h);
+  return c;
+}
+
 async function componerHojaConMarca(fuente, opciones){
   opciones = opciones || {};
   await prepararImagenMarca();
@@ -3781,16 +3794,14 @@ async function componerHojaConMarca(fuente, opciones){
   const m = Math.round(lado * (opciones.margen !== undefined ? opciones.margen : MARGEN_HOJA));
   const W = med.w + m*2, H = med.h + m*2;
 
-  const hoja = document.createElement('canvas');
-  hoja.width = W; hoja.height = H;
+  const hoja = lienzo('hoja', W, H);
   const hctx = hoja.getContext('2d');
   hctx.fillStyle = COLOR_FONDO_MANUAL;
   hctx.fillRect(0, 0, W, H);
   hctx.drawImage(img, m, m);
 
   // La marca se dibuja aparte para poder recortarle la silueta antes de pegarla.
-  const capa = document.createElement('canvas');
-  capa.width = W; capa.height = H;
+  const capa = lienzo('marca', W, H);
   const cctx = capa.getContext('2d');
   dibujarMarcaAgua(cctx, W, H);
 
@@ -4330,7 +4341,14 @@ async function generateInstructionsPDF(){
     const capaMarca = construirCapaMarcaPagina(pageW, pageH, { x: margin, y: 18, w: imgSize, h: imgAlto });
     const rango = rangoPasos();
 
+    const totalPasos = rango.hasta - rango.desde + 1;
     for (let layer=rango.desde; layer<=rango.hasta; layer++){
+      // Decir en qué paso va sirve para dos cosas: se ve que avanza en vez de
+      // parecer colgado, y si alguna vez se traba de verdad, se sabe dónde.
+      setLoading(true, 'Armando el manual — paso ' + (layer - rango.desde + 1) + ' de ' + totalPasos + '…');
+      // Un respiro para que el navegador pueda repintar ese cartel: sin esto el
+      // bucle no suelta el hilo y la pestaña se ve congelada aunque avance bien.
+      await new Promise(r => setTimeout(r, 0));
       currentLayer = layer;
       rebuildMesh3D({ instrucciones:true }); // con showFullDesign=false y showBelowLayers=true: esta capa a color, las de abajo gris
       materialParaInstrucciones(realMat);
@@ -4519,7 +4537,14 @@ async function generateAssemblyVideo(){
     const offX = (dims.x*voxelSize)/2, offZ = (dims.z*voxelSize)/2;
     const growDummy = new THREE.Object3D();
 
+    const totalPasos = rango.hasta - rango.desde + 1;
     for (let layer=rango.desde; layer<=rango.hasta; layer++){
+      // Decir en qué paso va sirve para dos cosas: se ve que avanza en vez de
+      // parecer colgado, y si alguna vez se traba de verdad, se sabe dónde.
+      setLoading(true, 'Armando el video — paso ' + (layer - rango.desde + 1) + ' de ' + totalPasos + '…');
+      // Un respiro para que el navegador pueda repintar ese cartel: sin esto el
+      // bucle no suelta el hilo y la pestaña se ve congelada aunque avance bien.
+      await new Promise(r => setTimeout(r, 0));
       currentLayer = layer;
       rebuildMesh3D({ instrucciones:true });
       materialParaInstrucciones(realMat);
@@ -4677,7 +4702,14 @@ async function generateInstructionsPNGZip(){
     const pad = String(maxLayer+1).length;
     const rango = rangoPasos();
 
+    const totalPasos = rango.hasta - rango.desde + 1;
     for (let layer=rango.desde; layer<=rango.hasta; layer++){
+      // Decir en qué paso va sirve para dos cosas: se ve que avanza en vez de
+      // parecer colgado, y si alguna vez se traba de verdad, se sabe dónde.
+      setLoading(true, 'Armando los PNG — paso ' + (layer - rango.desde + 1) + ' de ' + totalPasos + '…');
+      // Un respiro para que el navegador pueda repintar ese cartel: sin esto el
+      // bucle no suelta el hilo y la pestaña se ve congelada aunque avance bien.
+      await new Promise(r => setTimeout(r, 0));
       currentLayer = layer;
       rebuildMesh3D({ instrucciones:true });
       materialParaInstrucciones(realMat);
