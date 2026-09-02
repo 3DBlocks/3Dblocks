@@ -466,7 +466,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v64</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v65</small></div>
     </div>
     <div id="modelNameText">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -617,11 +617,11 @@
       <div id="dropzone">
         <div class="dz-icon">▦</div>
         <div class="dz-text"><b>Arrastra un archivo</b> o haz clic para elegir</div>
-        <div class="fmt-row"><span class="fmt-badge">.VOX</span><span class="fmt-badge">.DAE</span><span class="fmt-badge">.JSON</span><span class="fmt-badge admin-only">.OBJ</span><span class="fmt-badge admin-only">.STL</span><span class="fmt-badge admin-only">.3MF</span></div>
+        <div class="fmt-row"><span class="fmt-badge">.VOX</span><span class="fmt-badge">.DAE</span><span class="fmt-badge">.JSON</span><span class="fmt-badge admin-only">.OBJ</span><span class="fmt-badge admin-only">.STL</span><span class="fmt-badge admin-only">.3MF</span><span class="fmt-badge admin-only">.GLB</span></div>
       </div>
-      <input id="fileInput" type="file" accept=".vox,.dae,.json,.obj,.stl,.3mf" />
+      <input id="fileInput" type="file" accept=".vox,.dae,.json,.obj,.stl,.3mf,.glb,.gltf" />
       <button class="btn wide admin-only" id="mergeFileBtn" style="width:100%; margin-top:8px;">➕ Unir otro diseño al actual</button>
-      <input id="mergeFileInput" type="file" accept=".vox,.dae,.json,.obj,.stl,.3mf" style="display:none;" />
+      <input id="mergeFileInput" type="file" accept=".vox,.dae,.json,.obj,.stl,.3mf,.glb,.gltf" style="display:none;" />
       <p class="admin-only" style="font-size:10.5px; color:var(--text-faint); margin:6px 0 0; line-height:1.5;">Carga un segundo archivo SIN borrar el que ya está: lo coloca al lado, apoyado en el piso, y lo deja seleccionado para que lo acomodes con la herramienta de mover. Desde ahí los dos son un solo diseño y se pintan juntos. Ctrl+Z deshace la unión.</p>
       <div id="statusMsg"></div>
     </div>
@@ -5641,6 +5641,190 @@ function buildVoxelsFromInstances(instances){
   return list.length ? normalize(list) : null;
 }
 
+/* ---------------------------- Lector .glb / .gltf ----------------------------
+   Un .glb es un contenedor binario: cabecera de 12 bytes y después bloques. El
+   primero es un JSON con la estructura del modelo (glTF 2.0) y el segundo es un
+   bloque de bytes con todos los números crudos. El JSON no guarda coordenadas:
+   guarda "dónde" están dentro de ese bloque, con qué tipo de número y cada
+   cuántos bytes. Por eso hay que leerlo a mano en vez de tratarlo como texto.
+
+   Se lee sin cargar ninguna librería extra a propósito: el programa importa un
+   solo archivo de three.js, y sumar el cargador oficial significaba otra
+   descarga más de la que depender.
+
+   Lo que NO se soporta, y avisa claro en vez de fallar raro: geometría
+   comprimida (Draco o meshopt) y .gltf que apunta a archivos sueltos aparte.
+   El color sale del material de cada parte, o de los colores por vértice si el
+   archivo los trae. Las texturas no se leen: una imagen pegada sobre la malla
+   no se puede convertir en un color por bloque sin muestrearla, así que esas
+   partes salen con el color base del material. */
+const GLTF_TIPOS = { SCALAR:1, VEC2:2, VEC3:3, VEC4:4, MAT2:4, MAT3:9, MAT4:16 };
+const GLTF_COMPONENTES = {
+  5120: { array: Int8Array,    bytes: 1, tope: 127 },
+  5121: { array: Uint8Array,   bytes: 1, tope: 255 },
+  5122: { array: Int16Array,   bytes: 2, tope: 32767 },
+  5123: { array: Uint16Array,  bytes: 2, tope: 65535 },
+  5125: { array: Uint32Array,  bytes: 4, tope: 4294967295 },
+  5126: { array: Float32Array, bytes: 4, tope: 1 },
+};
+
+function parseGlb(arrayBuffer){
+  const vista = new DataView(arrayBuffer);
+  let json = null, binario = null;
+
+  if (vista.byteLength >= 12 && vista.getUint32(0, true) === 0x46546C67){ // "glTF"
+    const total = vista.getUint32(8, true);
+    let p = 12;
+    while (p + 8 <= Math.min(total, vista.byteLength)){
+      const largo = vista.getUint32(p, true);
+      const tipo  = vista.getUint32(p+4, true);
+      const datos = new Uint8Array(arrayBuffer, p+8, largo);
+      if (tipo === 0x4E4F534A) json = JSON.parse(new TextDecoder().decode(datos));       // JSON
+      else if (tipo === 0x004E4942) binario = datos;                                      // BIN
+      p += 8 + largo + ((4 - (largo % 4)) % 4); // los bloques van alineados de a 4 bytes
+    }
+  } else {
+    // .gltf suelto: es JSON de texto plano
+    try{ json = JSON.parse(new TextDecoder().decode(new Uint8Array(arrayBuffer))); }
+    catch(err){ throw new Error('El archivo no es un .glb ni un .gltf válido.'); }
+  }
+  if (!json) throw new Error('El .glb no trae el bloque JSON con la estructura del modelo.');
+
+  const requeridas = json.extensionsRequired || [];
+  const comprimido = requeridas.find(e => /draco|meshopt/i.test(e));
+  if (comprimido){
+    throw new Error('Este .glb viene con la geometría comprimida (' + comprimido + '), que este lector no puede abrir. Volvé a exportarlo desde tu programa 3D con la compresión desactivada.');
+  }
+
+  // Los buffers: el 0 suele ser el bloque binario del propio .glb; también se
+  // aceptan los que vienen incrustados como texto base64 dentro del JSON.
+  const buffers = (json.buffers || []).map((b, i)=>{
+    if (!b.uri) {
+      if (!binario) throw new Error('El archivo dice tener datos binarios pero no los trae adentro.');
+      return binario;
+    }
+    const m = /^data:[^;]*;base64,(.*)$/.exec(b.uri);
+    if (!m) throw new Error('Este .gltf guarda la geometría en un archivo aparte (' + b.uri + '). Exportalo como .glb, que lleva todo en un solo archivo.');
+    const cruda = atob(m[1]);
+    const bytes = new Uint8Array(cruda.length);
+    for (let k = 0; k < cruda.length; k++) bytes[k] = cruda.charCodeAt(k);
+    return bytes;
+  });
+
+  /* Lee un accesor: devuelve un array plano con sus números ya desempaquetados.
+     Hay que respetar el "byteStride", porque varios atributos (posición, normal,
+     color…) pueden venir intercalados en la misma tira de bytes. */
+  function leerAccesor(indice){
+    const acc = (json.accessors || [])[indice];
+    if (!acc) return null;
+    const comps = GLTF_TIPOS[acc.type] || 1;
+    const info = GLTF_COMPONENTES[acc.componentType];
+    if (!info) throw new Error('El .glb usa un tipo de número que este lector no conoce.');
+    const salida = new Float32Array(acc.count * comps);
+    if (acc.bufferView === undefined) return salida; // accesor vacío: todo ceros, es válido
+    const bv = json.bufferViews[acc.bufferView];
+    const buf = buffers[bv.buffer || 0];
+    const base = (bv.byteOffset || 0) + (acc.byteOffset || 0);
+    const paso = bv.byteStride || (info.bytes * comps);
+    const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+    for (let i = 0; i < acc.count; i++){
+      for (let c = 0; c < comps; c++){
+        const off = base + i*paso + c*info.bytes;
+        let v;
+        switch (acc.componentType){
+          case 5120: v = dv.getInt8(off); break;
+          case 5121: v = dv.getUint8(off); break;
+          case 5122: v = dv.getInt16(off, true); break;
+          case 5123: v = dv.getUint16(off, true); break;
+          case 5125: v = dv.getUint32(off, true); break;
+          default:   v = dv.getFloat32(off, true); break;
+        }
+        // Los enteros "normalizados" representan un 0..1 comprimido (típico en
+        // los colores por vértice): hay que devolverlos a su escala real.
+        if (acc.normalized && acc.componentType !== 5126) v = v / info.tope;
+        salida[i*comps + c] = v;
+      }
+    }
+    return salida;
+  }
+
+  function colorDeMaterial(indiceMat){
+    const mat = (json.materials || [])[indiceMat];
+    if (!mat) return null;
+    let f = mat.pbrMetallicRoughness && mat.pbrMetallicRoughness.baseColorFactor;
+    // Algunos exportadores viejos usan la extensión specular-glossiness
+    if (!f && mat.extensions && mat.extensions.KHR_materials_pbrSpecularGlossiness){
+      f = mat.extensions.KHR_materials_pbrSpecularGlossiness.diffuseFactor;
+    }
+    if (!f) return null;
+    // glTF guarda el color en lineal; la pantalla lo espera en sRGB.
+    const c = new THREE.Color();
+    if ('setRGB' in c && THREE.LinearSRGBColorSpace) c.setRGB(f[0], f[1], f[2], THREE.LinearSRGBColorSpace);
+    else c.setRGB(f[0], f[1], f[2]);
+    return '#' + c.getHexString();
+  }
+
+  // --- Recorrido del grafo de escena, arrastrando la transformación de cada nodo ---
+  const tris = [];
+  const nodos = json.nodes || [];
+  function matrizLocal(n){
+    const m = new THREE.Matrix4();
+    if (n.matrix && n.matrix.length === 16) return m.fromArray(n.matrix);
+    const t = n.translation || [0,0,0];
+    const r = n.rotation || [0,0,0,1];
+    const s = n.scale || [1,1,1];
+    return m.compose(new THREE.Vector3(t[0],t[1],t[2]),
+                     new THREE.Quaternion(r[0],r[1],r[2],r[3]),
+                     new THREE.Vector3(s[0],s[1],s[2]));
+  }
+  function agregarMalla(indiceMalla, mundo){
+    const malla = (json.meshes || [])[indiceMalla];
+    if (!malla) return;
+    (malla.primitives || []).forEach(prim=>{
+      if (prim.mode !== undefined && prim.mode !== 4) return; // solo triángulos sueltos
+      const pos = prim.attributes && prim.attributes.POSITION !== undefined
+        ? leerAccesor(prim.attributes.POSITION) : null;
+      if (!pos) return;
+      const colVert = prim.attributes && prim.attributes.COLOR_0 !== undefined
+        ? leerAccesor(prim.attributes.COLOR_0) : null;
+      const compsColor = colVert && (json.accessors[prim.attributes.COLOR_0].type === 'VEC4' ? 4 : 3);
+      const colorMat = prim.material !== undefined ? colorDeMaterial(prim.material) : null;
+
+      const idx = prim.indices !== undefined ? leerAccesor(prim.indices) : null;
+      const cantidad = idx ? idx.length : pos.length/3;
+      const punto = i => new THREE.Vector3(pos[i*3], pos[i*3+1], pos[i*3+2]).applyMatrix4(mundo);
+      const colorDe = i => {
+        if (!colVert) return colorMat;
+        const c = new THREE.Color();
+        const o = i*compsColor;
+        if ('setRGB' in c && THREE.LinearSRGBColorSpace) c.setRGB(colVert[o], colVert[o+1], colVert[o+2], THREE.LinearSRGBColorSpace);
+        else c.setRGB(colVert[o], colVert[o+1], colVert[o+2]);
+        return '#' + c.getHexString();
+      };
+      for (let i = 0; i + 2 < cantidad; i += 3){
+        const ia = idx ? idx[i] : i, ib = idx ? idx[i+1] : i+1, ic = idx ? idx[i+2] : i+2;
+        tris.push({ a: punto(ia), b: punto(ib), c: punto(ic), color: colorDe(ia) });
+      }
+    });
+  }
+  const vistos = new Set(); // por si el archivo trae un ciclo de nodos mal armado
+  function recorrer(indice, padre){
+    if (vistos.has(indice)) return;
+    vistos.add(indice);
+    const n = nodos[indice];
+    if (!n) return;
+    const mundo = padre.clone().multiply(matrizLocal(n));
+    if (n.mesh !== undefined) agregarMalla(n.mesh, mundo);
+    (n.children || []).forEach(h => recorrer(h, mundo));
+  }
+  const escena = (json.scenes || [])[json.scene || 0];
+  const raices = escena && escena.nodes ? escena.nodes : nodos.map((_, i) => i);
+  raices.forEach(r => recorrer(r, new THREE.Matrix4()));
+
+  if (!tris.length) throw new Error('El .glb no trae ninguna malla de triángulos que se pueda leer.');
+  return tris;
+}
+
 function voxelizeTriangles(tris, resolution){
   const box = new THREE.Box3();
   tris.forEach(({a,b,c})=>{ box.expandByPoint(a); box.expandByPoint(b); box.expandByPoint(c); });
@@ -5784,8 +5968,10 @@ async function handleFile(file, anexar){
       voxelSize = 1; setVoxels(list);
       document.getElementById('modelNameText').textContent = file.name;
       setStatus('Modelo .json cargado: '+list.length+' bloques.', 'ok');
-    } else if (ext==='obj' || ext==='stl'){
-      lastVoxelizerTris = ext==='obj' ? parseObjTriangles(await file.text()) : parseStlBuffer(await file.arrayBuffer());
+    } else if (ext==='obj' || ext==='stl' || ext==='glb' || ext==='gltf'){
+      if (ext==='obj')      lastVoxelizerTris = parseObjTriangles(await file.text());
+      else if (ext==='stl') lastVoxelizerTris = parseStlBuffer(await file.arrayBuffer());
+      else                  lastVoxelizerTris = parseGlb(await file.arrayBuffer());
       lastDaeParsed = null;
       const res = parseInt(document.getElementById('resSlider').value,10);
       const {list} = voxelizeTriangles(lastVoxelizerTris, res);
