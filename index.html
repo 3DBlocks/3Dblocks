@@ -515,7 +515,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v74</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v75</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -900,6 +900,9 @@
     <input type="range" id="wmAngle" min="-90" max="90" step="5" value="30" />
     <span class="wm-val" id="wmAngleVal">30°</span>
     <div class="wm-sep"></div>
+    <label style="display:flex; align-items:center; gap:5px; font-size:11px; color:var(--text-dim); cursor:pointer;" title="Recorta la marca siguiendo el contorno del modelo en vez de un recuadro. Se ve mejor, pero procesa cada página y en manuales largos puede tardar bastante más.">
+      <input type="checkbox" id="wmSilueta" /> Recortar al contorno (más lento)
+    </label>
     <button class="btn sm ghost" id="wmResetBtn" title="Volver a los valores de fábrica">↺</button>
   </div>
   <p style="font-size:10.5px; color:var(--text-faint); margin:0; text-align:center; max-width:640px;">La marca se repite en mosaico por toda la hoja, en diagonal. Los ajustes quedan guardados en este navegador y se aplican al PDF, a los PNG y al video.</p>
@@ -3417,7 +3420,7 @@ const configHoja = {
    mostrar exactamente la forma que va a tener impresa. Son las medidas reales
    del hueco en cada orientación. */
 function aspectoHoja(){
-  return configHoja.orientacion === 'horizontal' ? (281/155) : (194/232);
+  return 1; // el hueco de la foto es cuadrado en las dos orientaciones
 }
 
 const BASE_MARGIN = 1.85; // distancia base; se divide por el zoom
@@ -3564,6 +3567,7 @@ function ensurePieceGrouping(){
    la vista previa es exactamente lo que sale impreso, sin dos códigos que se
    puedan ir separando con el tiempo. */
 const MARCA_DEFAULT = {
+  silueta: false,   // recorte fino a la forma del modelo: lindo pero caro (ver abajo)
   modo: 'texto',      // 'ninguna' | 'texto' | 'imagen'
   texto: '3DBlock',
   opacidad: 0.05,
@@ -3805,10 +3809,25 @@ async function componerHojaConMarca(fuente, opciones){
   const cctx = capa.getContext('2d');
   dibujarMarcaAgua(cctx, W, H);
 
-  const silueta = siluetaDelRender(img, 0.012);
+  /* Cómo se le hace el hueco a la marca para que no tape el diseño.
+
+     Por silueta (marcaAgua.silueta): sigue el contorno real del modelo. Se ve
+     mejor, pero hay que recorrer los píxeles de CADA página, y en manuales
+     largos eso hace que el navegador se arrastre. Va apagado por defecto.
+
+     Por rectángulo: se borra el recuadro del render y listo. Son cuatro
+     operaciones de dibujo en vez de un análisis de imagen; la marca queda en el
+     margen de la hoja en vez de pegada al contorno, pero tampoco toca el
+     diseño y el manual se genera a la velocidad de siempre. */
   cctx.globalCompositeOperation = 'destination-out';
-  // La silueta viene reducida: se estira al tamaño real del render al borrarla.
-  cctx.drawImage(silueta, m, m, med.w, med.h);
+  if (marcaAgua.silueta){
+    const silueta = siluetaDelRender(img, 0.012);
+    cctx.drawImage(silueta, m, m, med.w, med.h); // viene reducida: se estira acá
+  } else {
+    const respiro = Math.max(2, Math.round(m * 0.12));
+    cctx.fillStyle = '#000';
+    cctx.fillRect(m - respiro, m - respiro, med.w + respiro*2, med.h + respiro*2);
+  }
   cctx.globalCompositeOperation = 'source-over';
 
   hctx.drawImage(capa, 0, 0);
@@ -3841,6 +3860,7 @@ function construirCapaMarcaPagina(pageWmm, pageHmm, huecoMm){
 /* ---------------------------- Controles de la marca en la vista previa ---------------------------- */
 function refrescarControlesMarca(){
   document.getElementById('wmMode').value = marcaAgua.modo;
+  document.getElementById('wmSilueta').checked = !!marcaAgua.silueta;
   document.getElementById('wmText').value = marcaAgua.texto;
   document.getElementById('wmOpacity').value = marcaAgua.opacidad;
   document.getElementById('wmScale').value = marcaAgua.escala;
@@ -4050,6 +4070,7 @@ async function cambiarMarca(cambios, recomponer){
   if (recomponer !== false) await actualizarImagenPreview();
 }
 document.getElementById('wmMode').addEventListener('change', e=>cambiarMarca({ modo: e.target.value }));
+document.getElementById('wmSilueta').addEventListener('change', e=>cambiarMarca({ silueta: e.target.checked }));
 document.getElementById('wmText').addEventListener('input', e=>cambiarMarca({ texto: e.target.value }));
 document.getElementById('wmOpacity').addEventListener('input', e=>cambiarMarca({ opacidad: parseFloat(e.target.value) }));
 document.getElementById('wmScale').addEventListener('input', e=>cambiarMarca({ escala: parseFloat(e.target.value) }));
@@ -4313,16 +4334,15 @@ async function generateInstructionsPDF(){
     await prepararImagenMarca();
     const imgSize = pageW - margin*2;
 
-    /* ---- Alto de la foto en la hoja ----
-       Antes era cuadrada (194x194 mm) y abajo quedaban unos 60 mm de hoja casi
-       vacíos. Ahora se calcula cuántas filas necesita la lista de piezas en el
-       paso más cargado de todo el manual, se le reserva ese espacio, y TODO lo
-       que sobra se le da a la foto. En un diseño de pocos colores la foto pasa
-       de 194 a más de 230 mm de alto.
+    /* ---- Tamaño de la foto en la hoja ----
+       CUADRADA, como hasta la v69. En la v70 se la había estirado para
+       aprovechar el alto que sobraba (llegaba a 243 mm), pero eso subió los
+       píxeles por página un 25% y fue lo que terminó de tumbar la generación en
+       modelos grandes. Se vuelve al tamaño que se sabía que funcionaba.
 
-       Se calcula una sola vez para todo el manual, no por página: si cada hoja
-       tuviera la foto de un alto distinto, el modelo cambiaría de tamaño al
-       pasar las páginas y sería mareador. */
+       Se sigue calculando cuántas filas necesita la lista de piezas en el paso
+       más cargado, pero ahora solo para que la foto ceda espacio si hiciera
+       falta: nunca para agrandarla. */
     const porFila = Math.max(1, Math.floor((pageW - margin*2) / 26));
     let filasLista = 1;
     for (let l = 0; l <= maxLayer; l++){
@@ -4331,14 +4351,13 @@ async function generateInstructionsPDF(){
     }
     const altoLista = filasLista * 6.5;
     // 18 arriba + 14 hasta la lista + la lista + 16 para el resumen del pie
-    // El piso de 150 mm es para el caso contrario: un paso con muchísimos colores
-    // necesita tantas filas de lista que, si la foto no cediera espacio, la lista
-    // se saldría de la hoja.
-    const imgAlto = Math.max(apaisada ? 95 : 150, Math.min(248, pageH - 18 - 14 - altoLista - 16));
-    const aspectoFoto = imgSize / imgAlto;
+    const ladoFoto = Math.min(imgSize, pageH - 18 - 14 - altoLista - 16);
+    const imgAncho = ladoFoto, imgAlto = ladoFoto;
+    const imgX = (pageW - imgAncho) / 2; // centrada: en hoja acostada sobra ancho
+    const aspectoFoto = 1;
     // La imagen del paso va en (margin, 18) con lado imgSize: ese rectángulo
     // queda libre de marca de agua para no estorbar la lectura del armado.
-    const capaMarca = construirCapaMarcaPagina(pageW, pageH, { x: margin, y: 18, w: imgSize, h: imgAlto });
+    const capaMarca = construirCapaMarcaPagina(pageW, pageH, { x: imgX, y: 18, w: imgAncho, h: imgAlto });
     const rango = rangoPasos();
 
     const totalPasos = rango.hasta - rango.desde + 1;
@@ -4364,7 +4383,12 @@ async function generateInstructionsPDF(){
       // modelo: alrededor de la figura sí, encima nunca. Se parte del PNG porque
       // el JPEG ensucia el blanco del fondo y confundiría al detector de silueta;
       // la salida vuelve a ser JPEG para no inflar el PDF.
-      const imgData = marcaEstaActiva()
+      // Solo se procesa la foto cuando se pidió el recorte por silueta. En el modo
+      // normal la marca la pone la capa de hoja —que se arma UNA vez para todo el
+      // manual y ya trae el hueco del recuadro—, así que acá no hay nada que
+      // hacer: la foto sale directa del visor. Esto es lo que devuelve la
+      // generación a la velocidad de antes.
+      const imgData = (marcaEstaActiva() && marcaAgua.silueta)
         ? await componerHojaConMarca(renderer.domElement,
                                      { margen: 0, formato: 'image/jpeg', calidad: 0.9 })
         : renderer.domElement.toDataURL('image/jpeg', 0.9);
@@ -4373,7 +4397,7 @@ async function generateInstructionsPDF(){
       doc.setFontSize(14);
       doc.setTextColor(20,20,20);
       doc.text(modelName + ' — Paso ' + (layer+1) + ' de ' + (maxLayer+1), pageW/2, 12, { align:'center' });
-      doc.addImage(imgData, 'JPEG', margin, 18, imgSize, imgAlto);
+      doc.addImage(imgData, 'JPEG', imgX, 18, imgAncho, imgAlto);
 
       // Marca de agua configurable (se calibra desde ⚡ Vista previa). Es la misma
       // imagen para todas las páginas y va con alias, así jsPDF la guarda una
