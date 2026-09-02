@@ -466,7 +466,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v66</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v67</small></div>
     </div>
     <div id="modelNameText">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -616,12 +616,12 @@
       <p class="section-title">Importar modelo</p>
       <div id="dropzone">
         <div class="dz-icon">▦</div>
-        <div class="dz-text"><b>Arrastra un archivo</b> o haz clic para elegir</div>
+        <div class="dz-text"><b>Arrastra un archivo</b> o haz clic para elegir<br/><span style="font-size:10px; opacity:.7;">Si es un .gltf, elegí también su .bin y sus texturas</span></div>
         <div class="fmt-row"><span class="fmt-badge">.VOX</span><span class="fmt-badge">.DAE</span><span class="fmt-badge">.JSON</span><span class="fmt-badge admin-only">.OBJ</span><span class="fmt-badge admin-only">.STL</span><span class="fmt-badge admin-only">.3MF</span><span class="fmt-badge admin-only">.GLB</span></div>
       </div>
-      <input id="fileInput" type="file" accept=".vox,.dae,.json,.obj,.stl,.3mf,.glb,.gltf,.bin" multiple />
+      <input id="fileInput" type="file" accept=".vox,.dae,.json,.obj,.stl,.3mf,.glb,.gltf,.bin,.png,.jpg,.jpeg,.webp" multiple />
       <button class="btn wide admin-only" id="mergeFileBtn" style="width:100%; margin-top:8px;">➕ Unir otro diseño al actual</button>
-      <input id="mergeFileInput" type="file" accept=".vox,.dae,.json,.obj,.stl,.3mf,.glb,.gltf,.bin" multiple style="display:none;" />
+      <input id="mergeFileInput" type="file" accept=".vox,.dae,.json,.obj,.stl,.3mf,.glb,.gltf,.bin,.png,.jpg,.jpeg,.webp" multiple style="display:none;" />
       <p class="admin-only" style="font-size:10.5px; color:var(--text-faint); margin:6px 0 0; line-height:1.5;">Carga un segundo archivo SIN borrar el que ya está: lo coloca al lado, apoyado en el piso, y lo deja seleccionado para que lo acomodes con la herramienta de mover. Desde ahí los dos son un solo diseño y se pintan juntos. Ctrl+Z deshace la unión.</p>
       <div id="statusMsg"></div>
     </div>
@@ -5668,7 +5668,60 @@ const GLTF_COMPONENTES = {
   5126: { array: Float32Array, bytes: 4, tope: 1 },
 };
 
-function parseGlb(arrayBuffer, acompanantes){
+/* Decodifica las imágenes que trae el glTF y las deja como una tira de píxeles
+   consultable. Pueden venir de tres lados: dentro del propio .glb, incrustadas
+   como texto base64, o como archivos .png/.jpg sueltos que el usuario eligió
+   junto al .gltf. */
+async function cargarImagenesGltf(json, buffers, acompanantes){
+  const imagenes = [];
+  for (const im of (json.images || [])){
+    let bytes = null, tipo = im.mimeType || 'image/png';
+    if (im.bufferView !== undefined){
+      const bv = json.bufferViews[im.bufferView];
+      const buf = buffers[bv.buffer || 0];
+      bytes = new Uint8Array(buf.buffer, buf.byteOffset + (bv.byteOffset || 0), bv.byteLength);
+    } else if (im.uri){
+      const m = /^data:([^;]+);base64,(.*)$/.exec(im.uri);
+      if (m){
+        tipo = m[1];
+        const cruda = atob(m[2]);
+        bytes = new Uint8Array(cruda.length);
+        for (let k = 0; k < cruda.length; k++) bytes[k] = cruda.charCodeAt(k);
+      } else {
+        const nombre = decodeURIComponent(im.uri).split(/[\\/]/).pop().toLowerCase();
+        bytes = (acompanantes && acompanantes.get(nombre)) || null;
+      }
+    }
+    if (!bytes){ imagenes.push(null); continue; }
+    try{
+      const bmp = await createImageBitmap(new Blob([bytes], { type: tipo }));
+      const c = document.createElement('canvas');
+      c.width = bmp.width; c.height = bmp.height;
+      const ctx = c.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(bmp, 0, 0);
+      imagenes.push({ w: bmp.width, h: bmp.height, datos: ctx.getImageData(0,0,bmp.width,bmp.height).data });
+      bmp.close && bmp.close();
+    } catch(err){
+      imagenes.push(null); // una textura ilegible no debe tumbar toda la carga
+    }
+  }
+  return imagenes;
+}
+
+/* Lee el color de un punto de la textura. Toma el píxel tal cual, SIN promediar
+   con los vecinos: en estos modelos la textura suele ser una paleta diminuta de
+   pocos píxeles, uno por color, y promediar inventaría tonos que no existen. */
+function muestrearTextura(img, u, v){
+  if (!img) return null;
+  const envolver = t => { const f = t - Math.floor(t); return f < 0 ? f + 1 : f; };
+  const x = Math.min(img.w-1, Math.floor(envolver(u) * img.w));
+  const y = Math.min(img.h-1, Math.floor(envolver(v) * img.h)); // en glTF la V arranca arriba
+  const o = (y*img.w + x) * 4;
+  const d = img.datos;
+  return '#' + [d[o], d[o+1], d[o+2]].map(n => n.toString(16).padStart(2,'0')).join('');
+}
+
+async function parseGlb(arrayBuffer, acompanantes){
   const vista = new DataView(arrayBuffer);
   let json = null, binario = null;
 
@@ -5758,6 +5811,16 @@ function parseGlb(arrayBuffer, acompanantes){
     return salida;
   }
 
+  /* Índice de la imagen que usa el material como color base, o null. */
+  function texturaDeMaterial(indiceMat){
+    const mat = (json.materials || [])[indiceMat];
+    const t = mat && mat.pbrMetallicRoughness && mat.pbrMetallicRoughness.baseColorTexture;
+    if (!t) return null;
+    const tex = (json.textures || [])[t.index];
+    if (!tex || tex.source === undefined) return null;
+    return imagenes[tex.source] || null;
+  }
+
   function colorDeMaterial(indiceMat){
     const mat = (json.materials || [])[indiceMat];
     if (!mat) return null;
@@ -5773,6 +5836,9 @@ function parseGlb(arrayBuffer, acompanantes){
     else c.setRGB(f[0], f[1], f[2]);
     return '#' + c.getHexString();
   }
+
+  const imagenes = await cargarImagenesGltf(json, buffers, acompanantes);
+  let texturasFaltantes = 0, trisConTextura = 0;
 
   // --- Recorrido del grafo de escena, arrastrando la transformación de cada nodo ---
   const tris = [];
@@ -5800,11 +5866,21 @@ function parseGlb(arrayBuffer, acompanantes){
       const compsColor = colVert && (json.accessors[prim.attributes.COLOR_0].type === 'VEC4' ? 4 : 3);
       const colorMat = prim.material !== undefined ? colorDeMaterial(prim.material) : null;
 
+      // Textura: hace falta la imagen Y las coordenadas UV de cada vértice.
+      const tex = prim.material !== undefined ? texturaDeMaterial(prim.material) : null;
+      const uv = (tex && prim.attributes && prim.attributes.TEXCOORD_0 !== undefined)
+        ? leerAccesor(prim.attributes.TEXCOORD_0) : null;
+      if (prim.material !== undefined && !tex && json.materials && json.materials[prim.material]
+          && json.materials[prim.material].pbrMetallicRoughness
+          && json.materials[prim.material].pbrMetallicRoughness.baseColorTexture){
+        texturasFaltantes++; // el material pide una textura que no pudimos leer
+      }
+
       const idx = prim.indices !== undefined ? leerAccesor(prim.indices) : null;
       const cantidad = idx ? idx.length : pos.length/3;
       const punto = i => new THREE.Vector3(pos[i*3], pos[i*3+1], pos[i*3+2]).applyMatrix4(mundo);
-      const colorDe = i => {
-        if (!colVert) return colorMat;
+      const colorVertice = i => {
+        if (!colVert) return null;
         const c = new THREE.Color();
         const o = i*compsColor;
         if ('setRGB' in c && THREE.LinearSRGBColorSpace) c.setRGB(colVert[o], colVert[o+1], colVert[o+2], THREE.LinearSRGBColorSpace);
@@ -5813,7 +5889,17 @@ function parseGlb(arrayBuffer, acompanantes){
       };
       for (let i = 0; i + 2 < cantidad; i += 3){
         const ia = idx ? idx[i] : i, ib = idx ? idx[i+1] : i+1, ic = idx ? idx[i+2] : i+2;
-        tris.push({ a: punto(ia), b: punto(ib), c: punto(ic), color: colorDe(ia) });
+        let color = colorVertice(ia);
+        if (!color && uv){
+          // Se muestrea en el CENTRO del triángulo, no en un vértice: los vértices
+          // caen justo en el borde entre dos casillas de la paleta y ahí el color
+          // que toca es ambiguo — de un lado sale uno y del otro, otro.
+          const u = (uv[ia*2] + uv[ib*2] + uv[ic*2]) / 3;
+          const v = (uv[ia*2+1] + uv[ib*2+1] + uv[ic*2+1]) / 3;
+          color = muestrearTextura(tex, u, v);
+          if (color) trisConTextura++;
+        }
+        tris.push({ a: punto(ia), b: punto(ib), c: punto(ic), color: color || colorMat });
       }
     });
   }
@@ -5832,6 +5918,11 @@ function parseGlb(arrayBuffer, acompanantes){
   raices.forEach(r => recorrer(r, new THREE.Matrix4()));
 
   if (!tris.length) throw new Error('El .glb no trae ninguna malla de triángulos que se pueda leer.');
+  if (texturasFaltantes && !trisConTextura){
+    // No es para cortar la carga: el modelo entra igual, pero sin este aviso el
+    // usuario ve todo de un color y no sabe por qué.
+    tris.avisoTextura = 'El modelo saca sus colores de una imagen que no vino en la selección. Volvé a elegir e incluí también los archivos de la carpeta "textures".';
+  }
   return tris;
 }
 
@@ -5981,14 +6072,18 @@ async function handleFile(file, anexar, acompanantes){
     } else if (ext==='obj' || ext==='stl' || ext==='glb' || ext==='gltf'){
       if (ext==='obj')      lastVoxelizerTris = parseObjTriangles(await file.text());
       else if (ext==='stl') lastVoxelizerTris = parseStlBuffer(await file.arrayBuffer());
-      else                  lastVoxelizerTris = parseGlb(await file.arrayBuffer(), acompanantes);
+      else                  lastVoxelizerTris = await parseGlb(await file.arrayBuffer(), acompanantes);
       lastDaeParsed = null;
       const res = parseInt(document.getElementById('resSlider').value,10);
       const {list} = voxelizeTriangles(lastVoxelizerTris, res);
       voxelSize = 1; setVoxels(list);
       document.getElementById('modelNameText').textContent = file.name + ' (voxelizado)';
       document.getElementById('voxelizeSection').style.display = 'block';
-      setStatus('Modelo .' + ext + ' voxelizado: ' + list.length + ' bloques. Ajustá la resolución si querés más o menos detalle.', 'ok');
+      if (lastVoxelizerTris.avisoTextura){
+        setStatus(lastVoxelizerTris.avisoTextura, 'err');
+      } else {
+        setStatus('Modelo .' + ext + ' voxelizado: ' + list.length + ' bloques. Ajustá la resolución si querés más o menos detalle.', 'ok');
+      }
     } else if (ext==='3mf'){
       setLoading(true, 'Leyendo el .3mf (puede tardar si el archivo es grande)…');
       lastVoxelizerTris = await parse3MF(await file.arrayBuffer());
@@ -6279,7 +6374,7 @@ async function leerAcompanantes(archivos, principal){
 async function cargarSeleccion(lista, anexar){
   const { principal, archivos } = separarArchivos(lista);
   if (!principal) return;
-  const necesitaExtras = /\.gltf$/i.test(principal.name) && archivos.length > 1;
+  const necesitaExtras = /\.(gltf|glb)$/i.test(principal.name) && archivos.length > 1;
   const acompanantes = necesitaExtras ? await leerAcompanantes(archivos, principal) : null;
   return handleFile(principal, anexar, acompanantes);
 }
