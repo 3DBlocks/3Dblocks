@@ -466,7 +466,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v61</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v62</small></div>
     </div>
     <div id="modelNameText">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -624,6 +624,46 @@
       <input id="mergeFileInput" type="file" accept=".vox,.dae,.json,.obj,.stl,.3mf" style="display:none;" />
       <p class="admin-only" style="font-size:10.5px; color:var(--text-faint); margin:6px 0 0; line-height:1.5;">Carga un segundo archivo SIN borrar el que ya está: lo coloca al lado, apoyado en el piso, y lo deja seleccionado para que lo acomodes con la herramienta de mover. Desde ahí los dos son un solo diseño y se pintan juntos. Ctrl+Z deshace la unión.</p>
       <div id="statusMsg"></div>
+    </div>
+
+    <div class="section admin-only" id="renderSection">
+      <p class="section-title">Foto de presentación (render)</p>
+      <p style="font-size:10.5px; color:var(--text-faint); margin:0 0 10px; line-height:1.5;">Ajustá la luz y el acabado hasta que se parezca al render que buscás. Los valores quedan guardados y se usan cada vez que sacás la foto.</p>
+
+      <div class="row"><span class="label-sm">Luz principal</span><span class="value-mono" id="rndKeyVal">1.55</span></div>
+      <input type="range" id="rndKey" min="0.4" max="2.6" step="0.05" value="1.55" style="width:100%;" />
+
+      <div class="row" style="margin-top:8px;"><span class="label-sm">Luz de relleno</span><span class="value-mono" id="rndFillVal">1.00</span></div>
+      <input type="range" id="rndFill" min="0" max="1.8" step="0.05" value="1" style="width:100%;" />
+      <p style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">Menos relleno = sombras más marcadas entre bloques y más volumen. Demasiado poco y los rincones quedan negros.</p>
+
+      <div class="row" style="margin-top:8px;"><span class="label-sm">Brillo del plástico</span><span class="value-mono" id="rndGlossVal">0.50</span></div>
+      <input type="range" id="rndGloss" min="0" max="1" step="0.02" value="0.5" style="width:100%;" />
+      <p style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">A la izquierda, mate como pieza recién impresa. A la derecha, brillante como pieza inyectada.</p>
+
+      <div class="row" style="margin-top:8px;"><span class="label-sm">Aire alrededor</span><span class="value-mono" id="rndAireVal">1.08</span></div>
+      <input type="range" id="rndAire" min="1" max="1.8" step="0.02" value="1.08" style="width:100%;" />
+      <p style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">1.00 = la figura toca los bordes del cuadro. Más alto, más aire. Nunca se corta: la distancia se calcula midiendo lo que ocupa el modelo desde ese ángulo.</p>
+
+      <div class="row" style="margin-top:10px;"><span class="label-sm">Nitidez</span></div>
+      <select id="rndCalidad" style="width:100%; background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:7px; padding:5px 8px; font-size:12px;">
+        <option value="1600">Normal — 1600×1200</option>
+        <option value="2400">Alta — 2400×1800</option>
+        <option value="3200">Máxima — 3200×2400</option>
+      </select>
+
+      <div class="row" style="margin-top:8px;"><span class="label-sm">Fondo</span></div>
+      <select id="rndFondo" style="width:100%; background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:7px; padding:5px 8px; font-size:12px;">
+        <option value="estudio">Gris de estudio</option>
+        <option value="blanco">Blanco</option>
+        <option value="negro">Negro</option>
+      </select>
+
+      <label style="display:flex; align-items:center; gap:7px; margin-top:10px; font-size:11px; color:var(--text-dim); cursor:pointer;">
+        <input type="checkbox" id="rndPortada" /> Usar la última foto en la portada del manual
+      </label>
+      <p id="rndPortadaEstado" style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;"></p>
+      <button class="btn wide" id="rndResetBtn" style="width:100%; margin-top:8px;">↺ Volver a los valores de fábrica</button>
     </div>
 
     <div class="section" id="voxelizeSection" style="display:none;">
@@ -2709,22 +2749,44 @@ function drawPrintLayer(ctx, W, H, layer){
    era la exposición. */
 const COLOR_FONDO_RENDER = '#939393';
 
+/* Ajustes de la foto de presentación. Antes estaban clavados en el código; se
+   guardan en el navegador para no volver a calibrarlos en cada sesión. */
+const RENDER_DEFAULT = { key:1.55, relleno:1.0, brillo:0.5, aire:1.08, calidad:1600, fondo:'estudio', portada:false };
+const RENDER_KEY = '3dblock.render';
+function cargarConfigRender(){
+  try{
+    const g = JSON.parse(localStorage.getItem(RENDER_KEY) || 'null');
+    return g ? Object.assign({}, RENDER_DEFAULT, g) : Object.assign({}, RENDER_DEFAULT);
+  } catch(err){ return Object.assign({}, RENDER_DEFAULT); }
+}
+let configRender = cargarConfigRender();
+let ultimoRenderPortada = null; // dataURL JPEG de la última foto, para la portada
+
+const FONDOS_RENDER = {
+  estudio: ['#8a8a8a', '#9a9a9a', '#868686'],
+  blanco:  ['#f2f2f2', '#ffffff', '#efefef'],
+  negro:   ['#101010', '#1c1c1c', '#0b0b0b'],
+};
+
 /* Ciclorama: gris parejo con una subida de luz muy suave detrás del modelo, como
    una tela de fondo iluminada. Sin línea de horizonte, porque no hay piso. */
-let _texturaCiclorama = null;
+let _texturaCiclorama = null, _cicloramaDe = null;
 function fondoCicloramaTextura(){
-  if (_texturaCiclorama) return _texturaCiclorama;
+  const tonos = FONDOS_RENDER[configRender.fondo] || FONDOS_RENDER.estudio;
+  if (_texturaCiclorama && _cicloramaDe === configRender.fondo) return _texturaCiclorama;
+  if (_texturaCiclorama) _texturaCiclorama.dispose();
   const c = document.createElement('canvas');
   c.width = 8; c.height = 256;
   const ctx = c.getContext('2d');
   const g = ctx.createLinearGradient(0, 0, 0, 256);
-  g.addColorStop(0.00, '#8a8a8a');
-  g.addColorStop(0.45, '#9a9a9a');
-  g.addColorStop(1.00, '#868686');
+  g.addColorStop(0.00, tonos[0]);
+  g.addColorStop(0.45, tonos[1]);
+  g.addColorStop(1.00, tonos[2]);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 8, 256);
   _texturaCiclorama = new THREE.CanvasTexture(c);
   if ('colorSpace' in _texturaCiclorama) _texturaCiclorama.colorSpace = THREE.SRGBColorSpace;
+  _cicloramaDe = configRender.fondo;
   return _texturaCiclorama;
 }
 
@@ -2740,13 +2802,14 @@ function guardarLuces(){
 function lucesDeEstudio(){
   // Cielo neutro en vez de azul, y menos relleno: el relleno alto es lo que
   // borraba las sombras propias de los bloques y aplanaba la figura.
-  hemi.color.set(0xffffff); hemi.groundColor.set(0x9a9a9a); hemi.intensity = 0.42;
-  ambient.intensity = 0.30;
+  const r = configRender.relleno;
+  hemi.color.set(0xffffff); hemi.groundColor.set(0x9a9a9a); hemi.intensity = 0.42 * r;
+  ambient.intensity = 0.30 * r;
   // Luz principal desde arriba a la izquierda y algo al frente, como la foto de
   // Studio: marca el volumen de cada bloque sin quemar las caras claras.
-  key.color.set(0xffffff); key.intensity = 1.55; key.position.set(-5, 9, 7);
+  key.color.set(0xffffff); key.intensity = configRender.key; key.position.set(-5, 9, 7);
   // Contraluz neutro (antes era verdoso y teñía los bordes) para despegar la
-  // figura del fondo gris.
+  // figura del fondo.
   rim.color.set(0xffffff); rim.intensity = 0.42; rim.position.set(6, 5, -7);
   fillPt.intensity = 0; // el punto ámbar amarilleaba un lado
 }
@@ -2757,6 +2820,107 @@ function restaurarLuces(g){
   rim.intensity = g.rimInt; rim.color.copy(g.rimColor); rim.position.copy(g.rimPos);
   fillPt.intensity = g.fillInt;
 }
+
+/* Encuadre de la foto: acerca la cámara hasta que el modelo llene el cuadro sin
+   cortarse, mirándolo desde el ángulo que le diste en pantalla.
+
+   Un multiplicador fijo del tamaño del modelo NO sirve: lo que ocupa en pantalla
+   depende del ángulo. Un cubo visto de frente ocupa un lado, pero girado 45° y
+   con algo de picada llega a ocupar su diagonal — casi el doble. Con distancia
+   fija se cortaba la cabeza, que es lo que pasaba con el Goku.
+
+   Entonces: se arranca de la esfera que envuelve el modelo (distancia que entra
+   sí o sí desde cualquier ángulo, pero deja la figura chica) y se acerca de a
+   poco MIDIENDO las ocho esquinas proyectadas en pantalla. Cada acercamiento se
+   prueba antes de aceptarlo: si en la posición nueva algo se saldría del cuadro,
+   se descarta y se queda con la anterior. Probado en formas altas, cúbicas,
+   anchas y planas entre 5° y 80° de elevación: no corta en ninguna y la figura
+   ocupa entre el 61% y el 95% del cuadro. */
+function encuadrarModeloEnCuadro(box, elevacionGrados, azimutGrados, holgura){
+  const size = new THREE.Vector3(); box.getSize(size);
+  const centro = new THREE.Vector3(); box.getCenter(centro);
+  const er = elevacionGrados * Math.PI/180, ar = azimutGrados * Math.PI/180;
+  const dir = new THREE.Vector3(Math.cos(er)*Math.sin(ar), Math.sin(er), Math.cos(er)*Math.cos(ar));
+
+  const esquinas = [];
+  for (const x of [box.min.x, box.max.x])
+    for (const y of [box.min.y, box.max.y])
+      for (const z of [box.min.z, box.max.z]) esquinas.push(new THREE.Vector3(x,y,z));
+
+  const colocar = d => {
+    camera.position.copy(centro).addScaledVector(dir, d);
+    camera.lookAt(centro);
+    camera.updateMatrixWorld();
+    camera.updateProjectionMatrix();
+  };
+  // Cuánto del cuadro ocupa el modelo a esa distancia: 1 = justo tocando el
+  // borde, más de 1 = se corta.
+  const ocupacion = d => {
+    colocar(d);
+    let m = 0;
+    for (const e of esquinas){
+      const p = e.clone().project(camera);
+      m = Math.max(m, Math.abs(p.x), Math.abs(p.y));
+    }
+    return m;
+  };
+
+  const medioV = (camera.fov * Math.PI/180) / 2;
+  const medioH = Math.atan(Math.tan(medioV) * camera.aspect);
+  let d = (size.length()/2) / Math.sin(Math.min(medioV, medioH)); // arranque seguro
+  for (let i = 0; i < 3; i++){
+    const propuesta = d * ocupacion(d) * holgura;
+    if (ocupacion(propuesta) <= 1) d = propuesta; else break;
+  }
+  colocar(d);
+  camera.near = Math.max(0.05, d*0.02);
+  camera.far = d + size.length()*4;
+  camera.updateProjectionMatrix();
+}
+
+/* ---------------------------- Controles del panel de render ---------------------------- */
+function guardarConfigRender(){
+  try{ localStorage.setItem(RENDER_KEY, JSON.stringify(configRender)); }
+  catch(err){ /* si no se puede guardar, igual funciona en esta sesión */ }
+}
+function refrescarEstadoPortada(){
+  const el = document.getElementById('rndPortadaEstado');
+  if (!el) return;
+  el.textContent = ultimoRenderPortada
+    ? 'Hay una foto guardada, lista para la portada.'
+    : 'Todavía no sacaste ninguna foto: generá un render y se guarda sola.';
+}
+function refrescarPanelRender(){
+  document.getElementById('rndKey').value = configRender.key;
+  document.getElementById('rndFill').value = configRender.relleno;
+  document.getElementById('rndGloss').value = configRender.brillo;
+  document.getElementById('rndAire').value = configRender.aire;
+  document.getElementById('rndCalidad').value = String(configRender.calidad);
+  document.getElementById('rndFondo').value = configRender.fondo;
+  document.getElementById('rndPortada').checked = !!configRender.portada;
+  document.getElementById('rndKeyVal').textContent = Number(configRender.key).toFixed(2);
+  document.getElementById('rndFillVal').textContent = Number(configRender.relleno).toFixed(2);
+  document.getElementById('rndGlossVal').textContent = Number(configRender.brillo).toFixed(2);
+  document.getElementById('rndAireVal').textContent = Number(configRender.aire).toFixed(2);
+  refrescarEstadoPortada();
+}
+function cambiarConfigRender(cambios){
+  Object.assign(configRender, cambios);
+  guardarConfigRender();
+  refrescarPanelRender();
+}
+document.getElementById('rndKey').addEventListener('input', e=>cambiarConfigRender({ key: parseFloat(e.target.value) }));
+document.getElementById('rndFill').addEventListener('input', e=>cambiarConfigRender({ relleno: parseFloat(e.target.value) }));
+document.getElementById('rndGloss').addEventListener('input', e=>cambiarConfigRender({ brillo: parseFloat(e.target.value) }));
+document.getElementById('rndAire').addEventListener('input', e=>cambiarConfigRender({ aire: parseFloat(e.target.value) }));
+document.getElementById('rndCalidad').addEventListener('change', e=>cambiarConfigRender({ calidad: parseInt(e.target.value,10) }));
+document.getElementById('rndFondo').addEventListener('change', e=>cambiarConfigRender({ fondo: e.target.value }));
+document.getElementById('rndPortada').addEventListener('change', e=>cambiarConfigRender({ portada: e.target.checked }));
+document.getElementById('rndResetBtn').addEventListener('click', ()=>{
+  cambiarConfigRender(Object.assign({}, RENDER_DEFAULT));
+  setStatus('Ajustes de render vueltos a los valores de fábrica.', 'ok');
+});
+refrescarPanelRender();
 
 /* ---------------------------- Foto de presentación (con luces e iluminación real) ----------------------------
    El visor normal usa un material plano a propósito (para que nunca aparezca una
@@ -2825,11 +2989,14 @@ async function generatePresentationRender(){
      reventaba al sacar la foto con las piezas armadas. */
   const cuerpos = instMesh ? [instMesh] : pieceMeshes.filter(m => m.isInstancedMesh);
   const matsOriginales = cuerpos.map(m => m.material);
+  // El acabado sale del control "Brillo del plástico": en 0 queda mate como una
+  // pieza recién impresa; en 1, brillante como una inyectada.
+  const b = configRender.brillo;
   const realMat = new THREE.MeshPhysicalMaterial({
-    roughness: 0.32,        // brillo tipo plástico de juguete, no mate como antes
+    roughness: 0.62 - 0.42*b,
     metalness: 0.02,
-    clearcoat: 0.65,        // capa brillante fina por encima, como una pieza inyectada de verdad
-    clearcoatRoughness: 0.18,
+    clearcoat: 0.10 + 0.75*b,
+    clearcoatRoughness: 0.30 - 0.16*b,
   });
   materialParaInstrucciones(realMat);
   // El contorno grueso no queda bien en una foto con luces reales — se apaga el
@@ -2857,13 +3024,19 @@ async function generatePresentationRender(){
   const origAspectR = camera.aspect;
   const origCamPos = camera.position.clone();
   const origCamQuat = camera.quaternion.clone();
-  renderer.setSize(1600, 1200, false);
+  // El encuadre de la foto recalcula near/far para su distancia. Si no se
+  // guardan, el visor queda con los planos de recorte de la foto y el modelo
+  // desaparece al alejarse con la rueda.
+  const origNear = camera.near, origFar = camera.far;
+  const anchoFoto = parseInt(configRender.calidad, 10) || 1600;
+  renderer.setSize(anchoFoto, Math.round(anchoFoto*3/4), false);
   camera.aspect = 4/3;
   {
     // El ángulo actual del orbitador, pasado a los grados que espera el encuadre.
     const elevacion = 90 - (controls._po * 180/Math.PI);
     const azimut = controls._az * 180/Math.PI;
-    positionCameraFixedAngle(box, elevacion, azimut, 1.15, box.getCenter(new THREE.Vector3()));
+    // 1.00 = el modelo toca los bordes del cuadro; más alto, más aire alrededor.
+    encuadrarModeloEnCuadro(box, elevacion, azimut, configRender.aire);
   }
 
   // OJO: encuadrar recalcula el nivel de detalle del contorno, y eso vuelve a
@@ -2878,11 +3051,16 @@ async function generatePresentationRender(){
 
   renderer.render(scene, camera);
   const dataUrl = renderer.domElement.toDataURL('image/png');
+  // Copia en JPEG para la portada del manual: en PNG una foto de 3200 px
+  // hacía que el PDF pesara una barbaridad.
+  ultimoRenderPortada = renderer.domElement.toDataURL('image/jpeg', 0.92);
+  refrescarEstadoPortada();
 
   renderer.setSize(origSizeR.x, origSizeR.y, false);
   camera.aspect = origAspectR;
   camera.position.copy(origCamPos);
   camera.quaternion.copy(origCamQuat);
+  camera.near = origNear; camera.far = origFar;
   camera.updateProjectionMatrix();
 
   // Devolver TODO a como estaba en el visor
@@ -3705,6 +3883,13 @@ async function generateInstructionsPDF(){
     contornoParaInstrucciones();
     const coverBox = centeredBounds();
     const coverW = 88, coverY = 52;
+    if (configRender.portada && ultimoRenderPortada){
+      // Una sola foto grande, la que sacaste con el botón de render y sus
+      // ajustes de luz — en vez de las dos automáticas. Ocupa el mismo alto que
+      // las dos juntas, así lo que va abajo no se mueve.
+      const anchoPortada = Math.round(coverW * 4/3);
+      doc.addImage(ultimoRenderPortada, 'JPEG', (pageW - anchoPortada)/2, coverY, anchoPortada, coverW);
+    } else {
     coverAngles.forEach((ca, idx)=>{
       // Un poco más lejos que en las páginas de pasos, para que se vea el modelo
       // completo con aire alrededor (queda mejor como foto de portada).
@@ -3716,6 +3901,7 @@ async function generateInstructionsPDF(){
       const img = renderer.domElement.toDataURL('image/jpeg', 0.9);
       doc.addImage(img, 'JPEG', idx===0 ? 12 : 110, coverY, coverW, coverW);
     });
+    }
     showFullDesign = wasFullForCover;
 
     // Recuadro con el total de PIEZAS del modelo, separadas por tamaño (1x1, 1x2,
