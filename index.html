@@ -466,7 +466,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v63</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v64</small></div>
     </div>
     <div id="modelNameText">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -658,6 +658,12 @@
         <option value="blanco">Blanco</option>
         <option value="negro">Negro</option>
       </select>
+
+      <label style="display:flex; align-items:center; gap:7px; margin-top:10px; font-size:11px; color:var(--text-dim); cursor:pointer;">
+        <input type="checkbox" id="rndPisoSombra" /> Sombra en el piso (para que no flote)
+      </label>
+      <div class="row" style="margin-top:6px;"><span class="label-sm">Fuerza de la sombra</span><span class="value-mono" id="rndSombraOpVal">0.35</span></div>
+      <input type="range" id="rndSombraOp" min="0.05" max="0.75" step="0.01" value="0.35" style="width:100%;" />
 
       <label style="display:flex; align-items:center; gap:7px; margin-top:10px; font-size:11px; color:var(--text-dim); cursor:pointer;">
         <input type="checkbox" id="rndSombras" /> Sombras propias (pelo sobre la cara, brazo sobre el torso)
@@ -2763,7 +2769,7 @@ const COLOR_FONDO_RENDER = '#939393';
 
 /* Ajustes de la foto de presentación. Antes estaban clavados en el código; se
    guardan en el navegador para no volver a calibrarlos en cada sesión. */
-const RENDER_DEFAULT = { key:1.55, relleno:1.0, brillo:0.5, aire:1.08, calidad:1600, fondo:'estudio', portada:false, sombras:false };
+const RENDER_DEFAULT = { key:1.55, relleno:1.0, brillo:0.5, aire:1.08, calidad:1600, fondo:'estudio', portada:false, sombras:false, pisoSombra:true, sombraOpacidad:0.35 };
 const RENDER_KEY = '3dblock.render';
 function cargarConfigRender(){
   try{
@@ -2773,6 +2779,7 @@ function cargarConfigRender(){
 }
 let configRender = cargarConfigRender();
 let ultimoRenderPortada = null; // dataURL JPEG de la última foto, para la portada
+let sombraPisoMesh = null;      // plano que solo dibuja la sombra; se crea al primer uso
 
 const FONDOS_RENDER = {
   estudio: ['#8a8a8a', '#9a9a9a', '#868686'],
@@ -2911,6 +2918,9 @@ function refrescarPanelRender(){
   document.getElementById('rndFondo').value = configRender.fondo;
   document.getElementById('rndPortada').checked = !!configRender.portada;
   document.getElementById('rndSombras').checked = !!configRender.sombras;
+  document.getElementById('rndPisoSombra').checked = !!configRender.pisoSombra;
+  document.getElementById('rndSombraOp').value = configRender.sombraOpacidad;
+  document.getElementById('rndSombraOpVal').textContent = Number(configRender.sombraOpacidad).toFixed(2);
   document.getElementById('rndKeyVal').textContent = Number(configRender.key).toFixed(2);
   document.getElementById('rndFillVal').textContent = Number(configRender.relleno).toFixed(2);
   document.getElementById('rndGlossVal').textContent = Number(configRender.brillo).toFixed(2);
@@ -2962,6 +2972,8 @@ document.getElementById('rndCalidad').addEventListener('change', e=>cambiarConfi
 document.getElementById('rndFondo').addEventListener('change', e=>cambiarConfigRender({ fondo: e.target.value }));
 document.getElementById('rndPortada').addEventListener('change', e=>cambiarConfigRender({ portada: e.target.checked }));
 document.getElementById('rndSombras').addEventListener('change', e=>cambiarConfigRender({ sombras: e.target.checked }));
+document.getElementById('rndPisoSombra').addEventListener('change', e=>cambiarConfigRender({ pisoSombra: e.target.checked }));
+document.getElementById('rndSombraOp').addEventListener('input', e=>cambiarConfigRender({ sombraOpacidad: parseFloat(e.target.value) }));
 document.getElementById('rndPreviaBtn').addEventListener('click', actualizarPreviaRender);
 document.getElementById('rndResetBtn').addEventListener('click', ()=>{
   cambiarConfigRender(Object.assign({}, RENDER_DEFAULT));
@@ -3064,7 +3076,8 @@ async function generatePresentationRender(opciones){
   const wasShadowType = renderer.shadowMap.type;
   const wasKeyCast = key.castShadow;
   const wasSombraObjetos = [];
-  if (configRender.sombras){
+  const quiereSombras = configRender.sombras || configRender.pisoSombra;
+  if (quiereSombras){
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     const centroM = box.getCenter(new THREE.Vector3());
@@ -3078,7 +3091,12 @@ async function generatePresentationRender(opciones){
     key.castShadow = true;
     key.shadow.mapSize.set(2048, 2048);
     const cs = key.shadow.camera;
-    cs.left = -R; cs.right = R; cs.top = R; cs.bottom = -R;
+    // El área que calcula la luz tiene que abarcar el modelo Y su sombra en el
+    // piso, no solo el modelo. Con la principal a unos 46° de altura, la sombra
+    // se estira casi tanto como el alto de la figura: con los límites justos al
+    // modelo, al Goku se le cortaba la sombra por la mitad.
+    const ext = R + sizeV.y;
+    cs.left = -ext; cs.right = ext; cs.top = ext; cs.bottom = -ext;
     cs.near = Math.max(0.1, R*0.5); cs.far = R*8;
     cs.updateProjectionMatrix();
     // Sesgo: sin esto aparecen rayas de sombra sobre las propias caras iluminadas.
@@ -3086,8 +3104,39 @@ async function generatePresentationRender(opciones){
     key.shadow.normalBias = Math.max(0.02, R*0.004);
     cuerpos.forEach(m=>{
       wasSombraObjetos.push([m, m.castShadow, m.receiveShadow]);
-      m.castShadow = true; m.receiveShadow = true;
+      m.castShadow = true;
+      // Recibir sombra es lo de "sombras propias". Para la sombra del piso
+      // alcanza con que el modelo la PROYECTE: si además la recibiera, se
+      // encenderían las dos cosas juntas sin haberlas pedido.
+      m.receiveShadow = !!configRender.sombras;
     });
+
+    // Sombra en el piso: un plano invisible que solo dibuja la sombra que le
+    // cae encima (ShadowMaterial). No se ve el plano en sí — no hay línea de
+    // horizonte ni disco gris — pero el modelo deja de flotar en el aire.
+    if (configRender.pisoSombra){
+      if (!sombraPisoMesh){
+        sombraPisoMesh = new THREE.Mesh(
+          new THREE.PlaneGeometry(1, 1),
+          new THREE.ShadowMaterial({ opacity: 0.35 })
+        );
+        sombraPisoMesh.rotation.x = -Math.PI/2;
+        sombraPisoMesh.receiveShadow = true;
+        scene.add(sombraPisoMesh);
+      }
+      sombraPisoMesh.material.opacity = configRender.sombraOpacidad;
+      // Apoyado en la base del modelo, apenas por debajo para que no pelee con
+      // la cara de abajo de los bloques (el clásico parpadeo de dos superficies
+      // en el mismo plano).
+      const RS = Math.max(1, box.getSize(new THREE.Vector3()).length());
+      sombraPisoMesh.position.set(
+        box.getCenter(new THREE.Vector3()).x,
+        box.min.y - RS*0.002,
+        box.getCenter(new THREE.Vector3()).z
+      );
+      sombraPisoMesh.scale.set(RS*6, RS*6, 1);
+      sombraPisoMesh.visible = true;
+    }
   }
 
   // El contorno grueso no queda bien en una foto con luces reales — se apaga el
@@ -3171,6 +3220,7 @@ async function generatePresentationRender(opciones){
   ground.scale.copy(wasGroundScale);
   layerPlaneEdge.visible = wasLayerEdgeVisible;
   selectionBoxHelper.visible = wasSelBoxVisible;
+  if (sombraPisoMesh) sombraPisoMesh.visible = false; // solo existe para la foto
   renderer.shadowMap.enabled = wasShadowMap;
   renderer.shadowMap.type = wasShadowType;
   key.castShadow = wasKeyCast;
