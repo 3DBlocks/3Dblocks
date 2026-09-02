@@ -515,7 +515,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v69</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v70</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -862,8 +862,8 @@
     <button class="btn sm" id="previewNextBtn" title="Paso siguiente (→)">Siguiente ›</button>
     <button class="btn sm" id="previewRefreshBtn">🔄 Actualizar</button>
     <span style="color:var(--text-dim); font-size:12.5px; margin-left:6px;">Zoom:</span>
-    <input type="range" id="previewZoomSlider" min="0.8" max="3" step="0.1" value="1.3" style="width:130px;" />
-    <span id="previewZoomVal" style="color:var(--accent); font-size:12px; font-family:var(--mono); min-width:30px;">1.3x</span>
+    <input type="range" id="previewZoomSlider" min="0.6" max="2" step="0.05" value="1" title="1.0 = el modelo entra entero. Más alto se acerca, aunque puede recortar." style="width:130px;" />
+    <span id="previewZoomVal" style="color:var(--accent); font-size:12px; font-family:var(--mono); min-width:30px;">1.0x</span>
     <button class="btn primary" id="anglePreviewCloseBtn">Cerrar</button>
   </div>
 
@@ -2921,9 +2921,12 @@ function restaurarLuces(g){
    se descarta y se queda con la anterior. Probado en formas altas, cúbicas,
    anchas y planas entre 5° y 80° de elevación: no corta en ninguna y la figura
    ocupa entre el 61% y el 95% del cuadro. */
-function encuadrarModeloEnCuadro(box, elevacionGrados, azimutGrados, holgura){
+function encuadrarModeloEnCuadro(box, elevacionGrados, azimutGrados, holgura, objetivo){
   const size = new THREE.Vector3(); box.getSize(size);
-  const centro = new THREE.Vector3(); box.getCenter(centro);
+  // `objetivo` permite apuntar a otro punto (la altura de la capa actual, en el
+  // manual) sin perder la garantía de que el modelo entero entra: la medición
+  // sigue siendo sobre las ocho esquinas de la caja completa.
+  const centro = objetivo ? objetivo.clone() : box.getCenter(new THREE.Vector3());
   const er = elevacionGrados * Math.PI/180, ar = azimutGrados * Math.PI/180;
   const dir = new THREE.Vector3(Math.cos(er)*Math.sin(ar), Math.sin(er), Math.cos(er)*Math.cos(ar));
 
@@ -2952,7 +2955,11 @@ function encuadrarModeloEnCuadro(box, elevacionGrados, azimutGrados, holgura){
 
   const medioV = (camera.fov * Math.PI/180) / 2;
   const medioH = Math.atan(Math.tan(medioV) * camera.aspect);
-  let d = (size.length()/2) / Math.sin(Math.min(medioV, medioH)); // arranque seguro
+  // Radio desde el punto al que se mira hasta la esquina más lejana: si se mira
+  // a la capa de abajo de una figura alta, el radio es casi su altura entera.
+  let radio = 0;
+  esquinas.forEach(e => { radio = Math.max(radio, e.distanceTo(centro)); });
+  let d = radio / Math.sin(Math.min(medioV, medioH)); // arranque seguro
   for (let i = 0; i < 3; i++){
     const propuesta = d * ocupacion(d) * holgura;
     if (ocupacion(propuesta) <= 1) d = propuesta; else break;
@@ -3360,9 +3367,28 @@ function positionCameraFixedAngle(box, elevationDeg, azimuthDeg, marginMult, foc
 // Qué tan cerca encuadra la cámara en el manual. 1.0 = como estaba antes (el
 // modelo quedaba chico, con mucho fondo gris vacío alrededor); más alto = más
 // cerca. Ajustable con el control de la vista previa.
-let instructionZoom = 1.3;
+let instructionZoom = 1.0; // 1.0 = el modelo entra entero con un respiro
+/* Proporción del hueco de la foto en la hoja del manual. La vista previa la usa
+   para mostrar exactamente la forma que va a tener impresa; el PDF calcula la
+   suya exacta según cuánto ocupe la lista de piezas, pero anda cerca de esta. */
+const ASPECTO_HOJA = 194 / 232;
+
 const BASE_MARGIN = 1.85; // distancia base; se divide por el zoom
 function instructionMargin(){ return BASE_MARGIN / instructionZoom; }
+
+/* Encuadre de las fotos del manual. Reemplaza al multiplicador fijo de antes,
+   que no miraba la forma del modelo: con 1.85 fijo una figura alta y flaca
+   llenaba apenas el 70% del cuadro (mucho fondo desperdiciado), y una cúbica
+   girada 45° se salía y se cortaba, porque su diagonal ocupa casi el doble que
+   su lado.
+
+   Ahora la distancia se mide proyectando las ocho esquinas del modelo, igual que
+   en la foto de presentación. El zoom pasa a significar cuánto llena el cuadro:
+   en 1.0 entra entero con un respiro, y por encima de 1.0 se acerca a propósito
+   aunque recorte. */
+function encuadrarInstruccion(box, elevacion, azimut, objetivo){
+  encuadrarModeloEnCuadro(box, elevacion, azimut, 1.06 / instructionZoom, objetivo);
+}
 
 // Punto al que debe apuntar la cámara en un paso del manual: la altura de la capa
 // que se está armando, pero mezclada con el centro para que no quede demasiado
@@ -3836,15 +3862,15 @@ async function quickAnglePreview(previewLayer){
   const origSize = new THREE.Vector2();
   renderer.getSize(origSize);
   const origAspect = camera.aspect;
-  renderer.setSize(900, 900, false); // más chico que el manual final (900 en vez de 1500) — más rápido, ya que es solo para previsualizar
-  camera.aspect = 1;
+  renderer.setSize(900, Math.round(900 / ASPECTO_HOJA), false); // más chico que el manual (900 de ancho, no 1500): es solo para mirar
+  camera.aspect = ASPECTO_HOJA; // lo que se ve acá es la forma real del hueco en la hoja
 
   const visibleNow = useFullDesign ? voxels : voxels.filter(v => Math.round(v.y) <= layerNum);
   const stepBox = worldBoxFromVoxelList(visibleNow);
   const ang = customInstructionAngle || { elevation: 35, azimuth: 45 };
   // En "modelo completo" apunta al centro; en un paso puntual, apunta a la altura
   // de esa capa (para que no se vea de canto en modelos altos).
-  positionCameraFixedAngle(stepBox, ang.elevation, ang.azimuth, instructionMargin(), useFullDesign ? null : focusPointForLayer(stepBox, layerNum));
+  encuadrarInstruccion(stepBox, ang.elevation, ang.azimuth, useFullDesign ? null : focusPointForLayer(stepBox, layerNum));
   renderer.render(scene, camera);
   const dataUrl = renderer.domElement.toDataURL('image/png');
 
@@ -4055,7 +4081,7 @@ async function generateInstructionsPDF(){
   renderer.getSize(origSize);
   const origAspect = camera.aspect;
   renderer.setSize(1100, 1100, false); // 1100 alcanza de sobra para una hoja A4 (~145 puntos por pulgada) y usa mucha menos memoria
-  camera.aspect = 1;
+  camera.aspect = aspectoFoto; // misma proporción que el hueco de la hoja
 
   try{
     const { jsPDF } = window.jspdf;
@@ -4186,9 +4212,33 @@ async function generateInstructionsPDF(){
     // Se construye una sola vez, fuera del bucle: es la misma para todas las hojas.
     await prepararImagenMarca();
     const imgSize = pageW - margin*2;
+
+    /* ---- Alto de la foto en la hoja ----
+       Antes era cuadrada (194x194 mm) y abajo quedaban unos 60 mm de hoja casi
+       vacíos. Ahora se calcula cuántas filas necesita la lista de piezas en el
+       paso más cargado de todo el manual, se le reserva ese espacio, y TODO lo
+       que sobra se le da a la foto. En un diseño de pocos colores la foto pasa
+       de 194 a más de 230 mm de alto.
+
+       Se calcula una sola vez para todo el manual, no por página: si cada hoja
+       tuviera la foto de un alto distinto, el modelo cambiaría de tamaño al
+       pasar las páginas y sería mareador. */
+    const porFila = Math.max(1, Math.floor((pageW - margin*2) / 26));
+    let filasLista = 1;
+    for (let l = 0; l <= maxLayer; l++){
+      const n = countPieces(voxels.filter(v => Math.round(v.y) === l)).bySizeColor.size;
+      filasLista = Math.max(filasLista, Math.ceil(n / porFila));
+    }
+    const altoLista = filasLista * 6.5;
+    // 18 arriba + 14 hasta la lista + la lista + 16 para el resumen del pie
+    // El piso de 150 mm es para el caso contrario: un paso con muchísimos colores
+    // necesita tantas filas de lista que, si la foto no cediera espacio, la lista
+    // se saldría de la hoja.
+    const imgAlto = Math.max(150, Math.min(248, pageH - 18 - 14 - altoLista - 16));
+    const aspectoFoto = imgSize / imgAlto;
     // La imagen del paso va en (margin, 18) con lado imgSize: ese rectángulo
     // queda libre de marca de agua para no estorbar la lectura del armado.
-    const capaMarca = construirCapaMarcaPagina(pageW, pageH, { x: margin, y: 18, w: imgSize, h: imgSize });
+    const capaMarca = construirCapaMarcaPagina(pageW, pageH, { x: margin, y: 18, w: imgSize, h: imgAlto });
     const rango = rangoPasos();
 
     for (let layer=rango.desde; layer<=rango.hasta; layer++){
@@ -4201,7 +4251,7 @@ async function generateInstructionsPDF(){
       const instrAngle = customInstructionAngle || { elevation: 35, azimuth: 45 };
       // La cámara apunta a la altura de la capa actual (no al centro del modelo):
       // en modelos altos, la capa nueva quedaba muy arriba y se veía de canto.
-      positionCameraFixedAngle(stepBox, instrAngle.elevation, instrAngle.azimuth, instructionMargin(), focusPointForLayer(stepBox, layer));
+      encuadrarInstruccion(stepBox, instrAngle.elevation, instrAngle.azimuth, focusPointForLayer(stepBox, layer));
       renderer.render(scene, camera);
       // La foto del paso lleva la marca de agua ya recortada a la silueta del
       // modelo: alrededor de la figura sí, encima nunca. Se parte del PNG porque
@@ -4216,7 +4266,7 @@ async function generateInstructionsPDF(){
       doc.setFontSize(14);
       doc.setTextColor(20,20,20);
       doc.text(modelName + ' — Paso ' + (layer+1) + ' de ' + (maxLayer+1), pageW/2, 12, { align:'center' });
-      doc.addImage(imgData, 'JPEG', margin, 18, imgSize, imgSize);
+      doc.addImage(imgData, 'JPEG', margin, 18, imgSize, imgAlto);
 
       // Marca de agua configurable (se calibra desde ⚡ Vista previa). Es la misma
       // imagen para todas las páginas y va con alias, así jsPDF la guarda una
@@ -4225,7 +4275,7 @@ async function generateInstructionsPDF(){
 
       doc.setFontSize(8.5);
       doc.setTextColor(120,130,150);
-      doc.text('En color: los bloques NUEVOS de este paso. En gris: lo que ya tenías armado.', pageW/2, 18+imgSize+6, { align:'center' });
+      doc.text('En color: los bloques NUEVOS de este paso. En gris: lo que ya tenías armado.', pageW/2, 18+imgAlto+6, { align:'center' });
 
       // Lista de piezas de ESTE paso: cada una dibujada con su forma real
       // (1x1 cuadrada, 1x2 y 1x3 alargadas) y su color, con la cantidad.
@@ -4238,7 +4288,7 @@ async function generateInstructionsPDF(){
           .sort((a,b)=>b[1]-a[1])
           .forEach(([k,count])=>stepEntries.push({ size, color:k.split('|')[1], count }));
       });
-      let ly = 18 + imgSize + 14;
+      let ly = 18 + imgAlto + 14;
       let lx = margin;
       doc.setFontSize(9.5);
       stepEntries.forEach(({size,color,count})=>{
@@ -4412,7 +4462,7 @@ async function generateAssemblyVideo(){
         // una capa a la siguiente. La cámara NO gira durante el armado: se queda
         // quieta para que se vea claro dónde va cada bloque.
         const focusLayer = layer===0 ? layer : (layer-1) + t;
-        positionCameraFixedAngle(fullBox, ang.elevation, ang.azimuth, instructionMargin(), focusPointForLayer(fullBox, focusLayer));
+        encuadrarInstruccion(fullBox, ang.elevation, ang.azimuth, focusPointForLayer(fullBox, focusLayer));
         renderer.render(scene, camera);
         frame++;
         await new Promise(r=>setTimeout(r, 1000/FPS));
@@ -4428,7 +4478,7 @@ async function generateAssemblyVideo(){
     const spinFrames = FPS*6; // 6 segundos para dar la vuelta completa, bien pausado
     for (let f=0; f<spinFrames; f++){
       const spin = (f/spinFrames) * 360;
-      positionCameraFixedAngle(fullBox, ang.elevation, ang.azimuth + spin, instructionMargin(), focusPointForLayer(fullBox, maxLayer));
+      encuadrarInstruccion(fullBox, ang.elevation, ang.azimuth + spin, focusPointForLayer(fullBox, maxLayer));
       renderer.render(scene, camera);
       await new Promise(r=>setTimeout(r, 1000/FPS));
     }
@@ -4546,7 +4596,7 @@ async function generateInstructionsPNGZip(){
       const visibleNow = voxels.filter(v => Math.round(v.y) <= layer);
       const stepBox = worldBoxFromVoxelList(visibleNow);
       const instrAngle2 = customInstructionAngle || { elevation: 35, azimuth: 45 };
-      positionCameraFixedAngle(stepBox, instrAngle2.elevation, instrAngle2.azimuth, instructionMargin(), focusPointForLayer(stepBox, layer));
+      encuadrarInstruccion(stepBox, instrAngle2.elevation, instrAngle2.azimuth, focusPointForLayer(stepBox, layer));
       renderer.render(scene, camera);
       const dataUrl = await componerHojaConMarca(renderer.domElement.toDataURL('image/png'));
       const base64 = dataUrl.split(',')[1];
@@ -7993,7 +8043,7 @@ document.getElementById('previewInstrAngleBtn').addEventListener('click', ()=>{
   rebuildMesh3D();
   const box = centeredBounds();
   const ang = customInstructionAngle || { elevation: 35, azimuth: 45 };
-  positionCameraFixedAngle(box, ang.elevation, ang.azimuth, instructionMargin());
+  encuadrarInstruccion(box, ang.elevation, ang.azimuth);
   // Sincroniza los controles de órbita con esta posición, para que si seguís
   // girando con el mouse desde acá no salte de golpe a otro lado.
   const center = new THREE.Vector3(); box.getCenter(center);
