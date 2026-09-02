@@ -466,7 +466,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v62</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v63</small></div>
     </div>
     <div id="modelNameText">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -660,10 +660,22 @@
       </select>
 
       <label style="display:flex; align-items:center; gap:7px; margin-top:10px; font-size:11px; color:var(--text-dim); cursor:pointer;">
+        <input type="checkbox" id="rndSombras" /> Sombras propias (pelo sobre la cara, brazo sobre el torso)
+      </label>
+      <p style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">Es lo que más acerca la foto al render de Studio. En modelos vaciados por dentro el hueco puede verse muy oscuro.</p>
+
+      <label style="display:flex; align-items:center; gap:7px; margin-top:10px; font-size:11px; color:var(--text-dim); cursor:pointer;">
         <input type="checkbox" id="rndPortada" /> Usar la última foto en la portada del manual
       </label>
       <p id="rndPortadaEstado" style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;"></p>
       <button class="btn wide" id="rndResetBtn" style="width:100%; margin-top:8px;">↺ Volver a los valores de fábrica</button>
+
+      <p class="section-title" style="margin-top:14px;">Vista previa en vivo</p>
+      <div id="rndPreviaCaja" style="position:relative; border:1px solid var(--border-soft); border-radius:9px; overflow:hidden; background:var(--panel-2); min-height:100px; display:flex; align-items:center; justify-content:center;">
+        <img id="rndPreviaImg" style="width:100%; display:block;" />
+        <span id="rndPreviaMsg" style="font-size:10.5px; color:var(--text-faint); padding:14px; text-align:center;">Movés un control y se actualiza sola.</span>
+      </div>
+      <button class="btn sm ghost" id="rndPreviaBtn" style="width:100%; margin-top:6px;">🔄 Actualizar vista previa</button>
     </div>
 
     <div class="section" id="voxelizeSection" style="display:none;">
@@ -2751,7 +2763,7 @@ const COLOR_FONDO_RENDER = '#939393';
 
 /* Ajustes de la foto de presentación. Antes estaban clavados en el código; se
    guardan en el navegador para no volver a calibrarlos en cada sesión. */
-const RENDER_DEFAULT = { key:1.55, relleno:1.0, brillo:0.5, aire:1.08, calidad:1600, fondo:'estudio', portada:false };
+const RENDER_DEFAULT = { key:1.55, relleno:1.0, brillo:0.5, aire:1.08, calidad:1600, fondo:'estudio', portada:false, sombras:false };
 const RENDER_KEY = '3dblock.render';
 function cargarConfigRender(){
   try{
@@ -2898,6 +2910,7 @@ function refrescarPanelRender(){
   document.getElementById('rndCalidad').value = String(configRender.calidad);
   document.getElementById('rndFondo').value = configRender.fondo;
   document.getElementById('rndPortada').checked = !!configRender.portada;
+  document.getElementById('rndSombras').checked = !!configRender.sombras;
   document.getElementById('rndKeyVal').textContent = Number(configRender.key).toFixed(2);
   document.getElementById('rndFillVal').textContent = Number(configRender.relleno).toFixed(2);
   document.getElementById('rndGlossVal').textContent = Number(configRender.brillo).toFixed(2);
@@ -2908,6 +2921,38 @@ function cambiarConfigRender(cambios){
   Object.assign(configRender, cambios);
   guardarConfigRender();
   refrescarPanelRender();
+  programarPreviaRender();
+}
+
+/* La vista previa se saca de una sola pasada de render, pero arrastrar un
+   control dispara decenas de cambios por segundo. Se espera a que el control se
+   quede quieto un momento, y no se encima una previa con otra. */
+let _timerPrevia = null, _previaEnCurso = false, _previaPendiente = false;
+function programarPreviaRender(){
+  clearTimeout(_timerPrevia);
+  _timerPrevia = setTimeout(actualizarPreviaRender, 140);
+}
+async function actualizarPreviaRender(){
+  if (_previaEnCurso){ _previaPendiente = true; return; }
+  _previaEnCurso = true;
+  try{
+    const img = document.getElementById('rndPreviaImg');
+    const msg = document.getElementById('rndPreviaMsg');
+    const url = await generatePresentationRender({ previa:true });
+    if (url){
+      img.src = url; img.style.display = 'block'; msg.style.display = 'none';
+    } else {
+      img.style.display = 'none'; msg.style.display = 'block';
+      msg.textContent = mainSplit.classList.contains('show-2d')
+        ? 'Pasá al visor 3D para ver la vista previa.'
+        : 'Cargá un diseño para ver la vista previa.';
+    }
+  } catch(err){
+    console.warn('vista previa de render', err);
+  } finally {
+    _previaEnCurso = false;
+    if (_previaPendiente){ _previaPendiente = false; programarPreviaRender(); }
+  }
 }
 document.getElementById('rndKey').addEventListener('input', e=>cambiarConfigRender({ key: parseFloat(e.target.value) }));
 document.getElementById('rndFill').addEventListener('input', e=>cambiarConfigRender({ relleno: parseFloat(e.target.value) }));
@@ -2916,6 +2961,8 @@ document.getElementById('rndAire').addEventListener('input', e=>cambiarConfigRen
 document.getElementById('rndCalidad').addEventListener('change', e=>cambiarConfigRender({ calidad: parseInt(e.target.value,10) }));
 document.getElementById('rndFondo').addEventListener('change', e=>cambiarConfigRender({ fondo: e.target.value }));
 document.getElementById('rndPortada').addEventListener('change', e=>cambiarConfigRender({ portada: e.target.checked }));
+document.getElementById('rndSombras').addEventListener('change', e=>cambiarConfigRender({ sombras: e.target.checked }));
+document.getElementById('rndPreviaBtn').addEventListener('click', actualizarPreviaRender);
 document.getElementById('rndResetBtn').addEventListener('click', ()=>{
   cambiarConfigRender(Object.assign({}, RENDER_DEFAULT));
   setStatus('Ajustes de render vueltos a los valores de fábrica.', 'ok');
@@ -2928,17 +2975,26 @@ refrescarPanelRender();
    temporal: sin ejes ni grilla, piso gris neutro con sombra suave de verdad, y un
    material de plástico brillante — y lo devolvemos todo a como estaba al terminar.
    Usa la orientación/cámara actual, tal como esté el modelo en pantalla. */
-async function generatePresentationRender(){
-  if (!voxels.length || !hayModeloEnElVisor()){ setStatus('No hay ningún diseño cargado.', 'err'); return; }
-  setLoading(true, 'Generando la foto (puede tardar unos segundos)…');
-  await new Promise(r=>setTimeout(r, 30));
-
-  // Si estás viendo el plano 2D, el visor 3D queda oculto (display:none) y la
-  // cámara no captura nada útil — lo cambiamos a 3D por un instante para sacar
-  // la foto, y volvemos a como estabas al terminar.
+async function generatePresentationRender(opciones){
+  opciones = opciones || {};
+  const previa = !!opciones.previa; // vista previa chica del panel: sin descarga ni cartel de espera
+  if (!voxels.length || !hayModeloEnElVisor()){
+    if (!previa) setStatus('No hay ningún diseño cargado.', 'err');
+    return null;
+  }
   const wasShow2D = mainSplit.classList.contains('show-2d');
-  if (wasShow2D) setView('3d');
-  await new Promise(r=>setTimeout(r, wasShow2D ? 90 : 30)); // deja que el layout/resize del canvas termine
+  // En vista previa no se fuerza el cambio de 2D a 3D: hacerlo en cada
+  // movimiento de un control haría parpadear la pantalla entera.
+  if (previa && wasShow2D) return null;
+  if (!previa){
+    setLoading(true, 'Generando la foto (puede tardar unos segundos)…');
+    await new Promise(r=>setTimeout(r, 30));
+    // Si estás viendo el plano 2D, el visor 3D queda oculto (display:none) y la
+    // cámara no captura nada útil — lo cambiamos a 3D por un instante para sacar
+    // la foto, y volvemos a como estabas al terminar.
+    if (wasShow2D) setView('3d');
+    await new Promise(r=>setTimeout(r, wasShow2D ? 90 : 30)); // deja que el layout/resize termine
+  }
 
   const wasFullDesign = showFullDesign;
   if (!showFullDesign){ showFullDesign = true; rebuildMesh3D(); } // se ve todo el modelo con sus colores reales
@@ -2979,10 +3035,9 @@ async function generatePresentationRender(){
   const luces = guardarLuces();
   lucesDeEstudio();
 
-  // Sin sombras proyectadas: con modelos vaciados por dentro ("Vaciar interior"),
-  // la sombra dura dejaba el hueco pintado de negro total, sin luz que llegara ahí.
-  // Con solo la iluminación pareja (ambiente + direccionales, sin oclusión) el
-  // plástico sigue viéndose con volumen real, pero sin ese agujero negro feo.
+  // Sin sombras proyectadas por defecto: con modelos vaciados por dentro ("Vaciar
+  // interior"), la sombra dura dejaba el hueco pintado de negro total. Por eso las
+  // sombras son una opción del panel y no algo siempre encendido.
   /* Los cuerpos pueden ser UN solo instMesh (bloque por bloque) o VARIOS
      pieceMeshes (modo piezas). Se guardan los materiales de todos para poder
      devolverlos al terminar. Antes esto asumía que instMesh existía siempre y
@@ -2999,6 +3054,42 @@ async function generatePresentationRender(){
     clearcoatRoughness: 0.30 - 0.16*b,
   });
   materialParaInstrucciones(realMat);
+  // --- Sombras propias ---
+  // Es lo que más acerca la foto al render de Studio: el pelo sombreando la
+  // cara, el brazo sombreando el torso. No hay piso, así que la sombra cae solo
+  // sobre el propio modelo — que es justo lo que se busca y evita la mancha
+  // dura en el suelo. Va como opción porque en modelos vaciados por dentro el
+  // hueco se puede ver muy oscuro.
+  const wasShadowMap = renderer.shadowMap.enabled;
+  const wasShadowType = renderer.shadowMap.type;
+  const wasKeyCast = key.castShadow;
+  const wasSombraObjetos = [];
+  if (configRender.sombras){
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    const centroM = box.getCenter(new THREE.Vector3());
+    const R = Math.max(1, box.getSize(new THREE.Vector3()).length()/2);
+    // La luz direccional se aleja en proporción al modelo: su cámara de sombra
+    // tiene que abarcarlo entero o la sombra aparece cortada por la mitad.
+    key.position.copy(centroM).add(new THREE.Vector3(-5, 9, 7).normalize().multiplyScalar(R*3));
+    key.target.position.copy(centroM);
+    if (!key.target.parent) scene.add(key.target);
+    key.target.updateMatrixWorld();
+    key.castShadow = true;
+    key.shadow.mapSize.set(2048, 2048);
+    const cs = key.shadow.camera;
+    cs.left = -R; cs.right = R; cs.top = R; cs.bottom = -R;
+    cs.near = Math.max(0.1, R*0.5); cs.far = R*8;
+    cs.updateProjectionMatrix();
+    // Sesgo: sin esto aparecen rayas de sombra sobre las propias caras iluminadas.
+    key.shadow.bias = -0.0007;
+    key.shadow.normalBias = Math.max(0.02, R*0.004);
+    cuerpos.forEach(m=>{
+      wasSombraObjetos.push([m, m.castShadow, m.receiveShadow]);
+      m.castShadow = true; m.receiveShadow = true;
+    });
+  }
+
   // El contorno grueso no queda bien en una foto con luces reales — se apaga el
   // del modo normal Y el de las piezas, que son objetos distintos.
   const lineasDePieza = pieceMeshes.filter(m => m.isLineSegments);
@@ -3028,7 +3119,9 @@ async function generatePresentationRender(){
   // guardan, el visor queda con los planos de recorte de la foto y el modelo
   // desaparece al alejarse con la rueda.
   const origNear = camera.near, origFar = camera.far;
-  const anchoFoto = parseInt(configRender.calidad, 10) || 1600;
+  // La vista previa se saca chica a propósito: es una sola pasada de render, así
+  // que mover un control se ve al instante en vez de esperar la foto grande.
+  const anchoFoto = previa ? 560 : (parseInt(configRender.calidad, 10) || 1600);
   renderer.setSize(anchoFoto, Math.round(anchoFoto*3/4), false);
   camera.aspect = 4/3;
   {
@@ -3053,8 +3146,10 @@ async function generatePresentationRender(){
   const dataUrl = renderer.domElement.toDataURL('image/png');
   // Copia en JPEG para la portada del manual: en PNG una foto de 3200 px
   // hacía que el PDF pesara una barbaridad.
-  ultimoRenderPortada = renderer.domElement.toDataURL('image/jpeg', 0.92);
-  refrescarEstadoPortada();
+  if (!previa){
+    ultimoRenderPortada = renderer.domElement.toDataURL('image/jpeg', 0.92);
+    refrescarEstadoPortada();
+  }
 
   renderer.setSize(origSizeR.x, origSizeR.y, false);
   camera.aspect = origAspectR;
@@ -3076,6 +3171,10 @@ async function generatePresentationRender(){
   ground.scale.copy(wasGroundScale);
   layerPlaneEdge.visible = wasLayerEdgeVisible;
   selectionBoxHelper.visible = wasSelBoxVisible;
+  renderer.shadowMap.enabled = wasShadowMap;
+  renderer.shadowMap.type = wasShadowType;
+  key.castShadow = wasKeyCast;
+  wasSombraObjetos.forEach(([m, c, r])=>{ m.castShadow = c; m.receiveShadow = r; });
   restaurarLuces(luces);
   scene.background = wasBg;
   scene.fog = wasFog;
@@ -3084,6 +3183,8 @@ async function generatePresentationRender(){
   if (!wasFullDesign){ showFullDesign = false; rebuildMesh3D(); }
   if (wasShow2D) setView('2d');
   renderer.render(scene, camera);
+
+  if (previa) return dataUrl; // el panel la muestra; no se descarga nada
 
   // Bajamos el PNG como archivo real (Blob), no como un link "data:" directo —
   // en algunas combinaciones de navegador/Windows, el link directo se guardaba
