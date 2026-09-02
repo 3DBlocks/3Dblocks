@@ -515,7 +515,7 @@
   <div id="idBar">
     <div class="brand-mark">
       <div class="brand-blocks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <div class="brand-title">3DBLOCK<small>Guía de armado — v75</small></div>
+      <div class="brand-title">3DBLOCK<small>Guía de armado — v77</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -862,13 +862,8 @@
     <button class="btn sm" id="previewNextBtn" title="Paso siguiente (→)">Siguiente ›</button>
     <button class="btn sm" id="previewRefreshBtn">🔄 Actualizar</button>
     <span style="color:var(--text-dim); font-size:12.5px; margin-left:6px;">Zoom:</span>
-    <input type="range" id="previewZoomSlider" min="0.6" max="3.5" step="0.05" value="1" title="1.0 = el modelo entra entero. Más alto se acerca, aunque puede recortar." style="width:130px;" />
-    <span id="previewZoomVal" style="color:var(--accent); font-size:12px; font-family:var(--mono); min-width:30px;">1.0x</span>
-    <span style="color:var(--text-dim); font-size:12.5px; margin-left:6px;">Hoja:</span>
-    <select id="orientacionHoja" title="La hoja acostada le da mucho más ancho a la foto: para diseños largos y bajos" style="background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:7px; padding:5px 8px; font-size:12.5px;">
-      <option value="vertical">Vertical</option>
-      <option value="horizontal">Horizontal</option>
-    </select>
+    <input type="range" id="previewZoomSlider" min="0.8" max="3" step="0.1" value="1.3" style="width:130px;" />
+    <span id="previewZoomVal" style="color:var(--accent); font-size:12px; font-family:var(--mono); min-width:30px;">1.3x</span>
     <button class="btn primary" id="anglePreviewCloseBtn">Cerrar</button>
   </div>
 
@@ -3411,7 +3406,7 @@ function positionCameraFixedAngle(box, elevationDeg, azimuthDeg, marginMult, foc
 // Qué tan cerca encuadra la cámara en el manual. 1.0 = como estaba antes (el
 // modelo quedaba chico, con mucho fondo gris vacío alrededor); más alto = más
 // cerca. Ajustable con el control de la vista previa.
-let instructionZoom = 1.0; // 1.0 = el modelo entra entero con un respiro
+let instructionZoom = 1.3;
 /* Orientación de la hoja del manual, guardada entre sesiones. */
 const configHoja = {
   orientacion: localStorage.getItem('3dblock.orientacionHoja') || 'vertical',
@@ -3426,19 +3421,6 @@ function aspectoHoja(){
 const BASE_MARGIN = 1.85; // distancia base; se divide por el zoom
 function instructionMargin(){ return BASE_MARGIN / instructionZoom; }
 
-/* Encuadre de las fotos del manual. Reemplaza al multiplicador fijo de antes,
-   que no miraba la forma del modelo: con 1.85 fijo una figura alta y flaca
-   llenaba apenas el 70% del cuadro (mucho fondo desperdiciado), y una cúbica
-   girada 45° se salía y se cortaba, porque su diagonal ocupa casi el doble que
-   su lado.
-
-   Ahora la distancia se mide proyectando las ocho esquinas del modelo, igual que
-   en la foto de presentación. El zoom pasa a significar cuánto llena el cuadro:
-   en 1.0 entra entero con un respiro, y por encima de 1.0 se acerca a propósito
-   aunque recorte. */
-function encuadrarInstruccion(box, elevacion, azimut, objetivo){
-  encuadrarModeloEnCuadro(box, elevacion, azimut, 1.06 / instructionZoom, objetivo);
-}
 
 // Punto al que debe apuntar la cámara en un paso del manual: la altura de la capa
 // que se está armando, pero mezclada con el centro para que no quede demasiado
@@ -3970,7 +3952,7 @@ async function quickAnglePreview(previewLayer){
   const ang = customInstructionAngle || { elevation: 35, azimuth: 45 };
   // En "modelo completo" apunta al centro; en un paso puntual, apunta a la altura
   // de esa capa (para que no se vea de canto en modelos altos).
-  encuadrarInstruccion(stepBox, ang.elevation, ang.azimuth, useFullDesign ? null : focusPointForLayer(stepBox, layerNum));
+  positionCameraFixedAngle(stepBox, ang.elevation, ang.azimuth, instructionMargin(), useFullDesign ? null : focusPointForLayer(stepBox, layerNum));
   renderer.render(scene, camera);
   const dataUrl = renderer.domElement.toDataURL('image/png');
 
@@ -4038,17 +4020,6 @@ function pasoPreview(delta){
 }
 /* Cambiar la orientación cambia la forma del hueco, así que hay que volver a
    sacar la foto: si no, se seguiría viendo la vista previa con la forma vieja. */
-(function orientacionHojaUI(){
-  const sel = document.getElementById('orientacionHoja');
-  sel.value = configHoja.orientacion;
-  sel.addEventListener('change', e=>{
-    configHoja.orientacion = e.target.value;
-    localStorage.setItem('3dblock.orientacionHoja', configHoja.orientacion);
-    const layerSel = document.getElementById('previewLayerSelect');
-    if (layerSel && layerSel.options.length) quickAnglePreview(layerSel.value);
-  });
-})();
-
 document.getElementById('previewPrevBtn').addEventListener('click', ()=>pasoPreview(-1));
 document.getElementById('previewNextBtn').addEventListener('click', ()=>pasoPreview(1));
 window.addEventListener('keydown', e=>{
@@ -4195,16 +4166,15 @@ async function generateInstructionsPDF(){
   renderer.getSize(origSize);
   const origAspect = camera.aspect;
   renderer.setSize(1100, 1100, false); // 1100 alcanza de sobra para una hoja A4 (~145 puntos por pulgada) y usa mucha menos memoria
-  camera.aspect = aspectoFoto; // misma proporción que el hueco de la hoja
+  camera.aspect = 1;
 
   try{
     const { jsPDF } = window.jspdf;
     /* Orientación de la hoja. La vertical sirve para casi todo, pero un diseño
        largo y bajo (un tren, un puente, un cartel) queda diminuto en el medio de
        una hoja alta: acostada aprovecha los 297 mm a lo ancho. */
-    const apaisada = configHoja.orientacion === 'horizontal';
-    const doc = new jsPDF({ unit:'mm', format:'a4', orientation: apaisada ? 'landscape' : 'portrait' });
-    const pageW = apaisada ? 297 : 210, pageH = apaisada ? 210 : 297;
+    const doc = new jsPDF({ unit:'mm', format:'a4', orientation:'portrait' });
+    const pageW = 210, pageH = 297;
     const modelName = (document.getElementById('modelNameText').textContent || 'Diseño 3DBlock').trim();
 
     // ---- Portada ----
@@ -4334,27 +4304,8 @@ async function generateInstructionsPDF(){
     await prepararImagenMarca();
     const imgSize = pageW - margin*2;
 
-    /* ---- Tamaño de la foto en la hoja ----
-       CUADRADA, como hasta la v69. En la v70 se la había estirado para
-       aprovechar el alto que sobraba (llegaba a 243 mm), pero eso subió los
-       píxeles por página un 25% y fue lo que terminó de tumbar la generación en
-       modelos grandes. Se vuelve al tamaño que se sabía que funcionaba.
-
-       Se sigue calculando cuántas filas necesita la lista de piezas en el paso
-       más cargado, pero ahora solo para que la foto ceda espacio si hiciera
-       falta: nunca para agrandarla. */
-    const porFila = Math.max(1, Math.floor((pageW - margin*2) / 26));
-    let filasLista = 1;
-    for (let l = 0; l <= maxLayer; l++){
-      const n = countPieces(voxels.filter(v => Math.round(v.y) === l)).bySizeColor.size;
-      filasLista = Math.max(filasLista, Math.ceil(n / porFila));
-    }
-    const altoLista = filasLista * 6.5;
-    // 18 arriba + 14 hasta la lista + la lista + 16 para el resumen del pie
-    const ladoFoto = Math.min(imgSize, pageH - 18 - 14 - altoLista - 16);
-    const imgAncho = ladoFoto, imgAlto = ladoFoto;
-    const imgX = (pageW - imgAncho) / 2; // centrada: en hoja acostada sobra ancho
-    const aspectoFoto = 1;
+    // Foto cuadrada de lado fijo y hoja vertical, como hasta la v69.
+    const imgAncho = imgSize, imgAlto = imgSize, imgX = margin;
     // La imagen del paso va en (margin, 18) con lado imgSize: ese rectángulo
     // queda libre de marca de agua para no estorbar la lectura del armado.
     const capaMarca = construirCapaMarcaPagina(pageW, pageH, { x: imgX, y: 18, w: imgAncho, h: imgAlto });
@@ -4377,7 +4328,7 @@ async function generateInstructionsPDF(){
       const instrAngle = customInstructionAngle || { elevation: 35, azimuth: 45 };
       // La cámara apunta a la altura de la capa actual (no al centro del modelo):
       // en modelos altos, la capa nueva quedaba muy arriba y se veía de canto.
-      encuadrarInstruccion(stepBox, instrAngle.elevation, instrAngle.azimuth, focusPointForLayer(stepBox, layer));
+      positionCameraFixedAngle(stepBox, instrAngle.elevation, instrAngle.azimuth, instructionMargin(), focusPointForLayer(stepBox, layer));
       renderer.render(scene, camera);
       // La foto del paso lleva la marca de agua ya recortada a la silueta del
       // modelo: alrededor de la figura sí, encima nunca. Se parte del PNG porque
@@ -4600,7 +4551,7 @@ async function generateAssemblyVideo(){
         // una capa a la siguiente. La cámara NO gira durante el armado: se queda
         // quieta para que se vea claro dónde va cada bloque.
         const focusLayer = layer===0 ? layer : (layer-1) + t;
-        encuadrarInstruccion(fullBox, ang.elevation, ang.azimuth, focusPointForLayer(fullBox, focusLayer));
+        positionCameraFixedAngle(fullBox, ang.elevation, ang.azimuth, instructionMargin(), focusPointForLayer(fullBox, focusLayer));
         renderer.render(scene, camera);
         frame++;
         await new Promise(r=>setTimeout(r, 1000/FPS));
@@ -4616,7 +4567,7 @@ async function generateAssemblyVideo(){
     const spinFrames = FPS*6; // 6 segundos para dar la vuelta completa, bien pausado
     for (let f=0; f<spinFrames; f++){
       const spin = (f/spinFrames) * 360;
-      encuadrarInstruccion(fullBox, ang.elevation, ang.azimuth + spin, focusPointForLayer(fullBox, maxLayer));
+      positionCameraFixedAngle(fullBox, ang.elevation, ang.azimuth + spin, instructionMargin(), focusPointForLayer(fullBox, maxLayer));
       renderer.render(scene, camera);
       await new Promise(r=>setTimeout(r, 1000/FPS));
     }
@@ -4741,7 +4692,7 @@ async function generateInstructionsPNGZip(){
       const visibleNow = voxels.filter(v => Math.round(v.y) <= layer);
       const stepBox = worldBoxFromVoxelList(visibleNow);
       const instrAngle2 = customInstructionAngle || { elevation: 35, azimuth: 45 };
-      encuadrarInstruccion(stepBox, instrAngle2.elevation, instrAngle2.azimuth, focusPointForLayer(stepBox, layer));
+      positionCameraFixedAngle(stepBox, instrAngle2.elevation, instrAngle2.azimuth, instructionMargin(), focusPointForLayer(stepBox, layer));
       renderer.render(scene, camera);
       const dataUrl = await componerHojaConMarca(renderer.domElement);
       const base64 = dataUrl.split(',')[1];
@@ -8188,7 +8139,7 @@ document.getElementById('previewInstrAngleBtn').addEventListener('click', ()=>{
   rebuildMesh3D();
   const box = centeredBounds();
   const ang = customInstructionAngle || { elevation: 35, azimuth: 45 };
-  encuadrarInstruccion(box, ang.elevation, ang.azimuth);
+  positionCameraFixedAngle(box, ang.elevation, ang.azimuth, instructionMargin());
   // Sincroniza los controles de órbita con esta posición, para que si seguís
   // girando con el mouse desde acá no salte de golpe a otro lado.
   const center = new THREE.Vector3(); box.getCenter(center);
