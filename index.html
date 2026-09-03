@@ -553,7 +553,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v80</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v81</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -660,12 +660,14 @@
   <div id="layerStrip">
     <button id="compactStripBtn" title="Achica la barra a una sola fila para dejarle más alto al visor">▾ Compactar</button>
     <div id="stepperRow">
+      <button class="stepBtn" id="firstLayerBtn" title="Ir a la capa 0, la de abajo del todo (tecla Inicio)">⏮</button>
       <button class="stepBtn" id="prevBtn" title="Capa anterior (←)">‹ Atrás</button>
       <div id="layerCenter">
         <div id="layerBigNum">0</div>
         <div id="layerOfTxt">CAPA <span id="layerNowTxt">0</span> DE <span id="layerMaxTxt">0</span></div>
       </div>
       <button class="stepBtn" id="nextBtn" title="Capa siguiente (→)">Siguiente ›</button>
+      <button class="stepBtn" id="lastLayerBtn" title="Ir a la última capa, la de arriba del todo (tecla Fin)">⏭</button>
       <button class="btn primary" id="playBtn" title="Reproducir armado completo">▶</button>
     </div>
     <!-- Alineada a la IZQUIERDA (v51): antes iba centrada y quedaba justo debajo
@@ -5100,7 +5102,15 @@ aplicarBarraCompacta(localStorage.getItem('3dblock.barraCompacta') === '1');
   });
 })();
 
+/* Cuando el modelo pierde altura —porque borraste la capa de arriba, o varias—
+   la vista baja sola hasta el fondo. Antes quedabas en la capa de más arriba que
+   siguiera existiendo y había que bajar de a una hasta donde estabas trabajando.
+   Solo se dispara si el modelo se achicó de verdad, no en cada refresco. */
+let maxLayerPrevio = 0;
+
 function refreshLayerUI(){
+  if (maxLayer < maxLayerPrevio && currentLayer > 0) currentLayer = 0;
+  maxLayerPrevio = maxLayer;
   if (typeof refrescarRangoPasos === 'function') refrescarRangoPasos(); // el tope del rango depende del modelo cargado  document.getElementById('layerBigNum').textContent = currentLayer;
   document.getElementById('layerNowTxt').textContent = currentLayer;
   document.getElementById('layerMaxTxt').textContent = maxLayer;
@@ -5121,6 +5131,23 @@ function refreshLayerUI(){
   updateLegend();
   rebuildMesh3D();
 }
+
+/* Saltar al fondo o al techo del modelo de una. Bajar capa por capa en un
+   modelo de 50 capas son 50 clics, y es lo que más se hace después de borrar
+   capas o de unir dos diseños. */
+function irACapaExtremo(alFondo){
+  goToLayer(alFondo ? 0 : maxLayer);
+  setStatus(alFondo ? 'Capa 0, la de abajo del todo.' : 'Capa ' + maxLayer + ', la de arriba del todo.', 'ok');
+}
+document.getElementById('firstLayerBtn').addEventListener('click', ()=>irACapaExtremo(true));
+document.getElementById('lastLayerBtn').addEventListener('click', ()=>irACapaExtremo(false));
+window.addEventListener('keydown', e=>{
+  if (e.key !== 'Home' && e.key !== 'End') return;
+  const tag = (document.activeElement && document.activeElement.tagName) || '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || esCampoEditable()) return;
+  e.preventDefault();
+  irACapaExtremo(e.key === 'Home');
+});
 
 function goToLayer(l){
   currentLayer = Math.max(0, Math.min(maxLayer, l));
@@ -7345,10 +7372,13 @@ function deleteSelection(){
 }
 
 /* Mueve los bloques seleccionados. Si en el destino ya hay un bloque, lo pisa. */
-function moveSelection(dx, dy, dz){
+function moveSelection(dx, dy, dz, sinDeshacer){
   const vs = selectionVoxels();
   if (!vs.length) return;
-  pushUndoSnapshot();
+  // Durante un arrastre no se guarda una foto por cada bloque recorrido: se
+  // guarda una sola al empezar. Si no, deshacer un arrastre largo obligaría a
+  // apretar Ctrl+Z treinta veces.
+  if (!sinDeshacer) pushUndoSnapshot();
   const enMovimiento = new Set(vs);
   const destinos = new Set(vs.map(v => (v.x+dx)+','+(Math.round(v.y)+dy)+','+(v.z+dz)));
   const quedan = voxels.filter(v =>
@@ -7774,6 +7804,69 @@ function apply3DEditAt(e){
 }
 let pointer3DDownXY = null;
 let rightDown3DXY = null;
+
+/* ---------------------------- Arrastrar la selección ----------------------------
+   Como en Studio 2.0: se agarra un bloque YA seleccionado y se arrastra. Antes
+   solo se podía mover de a un bloque con las flechas o los botones, que para
+   acomodar un diseño unido al lado de otro son decenas de clics.
+
+   El movimiento se calcula sobre un plano horizontal a la altura de la base de
+   la selección: se mira dónde cae el rayo del mouse en ese plano al empezar y
+   dónde cae ahora, y la diferencia en celdas es lo que hay que mover. Con Shift
+   el arrastre pasa a ser vertical, usando el movimiento del mouse en pantalla.
+
+   Se aplica solo cuando la diferencia llega a una celda entera, así que arrastrar
+   despacio no dispara un rebuild por píxel. */
+let arrastreSeleccion = null;
+const planoArrastre = new THREE.Plane();
+const puntoArrastre = new THREE.Vector3();
+
+function puntoEnPlanoArrastre(e){
+  const rect = host.getBoundingClientRect();
+  const ndc = new THREE.Vector2(
+    ((e.clientX - rect.left) / rect.width) * 2 - 1,
+    -((e.clientY - rect.top) / rect.height) * 2 + 1
+  );
+  paintRaycaster.setFromCamera(ndc, camera);
+  return paintRaycaster.ray.intersectPlane(planoArrastre, puntoArrastre) ? puntoArrastre.clone() : null;
+}
+
+function iniciarArrastreSeleccion(e){
+  const vs = selectionVoxels();
+  if (!vs.length) return false;
+  const v = bloqueBajoElCursor(e);
+  if (!v) return false;
+  const clave = v.x+','+Math.round(v.y)+','+v.z;
+  if (!boxSelection || !boxSelection.has(clave)) return false; // solo si agarrás algo TUYO
+
+  const baseY = Math.min(...vs.map(b => Math.round(b.y)));
+  planoArrastre.set(new THREE.Vector3(0,1,0), -(baseY * voxelSize));
+  const p = puntoEnPlanoArrastre(e);
+  if (!p) return false;
+  arrastreSeleccion = { inicio: p, pantallaY: e.clientY, dx: 0, dy: 0, dz: 0, movio: false };
+  return true;
+}
+
+function seguirArrastreSeleccion(e){
+  if (!arrastreSeleccion) return;
+  let dx = arrastreSeleccion.dx, dy = arrastreSeleccion.dy, dz = arrastreSeleccion.dz;
+  if (e.shiftKey){
+    // Vertical: 22 píxeles de pantalla por bloque va cómodo con cualquier zoom.
+    dy = Math.round((arrastreSeleccion.pantallaY - e.clientY) / 22);
+  } else {
+    const p = puntoEnPlanoArrastre(e);
+    if (!p) return;
+    dx = Math.round((p.x - arrastreSeleccion.inicio.x) / voxelSize);
+    dz = Math.round((p.z - arrastreSeleccion.inicio.z) / voxelSize);
+  }
+  if (dx === arrastreSeleccion.dx && dy === arrastreSeleccion.dy && dz === arrastreSeleccion.dz) return;
+
+  // Una sola foto para deshacer, al primer movimiento real del arrastre.
+  if (!arrastreSeleccion.movio){ pushUndoSnapshot(); arrastreSeleccion.movio = true; }
+  moveSelection(dx - arrastreSeleccion.dx, dy - arrastreSeleccion.dy, dz - arrastreSeleccion.dz, true);
+  arrastreSeleccion.dx = dx; arrastreSeleccion.dy = dy; arrastreSeleccion.dz = dz;
+  setStatus('Moviendo: ' + dx + ' en X, ' + dy + ' en Y, ' + dz + ' en Z. Shift para subir o bajar.', 'ok');
+}
 renderer.domElement.addEventListener('pointerdown', e=>{
   if (!paintMode) return;
   if (e.button === 2){ rightDown3DXY = { x: e.clientX, y: e.clientY }; return; } // no interfiere con orbitar
@@ -7781,8 +7874,14 @@ renderer.domElement.addEventListener('pointerdown', e=>{
   pointer3DDownXY = { x: e.clientX, y: e.clientY };
   isDragEditing = true; lastEditedCellKey = null;
   undoPendingGesture = true;
+  // Con la herramienta de selección, agarrar un bloque ya seleccionado arrastra
+  // TODA la selección en vez de empezar un recuadro nuevo.
+  if (activeTool === 'select' && !e.ctrlKey && !e.metaKey && !e.altKey){
+    if (iniciarArrastreSeleccion(e)) host.style.cursor = 'move';
+  }
 });
 renderer.domElement.addEventListener('pointermove', e=>{
+  if (arrastreSeleccion){ seguirArrastreSeleccion(e); return; }
   if (!paintMode || !isDragEditing || !pointer3DDownXY) return;
   const moved = Math.hypot(e.clientX-pointer3DDownXY.x, e.clientY-pointer3DDownXY.y);
   if (moved < CLICK_MOVE_THRESHOLD) return; // todavía no se considera "arrastre"
@@ -7802,6 +7901,16 @@ renderer.domElement.addEventListener('pointermove', e=>{
   apply3DEditAt(e);
 });
 renderer.domElement.addEventListener('pointerup', e=>{
+  if (arrastreSeleccion){
+    // Terminó el arrastre: se corta acá para que el pointerup no lo interprete
+    // además como un clic de selección y te borre lo que acabás de mover.
+    const movio = arrastreSeleccion.movio;
+    arrastreSeleccion = null;
+    host.style.cursor = '';
+    pointer3DDownXY = null; isDragEditing = false;
+    if (movio) setStatus('Selección movida. Ctrl+Z deshace todo el arrastre de una.', 'ok');
+    return;
+  }
   if (e.button === 2 && rightDown3DXY){
     const moved = Math.hypot(e.clientX-rightDown3DXY.x, e.clientY-rightDown3DXY.y);
     rightDown3DXY = null;
