@@ -553,7 +553,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v82</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v83</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -1516,13 +1516,17 @@ function rgbAHsl(r, g, b){          // r,g,b en sRGB 0..1
   if (h < 0) h += 360;
   return { h, s, l };
 }
+/* Qué colores llevan línea CLARA en el manual. Antes entraban también el azul y
+   el café, y eso arruinaba los modelos con mucho azul: cada pieza quedaba
+   rodeada de blanco y el conjunto se veía lavado y más claro de lo que es. Con
+   piezas 1x2 y 1x3 se nota todavía más, porque el contorno rodea la pieza entera
+   y esas líneas blancas largas pesan mucho más que las de un 1x1.
+
+   Ahora solo el negro y lo casi negro llevan línea blanca. Todo lo demás,
+   incluido el azul, va con línea oscura, que es lo que pidió el uso real. */
 function esNegroCafeOAzul(r, g, b){ // r,g,b en sRGB 0..1
-  const { h, s, l } = rgbAHsl(r, g, b);
-  if (l <= 0.16) return true;                          // negro y casi negro
-  if (s < 0.25)  return false;                         // grises: ni café ni azul
-  if (h >= 195 && h < 265 && l <= 0.55) return true;   // azul (sin cyan ni violeta)
-  if (h >= 12  && h <= 42 && l <= 0.46) return true;   // café = naranja oscuro
-  return false;
+  const { l } = rgbAHsl(r, g, b);
+  return l <= 0.16;
 }
 
 /* ⚠️ OJO CON EL ESPACIO DE COLOR — es fácil equivocarse acá y el error no se ve.
