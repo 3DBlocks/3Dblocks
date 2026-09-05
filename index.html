@@ -553,7 +553,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v86</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v87</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -1592,10 +1592,15 @@ function colorDeContorno(c){        // recibe un THREE.Color
     const [r,g,b] = sRGBDeColor(c);
     return esNegroCafeOAzul(r,g,b) ? LINEA_CLARA : LINEA_OSCURA;
   }
-  // Pantalla de edición: la regla de siempre. Se mira el canal más alto, no la
-  // luminancia — con luminancia, un azul marino o un marrón oscuro también
-  // recibían línea clara acá, que no es lo que se quiere en el visor.
-  return Math.max(c.r, c.g, c.b) < 0.18 ? LINEA_CLARA : LINEA_OSCURA;
+  /* Pantalla de edición: línea clara SOLO en el negro y lo casi negro.
+
+     Acá vivía un error de espacio de color. three.js guarda el color en LINEAL,
+     no en sRGB, y el umbral estaba pensado para sRGB. En lineal un marrón como
+     #573826 vale 0.09 y caía por debajo de 0.18 como si fuera negro: por eso el
+     marrón, el azul oscuro y los grises salían todos con marco blanco y el
+     modelo se veía lavado. Convertir a sRGB antes de comparar lo arregla. */
+  const [r,g,b] = sRGBDeColor(c);
+  return Math.max(r, g, b) < 0.18 ? LINEA_CLARA : LINEA_OSCURA;
 }
 
 /* Peso de cada línea (la transparencia por vértice: el atributo `color` de las
