@@ -324,7 +324,7 @@
   }
   #sidebarOverlay.show{ opacity:1; pointer-events:auto; }
   #sidebar{
-    position:fixed; top:0; right:0; bottom:0; width:340px; max-width:88vw;
+    position:fixed; top:0; right:0; bottom:0; width:430px; max-width:92vw;
     background: linear-gradient(180deg, var(--panel), var(--bg-2)); border-left:1px solid var(--border);
     transform:translateX(100%); transition:transform .2s ease; z-index:30; display:flex; flex-direction:column;
     overflow-y:auto; box-shadow:-20px 0 50px rgba(0,0,0,.4);
@@ -335,7 +335,7 @@
      cierra por su cuenta, para no mezclar la foto de presentación con la
      importación de archivos. */
   #renderPanel{
-    position:fixed; top:0; right:0; bottom:0; width:340px; max-width:88vw;
+    position:fixed; top:0; right:0; bottom:0; width:430px; max-width:92vw;
     background: linear-gradient(180deg, var(--panel), var(--bg-2)); border-left:1px solid var(--border);
     transform:translateX(100%); transition:transform .2s ease; z-index:30; display:flex; flex-direction:column;
     overflow-y:auto; box-shadow:-20px 0 50px rgba(0,0,0,.4);
@@ -553,7 +553,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v89</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v90</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -707,7 +707,7 @@
       <p class="section-title">Foto de presentación (render)</p>
       <div style="position:sticky; top:0; z-index:5; background:var(--panel); padding-bottom:8px; margin-bottom:6px;">
       <p class="section-title" style="margin-top:0;">Vista previa en vivo</p>
-      <div id="rndPreviaCaja" style="position:relative; border:1px solid var(--border-soft); border-radius:9px; overflow:hidden; background:var(--panel-2); min-height:100px; display:flex; align-items:center; justify-content:center;">
+      <div id="rndPreviaCaja" style="position:relative; border:1px solid var(--border-soft); border-radius:9px; overflow:hidden; background:var(--panel-2); min-height:180px; display:flex; align-items:center; justify-content:center;">
         <img id="rndPreviaImg" style="width:100%; display:block;" />
         <span id="rndPreviaMsg" style="font-size:10.5px; color:var(--text-faint); padding:14px; text-align:center;">Movés un control y se actualiza sola.</span>
         </div>
@@ -733,6 +733,14 @@
       <div class="row" style="margin-top:8px;"><span class="label-sm">Luz de relleno</span><span class="value-mono" id="rndFillVal">1.00</span></div>
       <input type="range" id="rndFill" min="0" max="1.8" step="0.05" value="1" style="width:100%;" />
       <p style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">Menos relleno = sombras más marcadas entre bloques y más volumen. Demasiado poco y los rincones quedan negros.</p>
+
+      <div class="row" style="margin-top:8px;"><span class="label-sm">Reflejo del entorno</span><span class="value-mono" id="rndEnvVal">0.90</span></div>
+      <input type="range" id="rndEnv" min="0" max="2" step="0.05" value="0.9" style="width:100%;" />
+      <p style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">Le da al plástico algo que reflejar: techo claro arriba, piso oscuro abajo. Es lo que separa un plástico apagado de uno que parece fotografiado.</p>
+
+      <div class="row" style="margin-top:8px;"><span class="label-sm">Fuerza de las sombras</span><span class="value-mono" id="rndContVal">0.50</span></div>
+      <input type="range" id="rndCont" min="0" max="1" step="0.05" value="0.5" style="width:100%;" />
+      <p style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">Qué tan oscuras se ven las zonas en sombra. Al subirlo baja el relleno y sube la luz principal.</p>
 
       <div class="row" style="margin-top:8px;"><span class="label-sm">Sombreado de rincones</span><span class="value-mono" id="rndOcluVal">0.75</span></div>
       <input type="range" id="rndOclu" min="0" max="1.2" step="0.05" value="0.75" style="width:100%;" />
@@ -2998,9 +3006,42 @@ function drawPrintLayer(ctx, W, H, layer){
    era la exposición. */
 const COLOR_FONDO_RENDER = '#939393';
 
+/* ---------------------------- Entorno reflejado ----------------------------
+   Lo que más le falta a un render de WebGL para parecer real no son las luces:
+   es que el material no tiene NADA que reflejar. Un plástico de verdad devuelve
+   el cuarto donde está — el techo claro arriba, el piso oscuro abajo — y eso es
+   lo que le da el brillo vivo en los bordes.
+
+   Se arma un pequeño estudio de mentira (un degradado de claro arriba a oscuro
+   abajo) y se lo convierte en mapa de entorno. Cuesta una sola vez y no necesita
+   ninguna librería extra: PMREMGenerator viene en three.js.
+
+   Es la diferencia entre un plástico apagado y uno que parece fotografiado. */
+let _entorno = null;
+function entornoEstudio(){
+  if (_entorno) return _entorno;
+  const c = document.createElement('canvas');
+  c.width = 16; c.height = 256;
+  const ctx = c.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, 0, 256);
+  g.addColorStop(0.00, '#ffffff');   // techo del estudio
+  g.addColorStop(0.42, '#d8dce4');
+  g.addColorStop(0.55, '#8d9199');   // horizonte
+  g.addColorStop(1.00, '#2b2e33');   // piso
+  ctx.fillStyle = g; ctx.fillRect(0, 0, 16, 256);
+  const tex = new THREE.CanvasTexture(c);
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  if ('colorSpace' in tex) tex.colorSpace = THREE.SRGBColorSpace;
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  pmrem.compileEquirectangularShader();
+  _entorno = pmrem.fromEquirectangular(tex).texture;
+  pmrem.dispose(); tex.dispose();
+  return _entorno;
+}
+
 /* Ajustes de la foto de presentación. Antes estaban clavados en el código; se
    guardan en el navegador para no volver a calibrarlos en cada sesión. */
-const RENDER_DEFAULT = { key:1.55, relleno:1.0, brillo:0.5, aire:1.08, calidad:1600, fondo:'estudio', portada:false, sombras:false, pisoSombra:true, sombraOpacidad:0.35, oclusion:0.75, luz:'ai' };
+const RENDER_DEFAULT = { key:1.55, relleno:1.0, brillo:0.5, aire:1.08, calidad:1600, fondo:'estudio', portada:false, sombras:false, pisoSombra:true, sombraOpacidad:0.35, oclusion:0.75, luz:'ai', entorno:0.9, contraste:0.5 };
 const RENDER_KEY = '3dblock.render';
 function cargarConfigRender(){
   try{
@@ -3052,12 +3093,18 @@ function guardarLuces(){
 function lucesDeEstudio(){
   // Cielo neutro en vez de azul, y menos relleno: el relleno alto es lo que
   // borraba las sombras propias de los bloques y aplanaba la figura.
-  const r = configRender.relleno;
+  /* El contraste decide qué tan oscuras se ven las sombras. No hay un control
+     directo de "fuerza de sombra" en el motor: lo que define si una zona en
+     sombra se ve negra o gris es cuánta luz de relleno le llega. Así que subir
+     el contraste baja el relleno y sube la principal, manteniendo parecida la
+     exposición general pero marcando mucho más las sombras. */
+  const k = configRender.contraste;
+  const r = configRender.relleno * (1 - 0.65*k);
   hemi.color.set(0xffffff); hemi.groundColor.set(0x9a9a9a); hemi.intensity = 0.42 * r;
   ambient.intensity = 0.30 * r;
   // Luz principal desde arriba a la izquierda y algo al frente, como la foto de
   // Studio: marca el volumen de cada bloque sin quemar las caras claras.
-  key.color.set(0xffffff); key.intensity = configRender.key; key.position.set(-5, 9, 7);
+  key.color.set(0xffffff); key.intensity = configRender.key * (1 + 0.55*k); key.position.set(-5, 9, 7);
   // Contraluz neutro (antes era verdoso y teñía los bordes) para despegar la
   // figura del fondo.
   rim.color.set(0xffffff); rim.intensity = 0.42; rim.position.set(6, 5, -7);
@@ -3198,6 +3245,10 @@ function refrescarPanelRender(){
   document.getElementById('rndKeyVal').textContent = Number(configRender.key).toFixed(2);
   document.getElementById('rndFillVal').textContent = Number(configRender.relleno).toFixed(2);
   document.getElementById('rndGlossVal').textContent = Number(configRender.brillo).toFixed(2);
+  document.getElementById('rndEnv').value = configRender.entorno;
+  document.getElementById('rndEnvVal').textContent = Number(configRender.entorno).toFixed(2);
+  document.getElementById('rndCont').value = configRender.contraste;
+  document.getElementById('rndContVal').textContent = Number(configRender.contraste).toFixed(2);
   document.getElementById('rndOclu').value = configRender.oclusion;
   document.getElementById('rndOcluVal').textContent = Number(configRender.oclusion).toFixed(2);
   document.querySelectorAll('#rndLuzGrid button').forEach(b=>b.classList.toggle('primary', b.dataset.luz === configRender.luz));
@@ -3245,6 +3296,8 @@ document.getElementById('rndKey').addEventListener('input', e=>cambiarConfigRend
 document.getElementById('rndFill').addEventListener('input', e=>cambiarConfigRender({ relleno: parseFloat(e.target.value) }));
 document.getElementById('rndGloss').addEventListener('input', e=>cambiarConfigRender({ brillo: parseFloat(e.target.value) }));
 document.getElementById('rndOclu').addEventListener('input', e=>cambiarConfigRender({ oclusion: parseFloat(e.target.value) }));
+document.getElementById('rndEnv').addEventListener('input', e=>cambiarConfigRender({ entorno: parseFloat(e.target.value) }));
+document.getElementById('rndCont').addEventListener('input', e=>cambiarConfigRender({ contraste: parseFloat(e.target.value) }));
 document.getElementById('rndLuzGrid').addEventListener('click', e=>{
   const b = e.target.closest('button[data-luz]');
   if (b) cambiarConfigRender({ luz: b.dataset.luz });
@@ -3329,6 +3382,8 @@ async function generatePresentationRender(opciones){
   // Luces de estudio: las del visor tienen un cielo azulado y un contraluz
   // verdoso que quedan bien en pantalla pero tiñen la foto y la aplanan. Acá se
   // pasan a luz neutra con más contraste y se devuelven al terminar.
+  const wasEnv = scene.environment;
+  if (configRender.entorno > 0) scene.environment = entornoEstudio();
   const luces = guardarLuces();
   lucesDeEstudio();
 
@@ -3349,6 +3404,8 @@ async function generatePresentationRender(opciones){
     metalness: 0.02,
     clearcoat: 0.10 + 0.75*b,
     clearcoatRoughness: 0.30 - 0.16*b,
+    envMap: configRender.entorno > 0 ? entornoEstudio() : null,
+    envMapIntensity: configRender.entorno,
   });
   materialParaInstrucciones(realMat);
   // --- Sombras propias ---
@@ -3455,7 +3512,7 @@ async function generatePresentationRender(opciones){
   const origNear = camera.near, origFar = camera.far;
   // La vista previa se saca chica a propósito: es una sola pasada de render, así
   // que mover un control se ve al instante en vez de esperar la foto grande.
-  const anchoFoto = previa ? 560 : (parseInt(configRender.calidad, 10) || 1600);
+  const anchoFoto = previa ? 900 : (parseInt(configRender.calidad, 10) || 1600);
   renderer.setSize(anchoFoto, Math.round(anchoFoto*3/4), false);
   camera.aspect = 4/3;
   {
@@ -3548,6 +3605,7 @@ async function generatePresentationRender(opciones){
   key.castShadow = wasKeyCast;
   wasSombraObjetos.forEach(([m, c, r])=>{ m.castShadow = c; m.receiveShadow = r; });
   restaurarLuces(luces);
+  scene.environment = wasEnv;
   scene.background = wasBg;
   scene.fog = wasFog;
   axesHelper.visible = wasAxesVisible;
