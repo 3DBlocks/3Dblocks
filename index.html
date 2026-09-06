@@ -560,7 +560,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v93</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v94</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -3390,7 +3390,13 @@ async function generatePresentationRender(opciones){
      que la hace parecer real. Es una sola imagen, así que el costo se paga una
      vez, no como en el manual que son 72. */
   const wasStyleFoto = blockStyle, wasFlatFoto = flatBlockMode, wasPiezasFoto = renderAsPieces;
-  blockStyle = 'magic2'; flatBlockMode = false; renderAsPieces = true;
+  /* Se RESPETA el bloque que tengas elegido, siempre que tenga tachones: si
+     estás usando el Real anterior (magic), la foto sale con ese. Solo se fuerza
+     el Real cuando el elegido es Simple o Con muesca, porque esos no tienen
+     tachones y sin tachones no hay ni sombras ni reflejos arriba, que es lo que
+     hace que la foto parezca real. */
+  if (!esMagic()) blockStyle = 'magic2';
+  flatBlockMode = false; renderAsPieces = true;
   // Se rearma SIEMPRE, aunque ya estuviera en modelo completo, porque acá se
   // aplica la oclusión ambiental y el visor normal no la tiene.
   rebuildMesh3D({ oclusion: configRender.oclusion, bisel: configRender.bisel });
