@@ -553,7 +553,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v87</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v88</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -713,6 +713,10 @@
       <div class="row" style="margin-top:8px;"><span class="label-sm">Luz de relleno</span><span class="value-mono" id="rndFillVal">1.00</span></div>
       <input type="range" id="rndFill" min="0" max="1.8" step="0.05" value="1" style="width:100%;" />
       <p style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">Menos relleno = sombras más marcadas entre bloques y más volumen. Demasiado poco y los rincones quedan negros.</p>
+
+      <div class="row" style="margin-top:8px;"><span class="label-sm">Sombreado de rincones</span><span class="value-mono" id="rndOcluVal">0.75</span></div>
+      <input type="range" id="rndOclu" min="0" max="1.2" step="0.05" value="0.75" style="width:100%;" />
+      <p style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">Oscurece los bloques metidos entre otros, como hace la luz rebotada de verdad. Es lo que más acerca la foto a un render profesional.</p>
 
       <div class="row" style="margin-top:8px;"><span class="label-sm">Brillo del plástico</span><span class="value-mono" id="rndGlossVal">0.50</span></div>
       <input type="range" id="rndGloss" min="0" max="1" step="0.02" value="0.5" style="width:100%;" />
@@ -2276,6 +2280,44 @@ let showFullDesign = false; // vista previa: todo el modelo con sus colores real
 let showMeshTexture = true; // textura de rejilla sobre cada cara del bloque
 const belowLayerColor = new THREE.Color('#9aa4bd');
 
+/* ---------------------------- Oclusión ambiental por bloque ----------------------------
+   Es lo que más separa un render plano de uno que parece una foto: los rincones
+   entre piezas se ven más oscuros porque les llega menos luz rebotada. Los
+   motores como Eyesight lo calculan trazando rayos, que en un navegador no es
+   viable con ocho mil bloques.
+
+   Pero acá no hace falta trazar nada: ya sabemos dónde está cada bloque. Un
+   bloque rodeado por muchos vecinos está metido en un rincón y recibe menos luz;
+   uno suelto en la punta de un mástil recibe toda. Se cuentan los 26 vecinos y
+   se oscurece en proporción. Es una aproximación, pero es la misma idea y da el
+   mismo efecto en la práctica.
+
+   Se calcula una sola vez por modelo y se guarda: recorrer 8.000 bloques por 26
+   vecinos en cada dibujado sería carísimo. */
+let ocluSion = null;        // Map de "x,y,z" -> factor de 0 a 1
+let ocluSionFirma = null;   // para saber si hay que recalcularla
+
+function calcularOclusion(){
+  const firma = voxels.length + ':' + (voxels[0] ? voxels[0].x+','+voxels[0].y+','+voxels[0].z : '');
+  if (ocluSion && ocluSionFirma === firma) return ocluSion;
+  const ocupadas = new Set();
+  voxels.forEach(v => ocupadas.add(v.x+','+Math.round(v.y)+','+v.z));
+  const m = new Map();
+  voxels.forEach(v=>{
+    const x=v.x, y=Math.round(v.y), z=v.z;
+    let n = 0;
+    for (let dx=-1; dx<=1; dx++)
+      for (let dy=-1; dy<=1; dy++)
+        for (let dz=-1; dz<=1; dz++){
+          if (!dx && !dy && !dz) continue;
+          if (ocupadas.has((x+dx)+','+(y+dy)+','+(z+dz))) n++;
+        }
+    m.set(x+','+y+','+z, n/26);
+  });
+  ocluSion = m; ocluSionFirma = firma;
+  return m;
+}
+
 /* Dibuja el modelo agrupado en PIEZAS (1x1, 1x2, 1x3) en vez de bloque por bloque.
    Se usa solo para el manual y el video: así una pieza 1x3 se ve como una sola
    pieza larga con 3 botones, tal como la vas a tomar de la bolsita al armar. */
@@ -2413,6 +2455,11 @@ function buildPieceMeshes(visible){
    llamada la define de nuevo, y el próximo dibujado normal la apaga solo. */
 function rebuildMesh3D(opts){
   contornoInstrucciones = !!(opts && opts.instrucciones);
+  // Oclusión: solo se aplica cuando se pide explícitamente (la foto de
+  // presentación). En el visor de edición conviene ver los colores planos, sin
+  // sombreado, para saber exactamente de qué color es cada bloque.
+  const fuerzaOclusion = (opts && opts.oclusion) || 0;
+  const mapaOclusion = fuerzaOclusion > 0 ? calcularOclusion() : null;
   clearModelMeshes();
   const visible = showFullDesign
     ? voxels
@@ -2564,6 +2611,12 @@ function rebuildMesh3D(opts){
     // (con transparencia, nombre CSS, etc.), acá se normaliza en vez de romper el
     // dibujado o quedar en negro.
     if (isCurrentLayer){ tmpColor.set(cleanColor(v.color)); } else { tmpColor.copy(belowLayerColor); }
+    if (fuerzaOclusion > 0 && mapaOclusion){
+      // 0.55 de tope: un bloque totalmente enterrado baja a poco más de la mitad
+      // de su brillo. Más que eso y los rincones se van a negro.
+      const f = 1 - fuerzaOclusion * 0.55 * (mapaOclusion.get(v.x+','+Math.round(v.y)+','+v.z) || 0);
+      tmpColor.multiplyScalar(f);
+    }
     instMesh.setColorAt(i, tmpColor);
     // Resaltado de selección: SOLO el contorno cambia de color — el relleno del
     // bloque se queda siempre con su color real, nunca lo tapa. La selección
@@ -2931,7 +2984,7 @@ const COLOR_FONDO_RENDER = '#939393';
 
 /* Ajustes de la foto de presentación. Antes estaban clavados en el código; se
    guardan en el navegador para no volver a calibrarlos en cada sesión. */
-const RENDER_DEFAULT = { key:1.55, relleno:1.0, brillo:0.5, aire:1.08, calidad:1600, fondo:'estudio', portada:false, sombras:false, pisoSombra:true, sombraOpacidad:0.35 };
+const RENDER_DEFAULT = { key:1.55, relleno:1.0, brillo:0.5, aire:1.08, calidad:1600, fondo:'estudio', portada:false, sombras:false, pisoSombra:true, sombraOpacidad:0.35, oclusion:0.75 };
 const RENDER_KEY = '3dblock.render';
 function cargarConfigRender(){
   try{
@@ -3129,6 +3182,8 @@ function refrescarPanelRender(){
   document.getElementById('rndKeyVal').textContent = Number(configRender.key).toFixed(2);
   document.getElementById('rndFillVal').textContent = Number(configRender.relleno).toFixed(2);
   document.getElementById('rndGlossVal').textContent = Number(configRender.brillo).toFixed(2);
+  document.getElementById('rndOclu').value = configRender.oclusion;
+  document.getElementById('rndOcluVal').textContent = Number(configRender.oclusion).toFixed(2);
   document.getElementById('rndAireVal').textContent = Number(configRender.aire).toFixed(2);
   refrescarEstadoPortada();
 }
@@ -3172,6 +3227,7 @@ async function actualizarPreviaRender(){
 document.getElementById('rndKey').addEventListener('input', e=>cambiarConfigRender({ key: parseFloat(e.target.value) }));
 document.getElementById('rndFill').addEventListener('input', e=>cambiarConfigRender({ relleno: parseFloat(e.target.value) }));
 document.getElementById('rndGloss').addEventListener('input', e=>cambiarConfigRender({ brillo: parseFloat(e.target.value) }));
+document.getElementById('rndOclu').addEventListener('input', e=>cambiarConfigRender({ oclusion: parseFloat(e.target.value) }));
 document.getElementById('rndAire').addEventListener('input', e=>cambiarConfigRender({ aire: parseFloat(e.target.value) }));
 document.getElementById('rndCalidad').addEventListener('change', e=>cambiarConfigRender({ calidad: parseInt(e.target.value,10) }));
 document.getElementById('rndFondo').addEventListener('change', e=>cambiarConfigRender({ fondo: e.target.value }));
@@ -3214,7 +3270,10 @@ async function generatePresentationRender(opciones){
   }
 
   const wasFullDesign = showFullDesign;
-  if (!showFullDesign){ showFullDesign = true; rebuildMesh3D(); } // se ve todo el modelo con sus colores reales
+  showFullDesign = true;
+  // Se rearma SIEMPRE, aunque ya estuviera en modelo completo, porque acá se
+  // aplica la oclusión ambiental y el visor normal no la tiene.
+  rebuildMesh3D({ oclusion: configRender.oclusion });
 
   // --- "Estudio fotográfico": sin ejes ni grilla, fondo y piso del mismo gris
   // neutro (como un ciclorama real, sin línea de horizonte a la vista) ---
@@ -3435,7 +3494,8 @@ async function generatePresentationRender(opciones){
   scene.fog = wasFog;
   axesHelper.visible = wasAxesVisible;
   grid.visible = wasGridVisible;
-  if (!wasFullDesign){ showFullDesign = false; rebuildMesh3D(); }
+  showFullDesign = wasFullDesign;
+  rebuildMesh3D();   // vuelve al dibujado del visor, sin oclusión
   if (wasShow2D) setView('2d');
   renderer.render(scene, camera);
 
