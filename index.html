@@ -560,7 +560,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v92</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v93</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -743,14 +743,14 @@
 
       <div class="row" style="margin-top:8px;"><span class="label-sm">Reflejo de arriba</span><span class="value-mono" id="rndTechoVal">0.80</span></div>
       <input type="range" id="rndTecho" min="0" max="1" step="0.05" value="0.8" style="width:100%;" />
-      <p style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">Sube o baja el techo del estudio. Las caras de arriba y los tachones son las que lo reflejan, así que esto controla su brillo.</p>
+      <p style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">Sube o baja el techo del estudio. Las caras de arriba y los tachones son las que lo reflejan, así que esto controla su brillo. Con el reflejo alto, bajalo si se queman.</p>
 
       <div class="row" style="margin-top:8px;"><span class="label-sm">Bisel del borde</span><span class="value-mono" id="rndBiselVal">0.03</span></div>
       <input type="range" id="rndBisel" min="0" max="0.09" step="0.005" value="0.03" style="width:100%;" />
       <p style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">Separa un poco las piezas para que se vea el contorno de cada una, como en Studio. Muy alto y quedan sueltas.</p>
 
-      <div class="row" style="margin-top:8px;"><span class="label-sm">Reflejo del entorno</span><span class="value-mono" id="rndEnvVal">1.60</span></div>
-      <input type="range" id="rndEnv" min="0" max="4" step="0.05" value="1.6" style="width:100%;" />
+      <div class="row" style="margin-top:8px;"><span class="label-sm">Reflejo del entorno</span><span class="value-mono" id="rndEnvVal">6.00</span></div>
+      <input type="range" id="rndEnv" min="0" max="16" step="0.1" value="6" style="width:100%;" />
       <p style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">Le da al plástico algo que reflejar: techo claro arriba, piso oscuro abajo. Es lo que separa un plástico apagado de uno que parece fotografiado.</p>
 
       <div class="row" style="margin-top:8px;"><span class="label-sm">Fuerza de las sombras</span><span class="value-mono" id="rndContVal">0.50</span></div>
@@ -3074,7 +3074,7 @@ function entornoEstudio(){
 
 /* Ajustes de la foto de presentación. Antes estaban clavados en el código; se
    guardan en el navegador para no volver a calibrarlos en cada sesión. */
-const RENDER_DEFAULT = { key:1.55, relleno:1.0, brillo:0.85, aire:1.08, calidad:1600, fondo:'estudio', portada:false, sombras:false, pisoSombra:true, sombraOpacidad:0.35, oclusion:0.75, luz:'ai', entorno:1.6, contraste:0.5, techo:0.8, bisel:0.03 };
+const RENDER_DEFAULT = { key:1.55, relleno:1.0, brillo:0.85, aire:1.08, calidad:1600, fondo:'estudio', portada:false, sombras:false, pisoSombra:true, sombraOpacidad:0.35, oclusion:0.75, luz:'ai', entorno:6, contraste:0.5, techo:0.8, bisel:0.03 };
 const RENDER_KEY = '3dblock.render';
 function cargarConfigRender(){
   try{
@@ -3446,12 +3446,17 @@ async function generatePresentationRender(opciones){
   // pieza recién impresa; en 1, brillante como una inyectada.
   const b = configRender.brillo;
   const realMat = new THREE.MeshPhysicalMaterial({
-    // Rango ampliado: en el tope queda casi pulido (rugosidad 0.08) con capa
-    // brillante al máximo, que es donde el reflejo del entorno se ve de verdad.
-    roughness: 0.62 - 0.54*b,
+    /* Rango llevado al máximo que da el motor. En el tope la rugosidad baja a
+       0.02 y la capa brillante queda pulida: ahí el reflejo del entorno se ve
+       como un espejo. `reflectivity` y `specularIntensity` suben con el mismo
+       control, porque son los que deciden cuánta luz devuelve la superficie —
+       sin ellos, bajar la rugosidad sola no alcanza para un plástico lustroso. */
+    roughness: Math.max(0.02, 0.62 - 0.60*b),
     metalness: 0.02,
     clearcoat: 0.10 + 0.90*b,
-    clearcoatRoughness: 0.34 - 0.30*b,
+    clearcoatRoughness: Math.max(0.02, 0.34 - 0.32*b),
+    reflectivity: 0.35 + 0.65*b,
+    specularIntensity: 0.5 + 1.5*b,
     envMap: configRender.entorno > 0 ? entornoEstudio() : null,
     envMapIntensity: configRender.entorno,
   });
