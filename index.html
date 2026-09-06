@@ -324,7 +324,7 @@
   }
   #sidebarOverlay.show{ opacity:1; pointer-events:auto; }
   #sidebar{
-    position:fixed; top:0; right:0; bottom:0; width:430px; max-width:92vw;
+    position:fixed; top:0; right:0; bottom:0; width:360px; max-width:92vw;
     background: linear-gradient(180deg, var(--panel), var(--bg-2)); border-left:1px solid var(--border);
     transform:translateX(100%); transition:transform .2s ease; z-index:30; display:flex; flex-direction:column;
     overflow-y:auto; box-shadow:-20px 0 50px rgba(0,0,0,.4);
@@ -335,12 +335,19 @@
      cierra por su cuenta, para no mezclar la foto de presentación con la
      importación de archivos. */
   #renderPanel{
-    position:fixed; top:0; right:0; bottom:0; width:430px; max-width:92vw;
+    position:fixed; top:0; right:0; bottom:0; width:360px; max-width:92vw;
     background: linear-gradient(180deg, var(--panel), var(--bg-2)); border-left:1px solid var(--border);
     transform:translateX(100%); transition:transform .2s ease; z-index:30; display:flex; flex-direction:column;
     overflow-y:auto; box-shadow:-20px 0 50px rgba(0,0,0,.4);
   }
   #renderPanel.open{ transform:translateX(0); }
+  /* Controles compactos: el panel tiene doce ajustes y cada uno traía su párrafo
+     de ayuda. Se achican para que la vista previa se lleve el espacio. */
+  #renderSection .row{ margin-top:6px !important; }
+  #renderSection p{ font-size:9.5px !important; line-height:1.35 !important; margin:2px 0 0 !important; }
+  #renderSection input[type=range]{ margin:2px 0 0; }
+  #renderSection .btn.wide{ margin-top:6px !important; padding:6px 10px; }
+  #renderSection label{ margin-top:6px !important; }
   #renderPanel::-webkit-scrollbar{ width:8px; }
   #renderPanel::-webkit-scrollbar-thumb{ background:var(--border); border-radius:4px; }
   #renderOverlay{
@@ -553,7 +560,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v90</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v91</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -707,7 +714,7 @@
       <p class="section-title">Foto de presentación (render)</p>
       <div style="position:sticky; top:0; z-index:5; background:var(--panel); padding-bottom:8px; margin-bottom:6px;">
       <p class="section-title" style="margin-top:0;">Vista previa en vivo</p>
-      <div id="rndPreviaCaja" style="position:relative; border:1px solid var(--border-soft); border-radius:9px; overflow:hidden; background:var(--panel-2); min-height:180px; display:flex; align-items:center; justify-content:center;">
+      <div id="rndPreviaCaja" style="position:relative; border:1px solid var(--border-soft); border-radius:9px; overflow:hidden; background:var(--panel-2); min-height:300px; display:flex; align-items:center; justify-content:center;">
         <img id="rndPreviaImg" style="width:100%; display:block;" />
         <span id="rndPreviaMsg" style="font-size:10.5px; color:var(--text-faint); padding:14px; text-align:center;">Movés un control y se actualiza sola.</span>
         </div>
@@ -734,8 +741,8 @@
       <input type="range" id="rndFill" min="0" max="1.8" step="0.05" value="1" style="width:100%;" />
       <p style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">Menos relleno = sombras más marcadas entre bloques y más volumen. Demasiado poco y los rincones quedan negros.</p>
 
-      <div class="row" style="margin-top:8px;"><span class="label-sm">Reflejo del entorno</span><span class="value-mono" id="rndEnvVal">0.90</span></div>
-      <input type="range" id="rndEnv" min="0" max="2" step="0.05" value="0.9" style="width:100%;" />
+      <div class="row" style="margin-top:8px;"><span class="label-sm">Reflejo del entorno</span><span class="value-mono" id="rndEnvVal">1.60</span></div>
+      <input type="range" id="rndEnv" min="0" max="4" step="0.05" value="1.6" style="width:100%;" />
       <p style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">Le da al plástico algo que reflejar: techo claro arriba, piso oscuro abajo. Es lo que separa un plástico apagado de uno que parece fotografiado.</p>
 
       <div class="row" style="margin-top:8px;"><span class="label-sm">Fuerza de las sombras</span><span class="value-mono" id="rndContVal">0.50</span></div>
@@ -3041,7 +3048,7 @@ function entornoEstudio(){
 
 /* Ajustes de la foto de presentación. Antes estaban clavados en el código; se
    guardan en el navegador para no volver a calibrarlos en cada sesión. */
-const RENDER_DEFAULT = { key:1.55, relleno:1.0, brillo:0.5, aire:1.08, calidad:1600, fondo:'estudio', portada:false, sombras:false, pisoSombra:true, sombraOpacidad:0.35, oclusion:0.75, luz:'ai', entorno:0.9, contraste:0.5 };
+const RENDER_DEFAULT = { key:1.55, relleno:1.0, brillo:0.5, aire:1.08, calidad:1600, fondo:'estudio', portada:false, sombras:false, pisoSombra:true, sombraOpacidad:0.35, oclusion:0.75, luz:'ai', entorno:1.6, contraste:0.5 };
 const RENDER_KEY = '3dblock.render';
 function cargarConfigRender(){
   try{
@@ -3345,6 +3352,13 @@ async function generatePresentationRender(opciones){
 
   const wasFullDesign = showFullDesign;
   showFullDesign = true;
+  /* La foto usa SIEMPRE el bloque real con sus tachones, sin importar qué tenga
+     puesto el visor. Si estaba en "simple" no hay tachones, y sin tachones no
+     hay sombras de tachón ni reflejos en los bordes: la foto pierde justo lo
+     que la hace parecer real. Es una sola imagen, así que el costo se paga una
+     vez, no como en el manual que son 72. */
+  const wasStyleFoto = blockStyle, wasFlatFoto = flatBlockMode, wasPiezasFoto = renderAsPieces;
+  blockStyle = 'magic2'; flatBlockMode = false; renderAsPieces = true;
   // Se rearma SIEMPRE, aunque ya estuviera en modelo completo, porque acá se
   // aplica la oclusión ambiental y el visor normal no la tiene.
   rebuildMesh3D({ oclusion: configRender.oclusion });
@@ -3400,10 +3414,12 @@ async function generatePresentationRender(opciones){
   // pieza recién impresa; en 1, brillante como una inyectada.
   const b = configRender.brillo;
   const realMat = new THREE.MeshPhysicalMaterial({
-    roughness: 0.62 - 0.42*b,
+    // Rango ampliado: en el tope queda casi pulido (rugosidad 0.08) con capa
+    // brillante al máximo, que es donde el reflejo del entorno se ve de verdad.
+    roughness: 0.62 - 0.54*b,
     metalness: 0.02,
-    clearcoat: 0.10 + 0.75*b,
-    clearcoatRoughness: 0.30 - 0.16*b,
+    clearcoat: 0.10 + 0.90*b,
+    clearcoatRoughness: 0.34 - 0.30*b,
     envMap: configRender.entorno > 0 ? entornoEstudio() : null,
     envMapIntensity: configRender.entorno,
   });
@@ -3431,7 +3447,11 @@ async function generatePresentationRender(opciones){
     if (!key.target.parent) scene.add(key.target);
     key.target.updateMatrixWorld();
     key.castShadow = true;
-    key.shadow.mapSize.set(2048, 2048);
+    // 4096 en vez de 2048: con la mitad de resolución la sombra de un tachón
+    // ocupaba menos de un píxel del mapa y desaparecía. Los tachones son el
+    // detalle más chico del modelo, así que marcan el mínimo que hay que
+    // resolver.
+    key.shadow.mapSize.set(4096, 4096);
     const cs = key.shadow.camera;
     // El área que calcula la luz tiene que abarcar el modelo Y su sombra en el
     // piso, no solo el modelo. Con la principal a unos 46° de altura, la sombra
@@ -3442,8 +3462,11 @@ async function generatePresentationRender(opciones){
     cs.near = Math.max(0.1, R*0.5); cs.far = R*8;
     cs.updateProjectionMatrix();
     // Sesgo: sin esto aparecen rayas de sombra sobre las propias caras iluminadas.
-    key.shadow.bias = -0.0007;
-    key.shadow.normalBias = Math.max(0.02, R*0.004);
+    /* El sesgo evita las rayas de sombra sobre las caras iluminadas, pero si se
+       pasa, borra las sombras chicas: el tachón deja de proyectar. Se baja al
+       mínimo que sigue funcionando, proporcional al tamaño del modelo. */
+    key.shadow.bias = -0.00025;
+    key.shadow.normalBias = Math.max(0.006, R*0.0012);
     cuerpos.forEach(m=>{
       wasSombraObjetos.push([m, m.castShadow, m.receiveShadow]);
       m.castShadow = true;
@@ -3611,7 +3634,8 @@ async function generatePresentationRender(opciones){
   axesHelper.visible = wasAxesVisible;
   grid.visible = wasGridVisible;
   showFullDesign = wasFullDesign;
-  rebuildMesh3D();   // vuelve al dibujado del visor, sin oclusión
+  blockStyle = wasStyleFoto; flatBlockMode = wasFlatFoto; renderAsPieces = wasPiezasFoto;
+  rebuildMesh3D();   // vuelve al dibujado del visor, sin oclusión y con su bloque
   if (wasShow2D) setView('2d');
   renderer.render(scene, camera);
 
