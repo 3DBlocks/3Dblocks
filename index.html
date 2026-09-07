@@ -560,7 +560,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v99</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v100</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -720,7 +720,11 @@
         </div>
       <p style="font-size:10.5px; color:var(--text-faint); margin:0 0 10px; line-height:1.5;">Ajustá la luz y el acabado hasta que se parezca al render que buscás. Los valores quedan guardados y se usan cada vez que sacás la foto.</p>
 
-      <div class="row"><span class="label-sm">Desde dónde viene la luz</span></div>
+      <div class="row"><span class="label-sm">Exposición</span><span class="value-mono" id="rndExpVal">1.15</span></div>
+      <input type="range" id="rndExp" min="0.4" max="2.5" step="0.05" value="1.15" style="width:100%;" />
+      <p style="font-size:10px; color:var(--text-faint); margin:4px 0 0 0; line-height:1.4;">Es el diafragma de la cámara. La foto usa la misma curva de tono que el cine, así que las luces altas se apagan suave en vez de recortarse en blanco.</p>
+
+      <div class="row" style="margin-top:8px;"><span class="label-sm">Desde dónde viene la luz</span></div>
       <div id="rndLuzGrid" style="display:grid; grid-template-columns:repeat(3,1fr); gap:4px; margin-bottom:4px;">
         <button class="btn sm" data-luz="ai" title="Arriba izquierda">↖</button>
         <button class="btn sm" data-luz="ac" title="Arriba, de frente">↑</button>
@@ -3117,7 +3121,7 @@ function entornoEstudio(){
 
 /* Ajustes de la foto de presentación. Antes estaban clavados en el código; se
    guardan en el navegador para no volver a calibrarlos en cada sesión. */
-const RENDER_DEFAULT = { key:1.7, relleno:1.0, brillo:0.85, aire:1.08, calidad:1600, fondo:'estudio', portada:false, sombras:false, pisoSombra:true, sombraOpacidad:0.35, oclusion:1.0, luz:'ai', entorno:6, contraste:0.7, techo:0.8, vidrio:0.55, bisel:0.03 };
+const RENDER_DEFAULT = { key:1.7, relleno:1.0, brillo:0.85, aire:1.08, calidad:1600, fondo:'estudio', portada:false, sombras:false, pisoSombra:true, sombraOpacidad:0.35, oclusion:1.0, luz:'ai', entorno:6, contraste:0.7, techo:0.8, vidrio:0.55, exposicion:1.15, bisel:0.03 };
 const RENDER_KEY = '3dblock.render';
 function cargarConfigRender(){
   try{
@@ -3329,6 +3333,8 @@ function refrescarPanelRender(){
   document.getElementById('rndKeyVal').textContent = Number(configRender.key).toFixed(2);
   document.getElementById('rndFillVal').textContent = Number(configRender.relleno).toFixed(2);
   document.getElementById('rndGlossVal').textContent = Number(configRender.brillo).toFixed(2);
+  document.getElementById('rndExp').value = configRender.exposicion;
+  document.getElementById('rndExpVal').textContent = Number(configRender.exposicion).toFixed(2);
   document.getElementById('rndVidrio').value = configRender.vidrio;
   document.getElementById('rndVidrioVal').textContent = Number(configRender.vidrio).toFixed(2);
   document.getElementById('rndTecho').value = configRender.techo;
@@ -3389,6 +3395,7 @@ document.getElementById('rndOclu').addEventListener('input', e=>cambiarConfigRen
 document.getElementById('rndEnv').addEventListener('input', e=>cambiarConfigRender({ entorno: parseFloat(e.target.value) }));
 document.getElementById('rndTecho').addEventListener('input', e=>cambiarConfigRender({ techo: parseFloat(e.target.value) }));
 document.getElementById('rndVidrio').addEventListener('input', e=>cambiarConfigRender({ vidrio: parseFloat(e.target.value) }));
+document.getElementById('rndExp').addEventListener('input', e=>cambiarConfigRender({ exposicion: parseFloat(e.target.value) }));
 document.getElementById('rndBisel').addEventListener('input', e=>cambiarConfigRender({ bisel: parseFloat(e.target.value) }));
 document.getElementById('rndCont').addEventListener('input', e=>cambiarConfigRender({ contraste: parseFloat(e.target.value) }));
 document.getElementById('rndLuzGrid').addEventListener('click', e=>{
@@ -3488,6 +3495,21 @@ async function generatePresentationRender(opciones){
   // Luces de estudio: las del visor tienen un cielo azulado y un contraluz
   // verdoso que quedan bien en pantalla pero tiñen la foto y la aplanan. Acá se
   // pasan a luz neutra con más contraste y se devuelven al terminar.
+  /* CURVA DE TONO — esto es lo que faltaba de verdad.
+
+     El motor venía en NoToneMapping: cualquier valor de luz igual o mayor a 1 se
+     recorta a blanco puro. Por eso subir el reflejo o el brillo no cambiaba
+     nada visible: los reflejos ya pasaban de 1 y se recortaban todos al mismo
+     blanco plano. Es también la razón de que la imagen se viera "de programa":
+     sin curva, las luces altas se aplastan de golpe en vez de apagarse
+     suavemente como en una cámara.
+
+     ACES es la curva que usan cine y los motores fotorrealistas. Con ella una
+     luz de 1.5 da 0.88 y una de 4 da 0.97: siguen distinguiéndose en vez de
+     empastarse. La exposición hace de diafragma. */
+  const wasTono = renderer.toneMapping, wasExp = renderer.toneMappingExposure;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = configRender.exposicion;
   const wasEnv = scene.environment;
   if (configRender.entorno > 0) scene.environment = entornoEstudio();
   const luces = guardarLuces();
@@ -3761,6 +3783,7 @@ async function generatePresentationRender(opciones){
   key.castShadow = wasKeyCast;
   wasSombraObjetos.forEach(([m, c, r])=>{ m.castShadow = c; m.receiveShadow = r; });
   restaurarLuces(luces);
+  renderer.toneMapping = wasTono; renderer.toneMappingExposure = wasExp;
   scene.environment = wasEnv;
   scene.background = wasBg;
   scene.fog = wasFog;
