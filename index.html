@@ -566,7 +566,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v102</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v103</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -770,6 +770,10 @@
       <div class="row fino" style="margin-top:8px;"><span class="label-sm">Fuerza de las sombras</span><span class="value-mono" id="rndContVal">0.70</span></div>
       <input class="fino" type="range" id="rndCont" min="0" max="1" step="0.05" value="0.7" style="width:100%;" />
       <p class="fino" style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">Qué tan oscuras se ven las zonas en sombra. Al subirlo baja el relleno y sube la luz principal.</p>
+
+      <div class="row fino" style="margin-top:8px;"><span class="label-sm">Suavidad de la sombra</span><span class="value-mono" id="rndSuavVal">0.55</span></div>
+      <input class="fino" type="range" id="rndSuav" min="0" max="1" step="0.05" value="0.55" style="width:100%;" />
+      <p class="fino" style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">Borde de la sombra: a la izquierda filoso, a la derecha difuso como el de una foto con luz de ventana.</p>
 
       <div class="row fino" style="margin-top:8px;"><span class="label-sm">Sombreado de rincones</span><span class="value-mono" id="rndOcluVal">1.00</span></div>
       <input class="fino" type="range" id="rndOclu" min="0" max="1.2" step="0.05" value="1" style="width:100%;" />
@@ -1214,9 +1218,18 @@ scene.add(hemi);
 const ambient = new THREE.AmbientLight(0xffffff, 0.55);
 scene.add(ambient);
 const key = new THREE.DirectionalLight(0xfff8e8, 1.35);
+/* Dos luces flojas y cruzadas, para imitar la luz que rebota en un cuarto. En la
+   foto la luz no viene de un solo lado: entra por la ventana, rebota en la pared
+   y en la mesa, y llega de varias direcciones. Con un solo foco, las caras que
+   le dan la espalda quedan planas y las estrías del bloque no se leen. */
+const luzCuarto1 = new THREE.DirectionalLight(0xffffff, 0);
+luzCuarto1.position.set(8, 4, -6);
+const luzCuarto2 = new THREE.DirectionalLight(0xffffff, 0);
+luzCuarto2.position.set(-7, -2, -8);
 key.position.set(6, 10, 5);
 key.castShadow = false;
 scene.add(key);
+scene.add(luzCuarto1); scene.add(luzCuarto2);
 const rim = new THREE.DirectionalLight(0x2dd4bf, 0.16);
 rim.position.set(-8, 4, -6);
 scene.add(rim);
@@ -3137,7 +3150,7 @@ function entornoEstudio(){
 
 /* Ajustes de la foto de presentación. Antes estaban clavados en el código; se
    guardan en el navegador para no volver a calibrarlos en cada sesión. */
-const RENDER_DEFAULT = { key:1.9, relleno:1.0, brillo:0.45, aire:1.08, calidad:1600, fondo:'estudio', portada:false, sombras:false, pisoSombra:true, sombraOpacidad:0.22, oclusion:1.0, luz:'ai', entorno:1.2, contraste:0.7, techo:0.8, vidrio:0.55, exposicion:1.15, bisel:0.03 };
+const RENDER_DEFAULT = { key:1.9, relleno:1.0, brillo:0.45, aire:1.08, calidad:1600, fondo:'estudio', portada:false, sombras:false, pisoSombra:true, sombraOpacidad:0.22, oclusion:1.0, luz:'ai', entorno:1.2, contraste:0.7, techo:0.8, vidrio:0.55, exposicion:1.15, suavidad:0.55, bisel:0.03 };
 const RENDER_KEY = '3dblock.render';
 function cargarConfigRender(){
   try{
@@ -3209,12 +3222,15 @@ function lucesDeEstudio(){
   // Luz principal desde arriba a la izquierda y algo al frente, como la foto de
   // Studio: marca el volumen de cada bloque sin quemar las caras claras.
   key.color.set(0xffffff); key.intensity = configRender.key * (1 + 0.55*k); key.position.set(-5, 9, 7);
+  luzCuarto1.intensity = 0.30 * configRender.relleno * (1 - 0.5*k);
+  luzCuarto2.intensity = 0.22 * configRender.relleno * (1 - 0.5*k);
   // Contraluz neutro (antes era verdoso y teñía los bordes) para despegar la
   // figura del fondo.
   rim.color.set(0xffffff); rim.intensity = 0.42; rim.position.set(6, 5, -7);
   fillPt.intensity = 0; // el punto ámbar amarilleaba un lado
 }
 function restaurarLuces(g){
+  luzCuarto1.intensity = 0; luzCuarto2.intensity = 0;
   hemi.color.copy(g.hemiColor); hemi.groundColor.copy(g.hemiGround); hemi.intensity = g.hemiInt;
   ambient.intensity = g.ambInt;
   key.intensity = g.keyInt; key.color.copy(g.keyColor); key.position.copy(g.keyPos);
@@ -3361,6 +3377,8 @@ function refrescarPanelRender(){
   document.getElementById('rndEnvVal').textContent = Number(configRender.entorno).toFixed(2);
   document.getElementById('rndCont').value = configRender.contraste;
   document.getElementById('rndContVal').textContent = Number(configRender.contraste).toFixed(2);
+  document.getElementById('rndSuav').value = configRender.suavidad;
+  document.getElementById('rndSuavVal').textContent = Number(configRender.suavidad).toFixed(2);
   document.getElementById('rndOclu').value = configRender.oclusion;
   document.getElementById('rndOcluVal').textContent = Number(configRender.oclusion).toFixed(2);
   document.querySelectorAll('#rndLuzGrid button').forEach(b=>b.classList.toggle('primary', b.dataset.luz === configRender.luz));
@@ -3408,6 +3426,7 @@ document.getElementById('rndKey').addEventListener('input', e=>cambiarConfigRend
 document.getElementById('rndFill').addEventListener('input', e=>cambiarConfigRender({ relleno: parseFloat(e.target.value) }));
 document.getElementById('rndGloss').addEventListener('input', e=>cambiarConfigRender({ brillo: parseFloat(e.target.value) }));
 document.getElementById('rndOclu').addEventListener('input', e=>cambiarConfigRender({ oclusion: parseFloat(e.target.value) }));
+document.getElementById('rndSuav').addEventListener('input', e=>cambiarConfigRender({ suavidad: parseFloat(e.target.value) }));
 document.getElementById('rndEnv').addEventListener('input', e=>cambiarConfigRender({ entorno: parseFloat(e.target.value) }));
 document.getElementById('rndTecho').addEventListener('input', e=>cambiarConfigRender({ techo: parseFloat(e.target.value) }));
 document.getElementById('rndVidrio').addEventListener('input', e=>cambiarConfigRender({ vidrio: parseFloat(e.target.value) }));
@@ -3629,6 +3648,12 @@ async function generatePresentationRender(opciones){
     /* El sesgo evita las rayas de sombra sobre las caras iluminadas, pero si se
        pasa, borra las sombras chicas: el tachón deja de proyectar. Se baja al
        mínimo que sigue funcionando, proporcional al tamaño del modelo. */
+    /* Suavidad del borde. En una foto la sombra de una pieza sobre otra tiene el
+       borde difuso, porque la luz no viene de un punto sino de una ventana
+       entera. El radio del mapa imita eso: 1 da borde de navaja, 12 lo vuelve un
+       degradado. Es lo que más acerca la sombra a la de una foto. */
+    key.shadow.radius = 1 + 11 * configRender.suavidad;
+    if ('blurSamples' in key.shadow) key.shadow.blurSamples = Math.round(8 + 16*configRender.suavidad);
     key.shadow.bias = -0.00025;
     key.shadow.normalBias = Math.max(0.006, R*0.0012);
     cuerpos.forEach(m=>{
