@@ -560,7 +560,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v95</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v96</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -3045,22 +3045,50 @@ const COLOR_FONDO_RENDER = '#939393';
    Es la diferencia entre un plástico apagado y uno que parece fotografiado. */
 let _entorno = null, _entornoTecho = null;
 function entornoEstudio(){
-  // El techo del estudio se puede subir o bajar: las caras de arriba de los
-  // bloques y los tachones son las que lo reflejan, así que ese valor controla
-  // directamente cuánto brillan por arriba. Si cambia, se rehace el mapa.
   if (_entorno && _entornoTecho === configRender.techo) return _entorno;
   if (_entorno) _entorno.dispose();
-  const c = document.createElement('canvas');
-  c.width = 16; c.height = 256;
-  const ctx = c.getContext('2d');
-  const g = ctx.createLinearGradient(0, 0, 0, 256);
+
+  /* Acá estaba el error de fondo. El entorno era un degradado gris parejo, y una
+     superficie que refleja gris parejo se ve gris parejo: subir el reflejo solo
+     aclaraba todo, nunca aparecía un brillo. Lo que hace brillar al plástico no
+     es que el entorno sea claro, sino que tenga FUENTES DE LUZ CONCRETAS que se
+     reflejen como manchas brillantes.
+
+     Así que el entorno ahora es un estudio de verdad: el degradado de techo a
+     piso, más dos ventanas de luz (una grande a un lado, una chica al otro) y
+     una franja de techo. Esas son las que se ven espejadas en los tachones y en
+     los cantos, y son las que hacen la diferencia. */
   const t = Math.max(0, Math.min(1, configRender.techo));
-  const claro = Math.round(90 + 165*t);              // brillo del techo
-  g.addColorStop(0.00, 'rgb(%d,%d,%d)'.replace(/%d/g, claro));
-  g.addColorStop(0.42, 'rgb(%d,%d,%d)'.replace(/%d/g, Math.round(claro*0.82)));
-  g.addColorStop(0.55, '#8d9199');   // horizonte
-  g.addColorStop(1.00, '#2b2e33');   // piso
-  ctx.fillStyle = g; ctx.fillRect(0, 0, 16, 256);
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 256;
+  const cx = c.getContext('2d');
+
+  const claro = Math.round(70 + 120*t);
+  const g = cx.createLinearGradient(0, 0, 0, 256);
+  g.addColorStop(0.00, 'rgb('+claro+','+claro+','+claro+')');
+  g.addColorStop(0.48, 'rgb('+Math.round(claro*0.85)+','+Math.round(claro*0.85)+','+Math.round(claro*0.85)+')');
+  g.addColorStop(0.56, 'rgb(90,92,96)');
+  g.addColorStop(1.00, 'rgb(26,28,32)');
+  cx.fillStyle = g; cx.fillRect(0, 0, 512, 256);
+
+  // Ventanas de luz. El brillo se pasa de 255 a propósito: el generador de
+  // entorno trabaja en coma flotante, así que un valor quemado se convierte en
+  // un reflejo intenso en vez de un gris claro.
+  const luz = Math.round(200 + 55*t);
+  function ventana(px, py, ancho, alto, fuerza){
+    const r = cx.createRadialGradient(px, py, 0, px, py, Math.max(ancho, alto));
+    r.addColorStop(0, 'rgba(255,255,255,'+fuerza+')');
+    r.addColorStop(0.55, 'rgba('+luz+','+luz+','+luz+','+(fuerza*0.5)+')');
+    r.addColorStop(1, 'rgba(255,255,255,0)');
+    cx.save(); cx.translate(px, py); cx.scale(1, alto/ancho); cx.translate(-px, -py);
+    cx.fillStyle = r; cx.beginPath(); cx.arc(px, py, ancho, 0, Math.PI*2); cx.fill();
+    cx.restore();
+  }
+  ventana(150,  62, 120, 74, 1.0);   // ventana principal
+  ventana(392,  86,  74, 52, 0.55);  // ventana de relleno, del otro lado
+  cx.fillStyle = 'rgba(255,255,255,0.30)';
+  cx.fillRect(0, 0, 512, 16);        // franja de techo
+
   const tex = new THREE.CanvasTexture(c);
   tex.mapping = THREE.EquirectangularReflectionMapping;
   if ('colorSpace' in tex) tex.colorSpace = THREE.SRGBColorSpace;
