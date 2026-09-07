@@ -560,7 +560,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v97</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v98</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -751,7 +751,7 @@
 
       <div class="row" style="margin-top:8px;"><span class="label-sm">Reflejo del entorno</span><span class="value-mono" id="rndEnvVal">6.00</span></div>
       <input type="range" id="rndEnv" min="0" max="16" step="0.1" value="6" style="width:100%;" />
-      <p style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">Le da al plástico algo que reflejar: techo claro arriba, piso oscuro abajo. Es lo que separa un plástico apagado de uno que parece fotografiado.</p>
+      <p style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">El estudio va oscuro con dos ventanas de luz. Así el reflejo se ve como un barniz encima y no como una capa de gris que lava el color.</p>
 
       <div class="row" style="margin-top:8px;"><span class="label-sm">Fuerza de las sombras</span><span class="value-mono" id="rndContVal">0.70</span></div>
       <input type="range" id="rndCont" min="0" max="1" step="0.05" value="0.7" style="width:100%;" />
@@ -3067,12 +3067,19 @@ function entornoEstudio(){
   c.width = 512; c.height = 256;
   const cx = c.getContext('2d');
 
-  const claro = Math.round(70 + 120*t);
+  /* El fondo del estudio va OSCURO a propósito.
+     El mapa de entorno hace dos cosas al mismo tiempo: aporta luz difusa, que se
+     suma al color de la pieza y lo lava hacia el gris, y aporta reflejo. Si el
+     entorno es claro y parejo, lo que más pesa es lo primero: los colores se
+     apagan y el modelo se ve deslavado. Por eso el ambiente va oscuro y toda la
+     luz se concentra en las ventanas: así casi no hay lavado y el reflejo sigue
+     estando, como un barniz transparente en vez de una capa de gris encima. */
+  const claro = Math.round(18 + 40*t);
   const g = cx.createLinearGradient(0, 0, 0, 256);
   g.addColorStop(0.00, 'rgb('+claro+','+claro+','+claro+')');
-  g.addColorStop(0.48, 'rgb('+Math.round(claro*0.85)+','+Math.round(claro*0.85)+','+Math.round(claro*0.85)+')');
-  g.addColorStop(0.56, 'rgb(90,92,96)');
-  g.addColorStop(1.00, 'rgb(26,28,32)');
+  g.addColorStop(0.48, 'rgb('+Math.round(claro*0.7)+','+Math.round(claro*0.7)+','+Math.round(claro*0.7)+')');
+  g.addColorStop(0.56, 'rgb(16,17,19)');
+  g.addColorStop(1.00, 'rgb(6,6,8)');
   cx.fillStyle = g; cx.fillRect(0, 0, 512, 256);
 
   // Ventanas de luz. El brillo se pasa de 255 a propósito: el generador de
@@ -3088,10 +3095,10 @@ function entornoEstudio(){
     cx.fillStyle = r; cx.beginPath(); cx.arc(px, py, ancho, 0, Math.PI*2); cx.fill();
     cx.restore();
   }
-  ventana(150,  62, 120, 74, 1.0);   // ventana principal
-  ventana(392,  86,  74, 52, 0.55);  // ventana de relleno, del otro lado
-  cx.fillStyle = 'rgba(255,255,255,0.30)';
-  cx.fillRect(0, 0, 512, 16);        // franja de techo
+  ventana(150,  58,  92, 54, 1.0);   // ventana principal
+  ventana(392,  78,  52, 34, 0.85);  // ventana de relleno, del otro lado
+  cx.fillStyle = 'rgba(255,255,255,0.16)';
+  cx.fillRect(0, 0, 512, 10);        // franja de techo, apenas insinuada
 
   const tex = new THREE.CanvasTexture(c);
   tex.mapping = THREE.EquirectangularReflectionMapping;
@@ -3499,8 +3506,11 @@ async function generatePresentationRender(opciones){
        sin ellos, bajar la rugosidad sola no alcanza para un plástico lustroso. */
     roughness: Math.max(0.02, 0.62 - 0.60*b),
     metalness: 0.02,
-    clearcoat: 0.10 + 0.90*b,
-    clearcoatRoughness: Math.max(0.02, 0.34 - 0.32*b),
+    /* El barniz (clearcoat) es una capa transparente ENCIMA del color: refleja
+       sin teñir lo de abajo, igual que una mano de laca sobre pintura. Es la
+       parte del brillo que NO lava el color, así que se lleva al máximo. */
+    clearcoat: Math.min(1, 0.25 + 0.90*b),
+    clearcoatRoughness: Math.max(0.015, 0.30 - 0.29*b),
     reflectivity: 0.35 + 0.65*b,
     specularIntensity: 0.5 + 1.5*b,
     envMap: configRender.entorno > 0 ? entornoEstudio() : null,
