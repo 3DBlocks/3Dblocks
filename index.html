@@ -566,7 +566,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v103</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v104</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -4724,26 +4724,76 @@ async function generateInstructionsPDF(){
     const pageW = 210, pageH = 297;
     const modelName = (document.getElementById('modelNameText').textContent || ('Diseño ' + MARCA_NOMBRE)).trim();
 
-    // ---- Portada ----
+    /* ---- Portada ----
+       Con la identidad del programa: azul noche de fondo, cian de acento y el
+       violeta secundario. El nombre del diseño manda: va grande y primero,
+       porque es lo que uno busca cuando tiene varios manuales sobre la mesa. */
     doc.setFillColor(8,11,19);
     doc.rect(0,0,pageW,pageH,'F');
-    doc.setTextColor(242,177,52);
-    doc.setFontSize(28);
-    doc.text(MARCA_NOMBRE.toUpperCase(), pageW/2, 24, { align:'center' });
+
+    /* Logo: el bloque isométrico con sus estrías, no la caja lisa.
+       Se dibuja a mano con jsPDF porque un SVG no se puede incrustar directo.
+       La forma es la de siempre: un rombo arriba (la tapa vista en perspectiva)
+       y dos caras laterales colgando de sus bordes. */
+    (function logo(cx, cy, e){
+      const w = e, hh = e*0.5, H = e*1.05;   // medio ancho, medio alto del rombo, alto del cuerpo
+      // tapa
+      doc.setFillColor(52,223,245);
+      doc.lines([[w,-hh],[w,hh],[-w,hh],[-w,-hh]], cx-w, cy, [1,1], 'F', true);
+      // cara izquierda
+      doc.setFillColor(26,124,155);
+      doc.lines([[0,H],[w,hh],[0,-H],[-w,-hh]], cx-w, cy, [1,1], 'F', true);
+      // cara derecha, la más oscura
+      doc.setFillColor(17,86,112);
+      doc.lines([[0,H],[-w,hh],[0,-H],[w,-hh]], cx+w, cy, [1,1], 'F', true);
+      // ESTRÍAS: las nervaduras verticales de la pieza real, que es lo que la
+      // distingue de una caja lisa. Siguen la inclinación de cada cara.
+      doc.setLineWidth(0.17);
+      for (let i=1; i<6; i++){
+        const t = i/6;
+        doc.setDrawColor(14,74,96);
+        doc.line(cx-w+w*t, cy+hh*t, cx-w+w*t, cy+hh*t+H);
+        doc.setDrawColor(11,60,80);
+        doc.line(cx+w-w*t, cy+hh*t, cx+w-w*t, cy+hh*t+H);
+      }
+      // tachones de la tapa
+      doc.setFillColor(146,246,255);
+      doc.circle(cx-w*0.40, cy-hh*0.02, e*0.14, 'F');
+      doc.circle(cx+w*0.40, cy-hh*0.02, e*0.14, 'F');
+      doc.circle(cx, cy-hh*0.44, e*0.14, 'F');
+      doc.circle(cx, cy+hh*0.42, e*0.14, 'F');
+      // el destello violeta
+      doc.setDrawColor(162,113,255); doc.setLineWidth(0.65);
+      doc.line(cx+w*1.55, cy-hh*1.5, cx+w*1.55, cy-hh*0.3);
+      doc.line(cx+w*1.25, cy-hh*0.9, cx+w*1.85, cy-hh*0.9);
+    })(28, 24, 5.6);
+
+    doc.setTextColor(52,223,245);
+    doc.setFontSize(15);
+    doc.text(MARCA_NOMBRE.toUpperCase(), 42, 24);
+    doc.setFontSize(7.5);
+    doc.setTextColor(120,132,158);
+    doc.text('GUÍA DE ARMADO', 42, 30);
+
+    // Línea de acento bajo el encabezado
+    doc.setDrawColor(52,223,245); doc.setLineWidth(0.6);
+    doc.line(14, 36, pageW-14, 36);
+
+    // El nombre del archivo, en grande: es lo que identifica al manual
     doc.setTextColor(255,255,255);
-    doc.setFontSize(17);
-    doc.text(modelName, pageW/2, 36, { align:'center' });
+    doc.setFontSize(30);
+    doc.text(modelName, pageW/2, 50, { align:'center' });
     doc.setFontSize(10.5);
-    doc.setTextColor(180,186,204);
-    doc.text(voxels.length + ' bloques · ' + (maxLayer+1) + ' capas', pageW/2, 44, { align:'center' });
+    doc.setTextColor(162,113,255);
+    doc.text(voxels.length + ' bloques  ·  ' + (maxLayer+1) + ' capas', pageW/2, 58, { align:'center' });
     // Si es un tramo y no el manual entero, la portada lo dice: si no, dos partes
     // impresas quedan indistinguibles una vez apiladas en la mesa.
     {
       const rPortada = rangoPasos();
       if (rPortada.parcial){
         doc.setFontSize(12);
-        doc.setTextColor(242,177,52);
-        doc.text('Pasos ' + (rPortada.desde+1) + ' a ' + (rPortada.hasta+1) + ' de ' + (maxLayer+1), pageW/2, 52, { align:'center' });
+        doc.setTextColor(52,223,245);
+        doc.text('Pasos ' + (rPortada.desde+1) + ' a ' + (rPortada.hasta+1) + ' de ' + (maxLayer+1), pageW/2, 63, { align:'center' });
       }
     }
 
@@ -4764,7 +4814,7 @@ async function generateInstructionsPDF(){
     const coverBox = centeredBounds();
     // Las dos fotos se reparten el ancho disponible en vez de medir 88 mm fijos,
     // que en hoja acostada dejaban media hoja vacía.
-    const coverW = Math.min(88, (pageW - 34) / 2), coverY = 52;
+    const coverW = Math.min(88, (pageW - 34) / 2), coverY = 66;
     const coverX0 = (pageW - (coverW*2 + 10)) / 2;
     if (configRender.portada && ultimoRenderPortada){
       // Una sola foto grande, la que sacaste con el botón de render y sus
@@ -4804,12 +4854,12 @@ async function generateInstructionsPDF(){
     const rows = Math.ceil(entries.length / perRow);
     const boxY = coverY + coverW + 10, titleH = 19, rowH = 9;
     const boxH = titleH + rows*rowH + 8;
-    doc.setDrawColor(242,177,52);
+    doc.setDrawColor(52,223,245);
     doc.setLineWidth(0.5);
     doc.rect(boxX, boxY, boxW, boxH, 'S');
     doc.setFontSize(12);
-    doc.setTextColor(242,177,52);
-    doc.text('Piezas del modelo (' + modelName + ')', pageW/2, boxY+9, { align:'center' });
+    doc.setTextColor(52,223,245);
+    doc.text('CODIFICACIÓN DE PIEZAS', pageW/2, boxY+9, { align:'center' });
     doc.setFontSize(9);
     doc.setTextColor(180,186,204);
     const resumen = sizeOrder.map(s=>pc.bySize.get(s)+' de ' + s).join('   ·   ');
