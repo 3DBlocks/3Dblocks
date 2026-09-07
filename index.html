@@ -566,7 +566,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v101</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v102</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -2683,7 +2683,16 @@ function rebuildMesh3D(opts){
          concentra el oscurecimiento en los huecos de verdad y deja casi intactas
          las caras expuestas. */
       const oc = mapaOclusion.get(v.x+','+Math.round(v.y)+','+v.z) || 0;
-      const f = 1 - fuerzaOclusion * 0.92 * (oc*oc);
+      let f = 1 - fuerzaOclusion * 0.92 * (oc*oc);
+      /* Variación mínima pieza por pieza.
+         En un armado de verdad ninguna pieza sale exactamente igual a la de al
+         lado: cambia un poco el tono según cómo quedó encastrada y cómo le pega
+         la luz. Un render las hace todas idénticas, y esa perfección es
+         justamente lo que el ojo lee como "hecho por computadora".
+         Se le suma a cada bloque un ±4% sacado de su propia posición, así que es
+         siempre el mismo para el mismo bloque y no titila al girar el modelo. */
+      const hv = Math.sin(v.x*127.1 + Math.round(v.y)*311.7 + v.z*74.7) * 43758.5453;
+      f *= 1 + (hv - Math.floor(hv) - 0.5) * 0.08;
       tmpColor.multiplyScalar(f);
     }
     instMesh.setColorAt(i, tmpColor);
@@ -3128,7 +3137,7 @@ function entornoEstudio(){
 
 /* Ajustes de la foto de presentación. Antes estaban clavados en el código; se
    guardan en el navegador para no volver a calibrarlos en cada sesión. */
-const RENDER_DEFAULT = { key:1.9, relleno:1.0, brillo:0.45, aire:1.08, calidad:1600, fondo:'estudio', portada:false, sombras:false, pisoSombra:true, sombraOpacidad:0.35, oclusion:1.0, luz:'ai', entorno:1.2, contraste:0.7, techo:0.8, vidrio:0.55, exposicion:1.15, bisel:0.03 };
+const RENDER_DEFAULT = { key:1.9, relleno:1.0, brillo:0.45, aire:1.08, calidad:1600, fondo:'estudio', portada:false, sombras:false, pisoSombra:true, sombraOpacidad:0.22, oclusion:1.0, luz:'ai', entorno:1.2, contraste:0.7, techo:0.8, vidrio:0.55, exposicion:1.15, bisel:0.03 };
 const RENDER_KEY = '3dblock.render';
 function cargarConfigRender(){
   try{
@@ -3589,9 +3598,7 @@ async function generatePresentationRender(opciones){
   const wasShadowType = renderer.shadowMap.type;
   const wasKeyCast = key.castShadow;
   const wasSombraObjetos = [];
-  // La mancha de contacto no necesita el mapa de sombras: solo las sombras
-  // propias (pelo sobre la cara, tachón sobre el bloque de abajo) lo usan.
-  const quiereSombras = configRender.sombras;
+  const quiereSombras = configRender.sombras || configRender.pisoSombra;
   if (quiereSombras){
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -3637,39 +3644,29 @@ async function generatePresentationRender(opciones){
      son dos cosas independientes y se pueden usar por separado. */
   if (configRender.pisoSombra){
     if (!sombraPisoMesh){
-    /* Sombra de CONTACTO, no proyectada.
-       La sombra real del foco sale larga y de borde duro, tirada hacia un
-       costado: se ve artificial. En Studio lo que hay debajo del modelo es
-       un manchón suave, centrado, que se desvanece hacia afuera. Eso no es
-       una sombra calculada sino una mancha difusa, y queda mucho mejor.
-       Se dibuja una vez como degradado radial y se reusa. */
-    const cs = document.createElement('canvas');
-    cs.width = cs.height = 256;
-    const cx = cs.getContext('2d');
-    const rg = cx.createRadialGradient(128, 128, 8, 128, 128, 126);
-    rg.addColorStop(0.00, 'rgba(0,0,0,0.85)');
-    rg.addColorStop(0.45, 'rgba(0,0,0,0.45)');
-    rg.addColorStop(0.75, 'rgba(0,0,0,0.13)');
-    rg.addColorStop(1.00, 'rgba(0,0,0,0)');
-    cx.fillStyle = rg; cx.fillRect(0, 0, 256, 256);
-    const texS = new THREE.CanvasTexture(cs);
+    /* Sombra PROYECTADA y suave.
+       La mancha circular no servía: un barco no proyecta un círculo, y se le
+       notaba enseguida. Se vuelve a la sombra de verdad, que sigue el contorno
+       del modelo, pero clara. Lo que la hacía fea antes era que era muy oscura
+       y que la luz iba baja, lo que la estiraba a un costado como una sombra de
+       atardecer. */
     sombraPisoMesh = new THREE.Mesh(
       new THREE.PlaneGeometry(1, 1),
-      new THREE.MeshBasicMaterial({ map: texS, transparent: true, depthWrite: false })
+      new THREE.ShadowMaterial({ opacity: 0.22, transparent: true })
     );
     sombraPisoMesh.rotation.x = -Math.PI/2;
-    sombraPisoMesh.renderOrder = -1;
+    sombraPisoMesh.receiveShadow = true;
     scene.add(sombraPisoMesh);
     }
-    sombraPisoMesh.material.opacity = configRender.sombraOpacidad * 1.6; // la mancha ya viene con su propio degradado
+    sombraPisoMesh.material.opacity = configRender.sombraOpacidad;
     // Apoyado en la base del modelo, apenas por debajo para que no pelee con
     // la cara de abajo de los bloques (el clásico parpadeo de dos superficies
     // en el mismo plano).
     const tam = box.getSize(new THREE.Vector3());
     const centroS = box.getCenter(new THREE.Vector3());
-    // La mancha se ajusta a la HUELLA del modelo (ancho y fondo), no a su
-    // diagonal: con la diagonal, un barco alto proyectaba una mancha enorme.
-    const huella = Math.max(tam.x, tam.z) * 1.55;
+    // El plano tiene que ser amplio para recoger toda la sombra, que sale
+    // inclinada según de dónde venga la luz.
+    const huella = Math.max(tam.x, tam.z, tam.y) * 4;
     sombraPisoMesh.position.set(centroS.x, box.min.y - tam.length()*0.002, centroS.z);
     sombraPisoMesh.scale.set(huella, huella, 1);
     sombraPisoMesh.visible = true;
