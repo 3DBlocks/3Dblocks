@@ -566,7 +566,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v104</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v105</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -4062,6 +4062,33 @@ function ensurePieceGrouping(){
    manual, en el encabezado de cada hoja, en la marca de agua y en los diálogos
    de guardar: cambiarlo en un solo lugar evita que queden restos del anterior.
    Ojo con las comillas: el apóstrofo obliga a usar comillas dobles acá. */
+/* Convierte el logo del programa (un SVG con variables CSS) en una imagen, para
+   poder meterlo en el PDF. Se resuelven las variables a su valor real porque
+   dentro de un SVG suelto no existe la hoja de estilos. */
+function logoComoImagen(px){
+  const est = getComputedStyle(document.documentElement);
+  const v = n => est.getPropertyValue(n).trim() || '#34dff5';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="${px}" height="${px}">
+    <path d="M16 5 L28 12 L16 19 L4 12 Z" fill="${v('--accent')}"/>
+    <path d="M4 12 L16 19 L16 28 L4 21 Z" fill="${v('--accent-2-dim')}"/>
+    <path d="M28 12 L16 19 L16 28 L28 21 Z" fill="${v('--accent-2')}"/>
+    <ellipse cx="11" cy="11" rx="2.6" ry="1.5" fill="${v('--panel')}" opacity=".55"/>
+    <ellipse cx="21" cy="11" rx="2.6" ry="1.5" fill="${v('--panel')}" opacity=".55"/>
+    <ellipse cx="16" cy="14.5" rx="2.6" ry="1.5" fill="${v('--panel')}" opacity=".55"/>
+    <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="${v('--accent')}"/>
+  </svg>`;
+  return new Promise(res=>{
+    const img = new Image();
+    img.onload = ()=>{
+      const c = document.createElement('canvas'); c.width = c.height = px;
+      c.getContext('2d').drawImage(img, 0, 0, px, px);
+      res(c.toDataURL('image/png'));
+    };
+    img.onerror = ()=>res(null);
+    img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+  });
+}
+
 const MARCA_NOMBRE = "RenzoD'sing";
 
 const MARCA_DEFAULT = {
@@ -4731,61 +4758,39 @@ async function generateInstructionsPDF(){
     doc.setFillColor(8,11,19);
     doc.rect(0,0,pageW,pageH,'F');
 
-    /* Logo: el bloque isométrico con sus estrías, no la caja lisa.
-       Se dibuja a mano con jsPDF porque un SVG no se puede incrustar directo.
-       La forma es la de siempre: un rombo arriba (la tapa vista en perspectiva)
-       y dos caras laterales colgando de sus bordes. */
-    (function logo(cx, cy, e){
-      const w = e, hh = e*0.5, H = e*1.05;   // medio ancho, medio alto del rombo, alto del cuerpo
-      // tapa
-      doc.setFillColor(52,223,245);
-      doc.lines([[w,-hh],[w,hh],[-w,hh],[-w,-hh]], cx-w, cy, [1,1], 'F', true);
-      // cara izquierda
-      doc.setFillColor(26,124,155);
-      doc.lines([[0,H],[w,hh],[0,-H],[-w,-hh]], cx-w, cy, [1,1], 'F', true);
-      // cara derecha, la más oscura
-      doc.setFillColor(17,86,112);
-      doc.lines([[0,H],[-w,hh],[0,-H],[w,-hh]], cx+w, cy, [1,1], 'F', true);
-      // ESTRÍAS: las nervaduras verticales de la pieza real, que es lo que la
-      // distingue de una caja lisa. Siguen la inclinación de cada cara.
-      doc.setLineWidth(0.17);
-      for (let i=1; i<6; i++){
-        const t = i/6;
-        doc.setDrawColor(14,74,96);
-        doc.line(cx-w+w*t, cy+hh*t, cx-w+w*t, cy+hh*t+H);
-        doc.setDrawColor(11,60,80);
-        doc.line(cx+w-w*t, cy+hh*t, cx+w-w*t, cy+hh*t+H);
-      }
-      // tachones de la tapa
-      doc.setFillColor(146,246,255);
-      doc.circle(cx-w*0.40, cy-hh*0.02, e*0.14, 'F');
-      doc.circle(cx+w*0.40, cy-hh*0.02, e*0.14, 'F');
-      doc.circle(cx, cy-hh*0.44, e*0.14, 'F');
-      doc.circle(cx, cy+hh*0.42, e*0.14, 'F');
-      // el destello violeta
-      doc.setDrawColor(162,113,255); doc.setLineWidth(0.65);
-      doc.line(cx+w*1.55, cy-hh*1.5, cx+w*1.55, cy-hh*0.3);
-      doc.line(cx+w*1.25, cy-hh*0.9, cx+w*1.85, cy-hh*0.9);
-    })(28, 24, 5.6);
+    // Logo: el MISMO del programa, rasterizado desde su SVG. Dibujarlo a mano con
+    // jsPDF daba un bloque torcido; así queda idéntico al de la interfaz.
+    const logoPNG = await logoComoImagen(240);
 
+    // Todo centrado: logo, marca y nombre en un solo eje.
+    if (logoPNG) doc.addImage(logoPNG, 'PNG', pageW/2 - 9, 14, 18, 18);
     doc.setTextColor(52,223,245);
-    doc.setFontSize(15);
-    doc.text(MARCA_NOMBRE.toUpperCase(), 42, 24);
-    doc.setFontSize(7.5);
-    doc.setTextColor(120,132,158);
-    doc.text('GUÍA DE ARMADO', 42, 30);
+    doc.setFontSize(13);
+    doc.text(MARCA_NOMBRE.toUpperCase(), pageW/2, 39, { align:'center' });
 
-    // Línea de acento bajo el encabezado
-    doc.setDrawColor(52,223,245); doc.setLineWidth(0.6);
-    doc.line(14, 36, pageW-14, 36);
+    /* Línea de acento partida al medio, con el hueco donde va el nombre. Es un
+       recurso simple pero es lo que le da el aire de interfaz al conjunto. */
+    doc.setDrawColor(52,223,245); doc.setLineWidth(0.5);
+    doc.line(28, 45, 88, 45);
+    doc.line(pageW-88, 45, pageW-28, 45);
+    doc.setFillColor(162,113,255);
+    doc.circle(93, 45, 0.9, 'F'); doc.circle(pageW-93, 45, 0.9, 'F');
+    doc.setFillColor(52,223,245);
+    doc.circle(pageW/2, 45, 1.3, 'F');
 
-    // El nombre del archivo, en grande: es lo que identifica al manual
+    // El nombre del diseño, en grande: es lo que identifica al manual
     doc.setTextColor(255,255,255);
-    doc.setFontSize(30);
-    doc.text(modelName, pageW/2, 50, { align:'center' });
-    doc.setFontSize(10.5);
-    doc.setTextColor(162,113,255);
-    doc.text(voxels.length + ' bloques  ·  ' + (maxLayer+1) + ' capas', pageW/2, 58, { align:'center' });
+    doc.setFontSize(32);
+    doc.text(modelName, pageW/2, 60, { align:'center' });
+    doc.setFontSize(10);
+    doc.setTextColor(140,150,175);
+    doc.text(voxels.length + ' BLOQUES   ·   ' + (maxLayer+1) + ' CAPAS', pageW/2, 68, { align:'center' });
+
+    // Marcas de esquina, como las de un visor
+    doc.setDrawColor(52,223,245); doc.setLineWidth(0.4);
+    [[10,10,1,1],[pageW-10,10,-1,1],[10,pageH-10,1,-1],[pageW-10,pageH-10,-1,-1]].forEach(([x,y,dx,dy])=>{
+      doc.line(x, y, x+7*dx, y); doc.line(x, y, x, y+7*dy);
+    });
     // Si es un tramo y no el manual entero, la portada lo dice: si no, dos partes
     // impresas quedan indistinguibles una vez apiladas en la mesa.
     {
@@ -4793,7 +4798,7 @@ async function generateInstructionsPDF(){
       if (rPortada.parcial){
         doc.setFontSize(12);
         doc.setTextColor(52,223,245);
-        doc.text('Pasos ' + (rPortada.desde+1) + ' a ' + (rPortada.hasta+1) + ' de ' + (maxLayer+1), pageW/2, 63, { align:'center' });
+        doc.text('Pasos ' + (rPortada.desde+1) + ' a ' + (rPortada.hasta+1) + ' de ' + (maxLayer+1), pageW/2, 73, { align:'center' });
       }
     }
 
@@ -4814,7 +4819,7 @@ async function generateInstructionsPDF(){
     const coverBox = centeredBounds();
     // Las dos fotos se reparten el ancho disponible en vez de medir 88 mm fijos,
     // que en hoja acostada dejaban media hoja vacía.
-    const coverW = Math.min(88, (pageW - 34) / 2), coverY = 66;
+    const coverW = Math.min(88, (pageW - 34) / 2), coverY = 76;
     const coverX0 = (pageW - (coverW*2 + 10)) / 2;
     if (configRender.portada && ultimoRenderPortada){
       // Una sola foto grande, la que sacaste con el botón de render y sus
