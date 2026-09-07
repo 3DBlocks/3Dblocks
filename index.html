@@ -582,7 +582,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v108</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v109</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -2528,11 +2528,22 @@ function buildPieceMeshes(visible){
       try{
         const tc = new THREE.Color();
         const lineas = buildEdgesForInstances(geo, mesh, list.length, i=>{
-          /* El contorno se decide con el color GUARDADO de la pieza, aunque la
-             capa se dibuje en gris. Probamos lo contrario en la v85 —mirar el
-             color con el que se dibuja— y las capas de abajo perdían el contraste
-             que las hacía legibles, así que se volvió a esto. */
-          tc.set(cleanColor(list[i][0].color));
+          /* El contorno se decide distinto según dónde se dibuje.
+
+             EN EL MANUAL: manda el color con el que la pieza SE VE. Las capas ya
+             armadas salen en gris, así que van todas con línea oscura, aunque el
+             bloque sea negro por dentro. Solo la capa actual, que sale con sus
+             colores reales, conserva la línea blanca en el negro.
+
+             EN EL VISOR: manda el color GUARDADO, así un bloque negro se
+             reconoce como negro aunque esté en gris. */
+          const v0 = list[i][0];
+          if (contornoInstrucciones){
+            const esActual = showFullDesign || Math.round(v0.y) === currentLayer;
+            if (esActual) tc.set(cleanColor(v0.color)); else tc.copy(belowLayerColor);
+          } else {
+            tc.set(cleanColor(v0.color));
+          }
           return colorDeContorno(tc);
         }, juntas, bandaJunta);
         scene.add(lineas);
@@ -2749,6 +2760,9 @@ function rebuildMesh3D(opts){
     // En bloques oscuros/negros, un contorno negro no se nota (todo se ve como una
     // sola masa) — así que el contorno pasa a blanco solo ahí; en el resto de
     // colores (más claros) se mantiene negro, como siempre.
+    /* Misma regla que arriba: en el manual vale el color con el que se ve (gris
+       para lo ya armado); en el visor, el color guardado del bloque. */
+    if (!contornoInstrucciones) tmpColor.set(cleanColor(v.color));
     const defaultEdgeColor = colorDeContorno(tmpColor);
     // Bloques oscuros: en el modo "Contorno blanco" les va además un recuadro
     // blanco encima. Se decide con el MISMO criterio que el color de la línea,
