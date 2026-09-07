@@ -300,6 +300,22 @@
     text-align:left; font-size:11.5px; line-height:1.25; width:100%; flex-shrink:0;
   }
   #ctxToolbar .btn:hover{ background:var(--panel-2); }
+  /* Opción activa del menú, bien visible.
+     Antes no se notaba: la regla de arriba pone `background:transparent` y venía
+     DESPUÉS de la del botón activo, así que la pisaba y la opción elegida quedaba
+     igual de oscura que las demás. Había que acercarse a la pantalla para saber
+     qué estaba puesto. Ahora va en cian, con una barra a la izquierda. */
+  #ctxToolbar .btn.active{
+    background:rgba(52,223,245,.14) !important;
+    color:var(--accent) !important;
+    border:none !important;
+    box-shadow:inset 3px 0 0 var(--accent);
+    font-weight:600;
+  }
+  #ctxToolbar .btn.active:hover{ background:rgba(52,223,245,.22) !important; }
+  /* Sin el anillo naranja del navegador al hacer clic */
+  #ctxToolbar .btn:focus{ outline:none; }
+  #ctxToolbar .btn:focus-visible{ outline:2px solid var(--accent); outline-offset:-2px; }
 
   #ctxHint{
     position:absolute; bottom:10px; left:14px; font-size:9.5px; color:var(--text-faint); font-family:var(--mono);
@@ -566,7 +582,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v107</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v108</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -656,7 +672,7 @@
       <div id="canvasHost"></div>
       <div id="ctxToolbar">
         <button class="btn icon" id="resetViewBtn" title="Buscar y centrar el diseño en la pantalla">🔍<span class="txt">Buscar</span></button>
-        <button class="btn icon active" id="flatBlockBtn" title="Cambia el estilo del bloque: simple (caja lisa) → con muesca (botón arriba) → Magic Block real (la pieza física, con sus dientes de encastre)">◻️<span class="txt">Bloque: simple</span></button>
+        <button class="btn icon active" id="flatBlockBtn" title="Cambia el estilo del bloque: con muesca → Magic Block B (la pieza física con sus dientes) → hama bead (tubito con agujero)">◻️<span class="txt">Bloque: con muesca</span></button>
         <button class="btn icon active" id="belowLayersBtn" title="Mostrar/ocultar capas ya construidas (en gris)">▤<span class="txt">Gris</span></button>
         <button class="btn icon" id="fullViewBtn" title="Ver el diseño completo, con todos los colores">👁<span class="txt">Completo</span></button>
         <button class="btn icon" id="bgToggleBtn" title="Cambiar fondo del visor">◐<span class="txt">Fondo</span></button>
@@ -984,12 +1000,11 @@
     <input type="range" id="previewZoomSlider" min="0.8" max="3" step="0.1" value="1.3" style="width:130px;" />
     <span id="previewZoomVal" style="color:var(--accent); font-size:12px; font-family:var(--mono); min-width:30px;">1.3x</span>
     <span style="color:var(--text-dim); font-size:12.5px; margin-left:6px;">Bloque:</span>
-    <select id="bloqueManualSel" title="Si el manual no llega a generarse, probá con Simple: es el que menos trabajo le da al navegador." style="background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:7px; padding:5px 8px; font-size:12.5px;">
+    <select id="bloqueManualSel" title="Si el manual no llega a generarse, probá con Con muesca: es el que menos trabajo le da al navegador." style="background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:7px; padding:5px 8px; font-size:12.5px;">
       <option value="auto">Automático</option>
-      <option value="magic2">Real (704 caras)</option>
-      <option value="magic">Real anterior (472)</option>
-      <option value="muesca">Con muesca (419)</option>
-      <option value="simple">Simple (12) — el más liviano</option>
+      <option value="magic2">Magic Block B (704 caras)</option>
+      <option value="hama">Hama bead (tubito)</option>
+      <option value="muesca">Con muesca (419) — el más liviano</option>
     </select>
     <button class="btn primary" id="anglePreviewCloseBtn">Cerrar</button>
   </div>
@@ -2080,7 +2095,7 @@ let flatBlockMode = true; // POR DEFECTO: bloque simple (una sola caja), sin com
 let renderAsPieces = false;
 // Estilo del bloque: 'simple' (caja lisa), 'muesca' (con botón arriba) o
 // 'magic' (la malla del Magic Block real, con sus dientes de encastre).
-let blockStyle = 'simple';
+let blockStyle = 'muesca';
 // Línea blanca de separación sobre bloques oscuros. Apagada por defecto: en el
 // Magic Block se leía como un "corte" entre bloque y bloque.
 let showWhiteDarkEdge = false;
@@ -2095,6 +2110,23 @@ function buildBrickGeometry(size){
   // se veían separados. Con 0.996 se ven pegados, pero sin que las caras laterales
   // de dos bloques vecinos queden en el mismo plano exacto (eso causaría los
   // triángulos negros al apilar).
+  /* Hama bead: un tubito de plástico, no un cubo.
+     Se arma girando un perfil en U alrededor del eje vertical: pared exterior,
+     base, pared interior y borde de arriba. Así queda el agujero pasante que
+     tiene la cuenta de verdad, y se ve por dentro cuando lo mirás desde arriba. */
+  if (blockStyle === 'hama'){
+    const rExt = size*0.475, rInt = size*0.20, h = size*0.94;
+    const perfil = [
+      new THREE.Vector2(rInt, -h/2),
+      new THREE.Vector2(rExt, -h/2),
+      new THREE.Vector2(rExt,  h/2),
+      new THREE.Vector2(rInt,  h/2),
+      new THREE.Vector2(rInt, -h/2),
+    ];
+    const tubo = new THREE.LatheGeometry(perfil, 22);
+    tubo.computeVertexNormals();
+    return tubo;
+  }
   const body = new THREE.BoxGeometry(size*0.996, size*0.996, size*0.996);
   if (blockStyle === 'simple') return body; // sin botón: bloque liso
   // Botón: se hunde un poco DENTRO del cuerpo. Antes quedaba apoyado justo encima
@@ -2939,22 +2971,24 @@ document.getElementById('dupLayerBtnSide').addEventListener('click', duplicateCu
 document.getElementById('hollowLayerBtn3d').addEventListener('click', ()=> hollowInteriorBlocks(currentWallThickness(), true));
 
 document.getElementById('flatBlockBtn').addEventListener('click', e=>{
-  // Cicla entre los 3 estilos: simple → con muesca → Magic Block real → simple...
-  if (blockStyle === 'simple') blockStyle = 'muesca';
-  else if (blockStyle === 'muesca') blockStyle = 'magic';
-  else if (blockStyle === 'magic') blockStyle = 'magic2';
-  else blockStyle = 'simple';
-  const labels = { simple:['◻️','Bloque: simple'], muesca:['◻️','Bloque: con muesca'],
-                   magic:['🧱','Bloque: Magic Block'], magic2:['🧱','Bloque: Magic B'] };
+  /* Tres estilos: con muesca → Magic Block B → hama bead → y vuelve.
+     Se sacaron el bloque simple y el Magic Block viejo: el simple no se parecía
+     a ninguna pieza real y el viejo quedó reemplazado por el B, que viene de un
+     STL sano y tiene más detalle. */
+  if (blockStyle === 'muesca') blockStyle = 'magic2';
+  else if (blockStyle === 'magic2') blockStyle = 'hama';
+  else blockStyle = 'muesca';
+  const labels = { muesca:['◻️','Bloque: con muesca'],
+                   magic2:['🧱','Bloque: Magic Block B'],
+                   hama:['⭕','Bloque: hama bead'] };
   const msgs = {
-    simple: 'Bloque simple (caja lisa).',
     muesca: 'Bloque con muesca (botón arriba).',
-    magic: 'Magic Block real: la pieza física, con sus dientes de encastre metiéndose en el bloque vecino.',
-    magic2: 'Bloque B (el del STL nuevo): malla perfecta, sin agujeros. Mide 1,25 celdas de ancho, así que los dientes se meten más en el vecino — mirá si se pisan.'
+    magic2: 'Magic Block B: la pieza física con sus dientes de encastre.',
+    hama: 'Hama bead: tubito de plástico con el agujero pasante, como las cuentas para planchar.'
   };
   etiquetaBoton(e.currentTarget, labels[blockStyle][0], labels[blockStyle][1]);
-  e.currentTarget.classList.toggle('active', blockStyle !== 'simple');
-  flatBlockMode = (blockStyle === 'simple'); // se mantiene por compatibilidad
+  e.currentTarget.classList.add('active');
+  flatBlockMode = false;
   rebuildMesh3D();
   setStatus(msgs[blockStyle], 'ok');
 });
@@ -3491,11 +3525,10 @@ async function generatePresentationRender(opciones){
      vez, no como en el manual que son 72. */
   const wasStyleFoto = blockStyle, wasFlatFoto = flatBlockMode, wasPiezasFoto = renderAsPieces;
   /* Se RESPETA el bloque que tengas elegido, siempre que tenga tachones: si
-     estás usando el Real anterior (magic), la foto sale con ese. Solo se fuerza
-     el Real cuando el elegido es Simple o Con muesca, porque esos no tienen
-     tachones y sin tachones no hay ni sombras ni reflejos arriba, que es lo que
-     hace que la foto parezca real. */
-  if (!esMagic()) blockStyle = 'magic2';
+     estás usando el hama bead, la foto sale con hama beads. Solo se fuerza el
+     Magic Block B cuando el elegido es el de muesca, que es una caja con un
+     botón y no tiene el detalle que hace que la foto parezca real. */
+  if (blockStyle === 'muesca') blockStyle = 'magic2';
   flatBlockMode = false; renderAsPieces = true;
   // Se rearma SIEMPRE, aunque ya estuviera en modelo completo, porque acá se
   // aplica la oclusión ambiental y el visor normal no la tiene.
@@ -3992,13 +4025,15 @@ function contornoParaInstrucciones(){
    identificado. */
 const BLOQUE_MANUAL_KEY = '3dblock.bloqueManual';
 let bloqueManual = localStorage.getItem(BLOQUE_MANUAL_KEY) || 'auto';
+// Los estilos 'simple' y 'magic' ya no existen: quien los tuviera guardados
+// pasa al de muesca, si no el selector quedaba vacío.
+if (bloqueManual === 'simple' || bloqueManual === 'magic') bloqueManual = 'muesca';
 const CARAS_POR_ESTILO = { simple: 12, muesca: 419, magic: 472, magic2: 704 };
 
 function estiloParaInstrucciones(esVideo){
   if (bloqueManual !== 'auto'){
     blockStyle = bloqueManual;
-    if (blockStyle === 'simple') renderAsPieces = false;
-    flatBlockMode = (blockStyle === 'simple');
+    flatBlockMode = false;
     const caras = (voxels.length * (CARAS_POR_ESTILO[blockStyle] || 12) / 1e6).toFixed(1);
     setStatus('Manual con bloque "' + blockStyle + '": unos ' + caras + ' millones de caras por foto.', 'ok');
     return;
