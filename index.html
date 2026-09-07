@@ -560,7 +560,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v94</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v95</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -3087,7 +3087,7 @@ let ultimoRenderPortada = null; // dataURL JPEG de la última foto, para la port
 let sombraPisoMesh = null;      // plano que solo dibuja la sombra; se crea al primer uso
 
 const FONDOS_RENDER = {
-  estudio: ['#8a8a8a', '#9a9a9a', '#868686'],
+  estudio: ['#8f8f8f', '#949494', '#8c8c8c'],
   blanco:  ['#f2f2f2', '#ffffff', '#efefef'],
   negro:   ['#101010', '#1c1c1c', '#0b0b0b'],
 };
@@ -3096,6 +3096,10 @@ const FONDOS_RENDER = {
    una tela de fondo iluminada. Sin línea de horizonte, porque no hay piso. */
 let _texturaCiclorama = null, _cicloramaDe = null;
 function fondoCicloramaTextura(){
+  /* Medido sobre un render de Studio: su fondo es 148 PAREJO, sin degradado.
+     El mío iba de 138 a 154 y esa variación se leía como una banda diagonal
+     detrás del modelo. Se deja casi plano, con apenas una insinuación para que
+     no quede muerto. */
   const tonos = FONDOS_RENDER[configRender.fondo] || FONDOS_RENDER.estudio;
   if (_texturaCiclorama && _cicloramaDe === configRender.fondo) return _texturaCiclorama;
   if (_texturaCiclorama) _texturaCiclorama.dispose();
@@ -3477,7 +3481,9 @@ async function generatePresentationRender(opciones){
   const wasShadowType = renderer.shadowMap.type;
   const wasKeyCast = key.castShadow;
   const wasSombraObjetos = [];
-  const quiereSombras = configRender.sombras || configRender.pisoSombra;
+  // La mancha de contacto no necesita el mapa de sombras: solo las sombras
+  // propias (pelo sobre la cara, tachón sobre el bloque de abajo) lo usan.
+  const quiereSombras = configRender.sombras;
   if (quiereSombras){
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -3519,33 +3525,48 @@ async function generatePresentationRender(opciones){
       m.receiveShadow = !!configRender.sombras;
     });
 
-    // Sombra en el piso: un plano invisible que solo dibuja la sombra que le
-    // cae encima (ShadowMaterial). No se ve el plano en sí — no hay línea de
-    // horizonte ni disco gris — pero el modelo deja de flotar en el aire.
-    if (configRender.pisoSombra){
-      if (!sombraPisoMesh){
-        sombraPisoMesh = new THREE.Mesh(
-          new THREE.PlaneGeometry(1, 1),
-          new THREE.ShadowMaterial({ opacity: 0.35 })
-        );
-        sombraPisoMesh.rotation.x = -Math.PI/2;
-        sombraPisoMesh.receiveShadow = true;
-        scene.add(sombraPisoMesh);
-      }
-      sombraPisoMesh.material.opacity = configRender.sombraOpacidad;
-      // Apoyado en la base del modelo, apenas por debajo para que no pelee con
-      // la cara de abajo de los bloques (el clásico parpadeo de dos superficies
-      // en el mismo plano).
-      const RS = Math.max(1, box.getSize(new THREE.Vector3()).length());
-      sombraPisoMesh.position.set(
-        box.getCenter(new THREE.Vector3()).x,
-        box.min.y - RS*0.002,
-        box.getCenter(new THREE.Vector3()).z
-      );
-      sombraPisoMesh.scale.set(RS*6, RS*6, 1);
-      sombraPisoMesh.visible = true;
+  }    /* Mancha de contacto en el piso. Va FUERA del bloque de sombras propias:
+     son dos cosas independientes y se pueden usar por separado. */
+  if (configRender.pisoSombra){
+    if (!sombraPisoMesh){
+    /* Sombra de CONTACTO, no proyectada.
+       La sombra real del foco sale larga y de borde duro, tirada hacia un
+       costado: se ve artificial. En Studio lo que hay debajo del modelo es
+       un manchón suave, centrado, que se desvanece hacia afuera. Eso no es
+       una sombra calculada sino una mancha difusa, y queda mucho mejor.
+       Se dibuja una vez como degradado radial y se reusa. */
+    const cs = document.createElement('canvas');
+    cs.width = cs.height = 256;
+    const cx = cs.getContext('2d');
+    const rg = cx.createRadialGradient(128, 128, 8, 128, 128, 126);
+    rg.addColorStop(0.00, 'rgba(0,0,0,0.85)');
+    rg.addColorStop(0.45, 'rgba(0,0,0,0.45)');
+    rg.addColorStop(0.75, 'rgba(0,0,0,0.13)');
+    rg.addColorStop(1.00, 'rgba(0,0,0,0)');
+    cx.fillStyle = rg; cx.fillRect(0, 0, 256, 256);
+    const texS = new THREE.CanvasTexture(cs);
+    sombraPisoMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({ map: texS, transparent: true, depthWrite: false })
+    );
+    sombraPisoMesh.rotation.x = -Math.PI/2;
+    sombraPisoMesh.renderOrder = -1;
+    scene.add(sombraPisoMesh);
     }
+    sombraPisoMesh.material.opacity = configRender.sombraOpacidad * 1.6; // la mancha ya viene con su propio degradado
+    // Apoyado en la base del modelo, apenas por debajo para que no pelee con
+    // la cara de abajo de los bloques (el clásico parpadeo de dos superficies
+    // en el mismo plano).
+    const tam = box.getSize(new THREE.Vector3());
+    const centroS = box.getCenter(new THREE.Vector3());
+    // La mancha se ajusta a la HUELLA del modelo (ancho y fondo), no a su
+    // diagonal: con la diagonal, un barco alto proyectaba una mancha enorme.
+    const huella = Math.max(tam.x, tam.z) * 1.55;
+    sombraPisoMesh.position.set(centroS.x, box.min.y - tam.length()*0.002, centroS.z);
+    sombraPisoMesh.scale.set(huella, huella, 1);
+    sombraPisoMesh.visible = true;
   }
+
 
   // El contorno grueso no queda bien en una foto con luces reales — se apaga el
   // del modo normal Y el de las piezas, que son objetos distintos.
