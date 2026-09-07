@@ -341,6 +341,12 @@
     overflow-y:auto; box-shadow:-20px 0 50px rgba(0,0,0,.4);
   }
   #renderPanel.open{ transform:translateX(0); }
+  /* Panel simplificado: por defecto se ven la exposición, la dirección de la luz,
+     las dos luces y los interruptores. Los ajustes de material quedan plegados
+     detrás de un botón, porque son los que uno deja quietos una vez calibrados.
+     Se ocultan por CSS y no moviéndolos de lugar: así ningún control se pierde. */
+  #renderSection.simple .fino{ display:none; }
+  #btnFinos{ width:100%; margin-top:8px; font-size:11px; }
   /* Controles compactos: el panel tiene doce ajustes y cada uno traía su párrafo
      de ayuda. Se achican para que la vista previa se lleve el espacio. */
   #renderSection .row{ margin-top:6px !important; }
@@ -560,7 +566,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v100</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v101</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -714,7 +720,7 @@
       <p class="section-title">Foto de presentación (render)</p>
       <div style="position:sticky; top:0; z-index:5; background:var(--panel); padding-bottom:8px; margin-bottom:6px;">
       <p class="section-title" style="margin-top:0;">Vista previa en vivo</p>
-      <div id="rndPreviaCaja" style="position:relative; border:1px solid var(--border-soft); border-radius:9px; overflow:hidden; background:var(--panel-2); min-height:300px; display:flex; align-items:center; justify-content:center;">
+      <div id="rndPreviaCaja" style="position:relative; border:1px solid var(--border-soft); border-radius:9px; overflow:hidden; background:var(--panel-2); min-height:430px; display:flex; align-items:center; justify-content:center;">
         <img id="rndPreviaImg" style="width:100%; display:block;" />
         <span id="rndPreviaMsg" style="font-size:10.5px; color:var(--text-faint); padding:14px; text-align:center;">Movés un control y se actualiza sola.</span>
         </div>
@@ -745,33 +751,33 @@
       <input type="range" id="rndFill" min="0" max="1.8" step="0.05" value="1" style="width:100%;" />
       <p style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">Menos relleno = sombras más marcadas entre bloques y más volumen. Demasiado poco y los rincones quedan negros.</p>
 
-      <div class="row" style="margin-top:8px;"><span class="label-sm">Vidriado del plástico</span><span class="value-mono" id="rndVidrioVal">0.55</span></div>
-      <input type="range" id="rndVidrio" min="0" max="1" step="0.05" value="0.55" style="width:100%;" />
-      <p style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">A la izquierda, plástico apagado. A la derecha, el borde de cada pieza se enciende al mirarlo de canto, como el plástico y el vidrio de verdad. Alto cuesta más al generar.</p>
+      <div class="row fino" style="margin-top:8px;"><span class="label-sm">Vidriado del plástico</span><span class="value-mono" id="rndVidrioVal">0.55</span></div>
+      <input class="fino" type="range" id="rndVidrio" min="0" max="1" step="0.05" value="0.55" style="width:100%;" />
+      <p class="fino" style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">A la izquierda, plástico apagado. A la derecha, el borde de cada pieza se enciende al mirarlo de canto, como el plástico y el vidrio de verdad. Alto cuesta más al generar.</p>
 
-      <div class="row" style="margin-top:8px;"><span class="label-sm">Reflejo de arriba</span><span class="value-mono" id="rndTechoVal">0.80</span></div>
-      <input type="range" id="rndTecho" min="0" max="1" step="0.05" value="0.8" style="width:100%;" />
-      <p style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">Sube o baja el techo del estudio. Las caras de arriba y los tachones son las que lo reflejan, así que esto controla su brillo. Con el reflejo alto, bajalo si se queman.</p>
+      <div class="row fino" style="margin-top:8px;"><span class="label-sm">Reflejo de arriba</span><span class="value-mono" id="rndTechoVal">0.80</span></div>
+      <input class="fino" type="range" id="rndTecho" min="0" max="1" step="0.05" value="0.8" style="width:100%;" />
+      <p class="fino" style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">Sube o baja el techo del estudio. Las caras de arriba y los tachones son las que lo reflejan, así que esto controla su brillo. Con el reflejo alto, bajalo si se queman.</p>
 
-      <div class="row" style="margin-top:8px;"><span class="label-sm">Bisel del borde</span><span class="value-mono" id="rndBiselVal">0.03</span></div>
-      <input type="range" id="rndBisel" min="0" max="0.09" step="0.005" value="0.03" style="width:100%;" />
-      <p style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">Separa un poco las piezas para que se vea el contorno de cada una, como en Studio. Muy alto y quedan sueltas.</p>
+      <div class="row fino" style="margin-top:8px;"><span class="label-sm">Bisel del borde</span><span class="value-mono" id="rndBiselVal">0.03</span></div>
+      <input class="fino" type="range" id="rndBisel" min="0" max="0.09" step="0.005" value="0.03" style="width:100%;" />
+      <p class="fino" style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">Separa un poco las piezas para que se vea el contorno de cada una, como en Studio. Muy alto y quedan sueltas.</p>
 
-      <div class="row" style="margin-top:8px;"><span class="label-sm">Reflejo del entorno</span><span class="value-mono" id="rndEnvVal">6.00</span></div>
-      <input type="range" id="rndEnv" min="0" max="16" step="0.1" value="6" style="width:100%;" />
-      <p style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">El estudio va oscuro con dos ventanas de luz. Así el reflejo se ve como un barniz encima y no como una capa de gris que lava el color.</p>
+      <div class="row fino" style="margin-top:8px;"><span class="label-sm">Reflejo del entorno</span><span class="value-mono" id="rndEnvVal">1.20</span></div>
+      <input class="fino" type="range" id="rndEnv" min="0" max="16" step="0.1" value="1.2" style="width:100%;" />
+      <p class="fino" style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">El estudio va oscuro con dos ventanas de luz. Así el reflejo se ve como un barniz encima y no como una capa de gris que lava el color.</p>
 
-      <div class="row" style="margin-top:8px;"><span class="label-sm">Fuerza de las sombras</span><span class="value-mono" id="rndContVal">0.70</span></div>
-      <input type="range" id="rndCont" min="0" max="1" step="0.05" value="0.7" style="width:100%;" />
-      <p style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">Qué tan oscuras se ven las zonas en sombra. Al subirlo baja el relleno y sube la luz principal.</p>
+      <div class="row fino" style="margin-top:8px;"><span class="label-sm">Fuerza de las sombras</span><span class="value-mono" id="rndContVal">0.70</span></div>
+      <input class="fino" type="range" id="rndCont" min="0" max="1" step="0.05" value="0.7" style="width:100%;" />
+      <p class="fino" style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">Qué tan oscuras se ven las zonas en sombra. Al subirlo baja el relleno y sube la luz principal.</p>
 
-      <div class="row" style="margin-top:8px;"><span class="label-sm">Sombreado de rincones</span><span class="value-mono" id="rndOcluVal">1.00</span></div>
-      <input type="range" id="rndOclu" min="0" max="1.2" step="0.05" value="1" style="width:100%;" />
-      <p style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">Oscurece los bloques metidos entre otros, como hace la luz rebotada de verdad. Es lo que más acerca la foto a un render profesional.</p>
+      <div class="row fino" style="margin-top:8px;"><span class="label-sm">Sombreado de rincones</span><span class="value-mono" id="rndOcluVal">1.00</span></div>
+      <input class="fino" type="range" id="rndOclu" min="0" max="1.2" step="0.05" value="1" style="width:100%;" />
+      <p class="fino" style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">Oscurece los bloques metidos entre otros, como hace la luz rebotada de verdad. Es lo que más acerca la foto a un render profesional.</p>
 
-      <div class="row" style="margin-top:8px;"><span class="label-sm">Brillo del plástico</span><span class="value-mono" id="rndGlossVal">0.85</span></div>
-      <input type="range" id="rndGloss" min="0" max="1" step="0.02" value="0.85" style="width:100%;" />
-      <p style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">A la izquierda, mate como pieza recién impresa. A la derecha, brillante como pieza inyectada.</p>
+      <div class="row fino" style="margin-top:8px;"><span class="label-sm">Brillo del plástico</span><span class="value-mono" id="rndGlossVal">0.45</span></div>
+      <input class="fino" type="range" id="rndGloss" min="0" max="1" step="0.02" value="0.45" style="width:100%;" />
+      <p class="fino" style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">A la izquierda, mate como pieza recién impresa. A la derecha, brillante como pieza inyectada.</p>
 
       <div class="row" style="margin-top:8px;"><span class="label-sm">Aire alrededor</span><span class="value-mono" id="rndAireVal">1.08</span></div>
       <input type="range" id="rndAire" min="1" max="1.8" step="0.02" value="1.08" style="width:100%;" />
@@ -813,6 +819,7 @@
 
     </div>
       <button class="btn sm ghost" id="rndPreviaBtn" style="width:100%; margin-top:6px;">🔄 Actualizar vista previa</button>
+      <button class="btn sm" id="btnFinos" style="width:100%; margin-top:6px;">⚙ Ajustes finos del material</button>
     </div>
   </aside>
 
@@ -3121,7 +3128,7 @@ function entornoEstudio(){
 
 /* Ajustes de la foto de presentación. Antes estaban clavados en el código; se
    guardan en el navegador para no volver a calibrarlos en cada sesión. */
-const RENDER_DEFAULT = { key:1.7, relleno:1.0, brillo:0.85, aire:1.08, calidad:1600, fondo:'estudio', portada:false, sombras:false, pisoSombra:true, sombraOpacidad:0.35, oclusion:1.0, luz:'ai', entorno:6, contraste:0.7, techo:0.8, vidrio:0.55, exposicion:1.15, bisel:0.03 };
+const RENDER_DEFAULT = { key:1.9, relleno:1.0, brillo:0.45, aire:1.08, calidad:1600, fondo:'estudio', portada:false, sombras:false, pisoSombra:true, sombraOpacidad:0.35, oclusion:1.0, luz:'ai', entorno:1.2, contraste:0.7, techo:0.8, vidrio:0.55, exposicion:1.15, bisel:0.03 };
 const RENDER_KEY = '3dblock.render';
 function cargarConfigRender(){
   try{
@@ -3396,6 +3403,13 @@ document.getElementById('rndEnv').addEventListener('input', e=>cambiarConfigRend
 document.getElementById('rndTecho').addEventListener('input', e=>cambiarConfigRender({ techo: parseFloat(e.target.value) }));
 document.getElementById('rndVidrio').addEventListener('input', e=>cambiarConfigRender({ vidrio: parseFloat(e.target.value) }));
 document.getElementById('rndExp').addEventListener('input', e=>cambiarConfigRender({ exposicion: parseFloat(e.target.value) }));
+document.getElementById('renderSection').classList.add('simple');
+document.getElementById('btnFinos').addEventListener('click', ()=>{
+  const sec = document.getElementById('renderSection');
+  sec.classList.toggle('simple');
+  document.getElementById('btnFinos').textContent =
+    (sec.classList.contains('simple') ? '⚙ Ajustes finos del material' : '⚙ Ocultar ajustes finos');
+});
 document.getElementById('rndBisel').addEventListener('input', e=>cambiarConfigRender({ bisel: parseFloat(e.target.value) }));
 document.getElementById('rndCont').addEventListener('input', e=>cambiarConfigRender({ contraste: parseFloat(e.target.value) }));
 document.getElementById('rndLuzGrid').addEventListener('click', e=>{
@@ -3535,13 +3549,16 @@ async function generatePresentationRender(opciones){
        sin ellos, bajar la rugosidad sola no alcanza para un plástico lustroso. */
     roughness: Math.max(0.02, 0.62 - 0.60*b),
     metalness: 0.02,
-    /* El barniz (clearcoat) es una capa transparente ENCIMA del color: refleja
-       sin teñir lo de abajo, igual que una mano de laca sobre pintura. Es la
-       parte del brillo que NO lava el color, así que se lleva al máximo. */
-    clearcoat: Math.min(1, 0.25 + 0.90*b),
-    clearcoatRoughness: Math.max(0.015, 0.30 - 0.29*b),
-    reflectivity: 0.35 + 0.65*b,
-    specularIntensity: 0.5 + 1.5*b,
+    /* El barniz se mantiene BAJO a propósito.
+       Una capa transparente refleja la luz tal cual es: blanca. Cuanto más
+       barniz, más se cubre el color con manchas blancas. En Studio el brillo
+       conserva el color porque casi todo es luz difusa — la cara iluminada de
+       una pieza azul es un azul más claro, no un blanco — con apenas un toque
+       especular encima. Antes esto iba al máximo y se comía el color. */
+    clearcoat: 0.08 + 0.30*b,
+    clearcoatRoughness: Math.max(0.10, 0.45 - 0.30*b),
+    reflectivity: 0.25 + 0.35*b,
+    specularIntensity: 0.35 + 0.55*b,
     /* Vidriado. Acá está lo que hacía que las piezas parecieran dibujadas por un
        programa y no plástico de verdad: faltaba el efecto Fresnel.
 
@@ -3690,7 +3707,7 @@ async function generatePresentationRender(opciones){
   const origNear = camera.near, origFar = camera.far;
   // La vista previa se saca chica a propósito: es una sola pasada de render, así
   // que mover un control se ve al instante en vez de esperar la foto grande.
-  const anchoFoto = previa ? 900 : (parseInt(configRender.calidad, 10) || 1600);
+  const anchoFoto = previa ? 1100 : (parseInt(configRender.calidad, 10) || 1600);
   renderer.setSize(anchoFoto, Math.round(anchoFoto*3/4), false);
   camera.aspect = 4/3;
   {
