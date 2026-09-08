@@ -582,7 +582,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v110</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v111</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -6133,6 +6133,23 @@ function setVoxels(list, opts){
   opts = opts || {};
   voxels = list;
   problemCells = null; // modelo nuevo: las marcas viejas ya no significan nada
+  /* La sección de resolución queda disponible para CUALQUIER diseño, venga de una
+     malla o de bloques, y el deslizador se pone en el tamaño real del modelo: si
+     no, arrancaba en 32 y al tocarlo achicaba todo de golpe sin querer. */
+  if (voxels.length){
+    const sec = document.getElementById('voxelizeSection');
+    if (sec) sec.style.display = 'block';
+    let nx=0, ny=0, nz=0;
+    voxels.forEach(v=>{ nx=Math.max(nx,v.x); ny=Math.max(ny,Math.round(v.y)); nz=Math.max(nz,v.z); });
+    const lado = Math.max(nx, ny, nz) + 1;
+    const sl = document.getElementById('resSlider');
+    if (sl){
+      if (lado > +sl.max) sl.max = Math.ceil(lado*1.5);
+      sl.value = Math.min(+sl.max, lado);
+      const et = document.getElementById('resVal');
+      if (et) et.textContent = sl.value;
+    }
+  }
   const box = boundsOf(voxels);
   dims = {
     x: Math.round(box.max.x-box.min.x)+1,
@@ -7160,7 +7177,9 @@ async function handleFile(file, anexar, acompanantes){
         // Una pieza del .dae = un bloque exacto, sin elegir resolución.
         setVoxels(exactList);
         document.getElementById('modelNameText').textContent = file.name;
-        document.getElementById('voxelizeSection').style.display = 'none';
+        // Aunque el .dae traiga piezas exactas, la sección queda a la vista: el
+        // control de resolución ahora sirve para remuestrear la rejilla.
+        document.getElementById('voxelizeSection').style.display = 'block';
         setStatus('Modelo .dae cargado con sus piezas reales: '+exactList.length+' bloques (uno por pieza).', 'ok');
       } else {
         // Malla sin piezas discretas (p. ej. un solo objeto orgánico): voxelizar por resolución.
@@ -7339,13 +7358,14 @@ document.getElementById('regroupPiecesBtn').addEventListener('click', ()=>{ push
 });
 
 document.getElementById('revoxelizeBtn').addEventListener('click', async ()=>{
-  const tris = lastVoxelizerTris || (lastDaeParsed && lastDaeParsed.tris);
-  if (!tris) return;
-  setLoading(true,'Voxelizando…');
+  const tris = trisActuales();
+  if (!tris && !voxels.length) return;
+  setLoading(true, tris ? 'Voxelizando…' : 'Cambiando la resolución…');
   await new Promise(r=>setTimeout(r,10));
   try{
     const res = parseInt(document.getElementById('resSlider').value,10);
-    const {list} = voxelizeTriangles(tris, res);
+    // Con malla se voxeliza; con bloques se remuestrea la rejilla
+    const list = tris ? voxelizeTriangles(tris, res).list : remuestrearVoxels(res);
     setVoxels(list);
     const lengths = allowedPieceLengths();
     if (lengths.some(l=>l>1)) applyPieceGrouping();
@@ -7358,6 +7378,68 @@ document.getElementById('revoxelizeBtn').addEventListener('click', async ()=>{
    "unas 900 piezas" o "30 capas". Estas dos funciones despejan la resolución que
    consigue eso. */
 function trisActuales(){ return lastVoxelizerTris || (lastDaeParsed && lastDaeParsed.tris); }
+
+/* ---------------------------- Remuestreo de la rejilla ----------------------------
+   Un .json, un .vox o un .dae de piezas exactas no traen triángulos: ya son
+   bloques. Hasta ahora eso dejaba afuera el control de resolución, y no había
+   forma de agrandar o achicar un diseño ya hecho.
+
+   Acá se remuestrea la rejilla misma. Al achicar, varios bloques caen en la misma
+   celda y gana el color que más se repite — así un detalle de tres bloques rojos
+   no desaparece frente a uno solo azul. Al agrandar, cada celda nueva toma el
+   color del bloque de origen que le corresponde.
+
+   No es lo mismo que voxelizar una malla: acá no hay más información que la que
+   ya está, así que agrandar no inventa detalle, solo hace las piezas más gruesas. */
+function remuestrearVoxels(res){
+  if (!voxels.length) return null;
+  let nx=0, ny=0, nz=0;
+  voxels.forEach(v=>{ nx=Math.max(nx,v.x); ny=Math.max(ny,Math.round(v.y)); nz=Math.max(nz,v.z); });
+  nx++; ny++; nz++;
+  const mayor = Math.max(nx, ny, nz);
+  const f = res / mayor;
+  if (Math.abs(f - 1) < 1e-6) return voxels.map(v=>({ x:v.x, y:Math.round(v.y), z:v.z, color:v.color }));
+
+  if (f < 1){
+    // Achicar: se vota el color por celda destino
+    const votos = new Map();
+    voxels.forEach(v=>{
+      const k = Math.floor(v.x*f) + ',' + Math.floor(Math.round(v.y)*f) + ',' + Math.floor(v.z*f);
+      let m = votos.get(k);
+      if (!m){ m = new Map(); votos.set(k, m); }
+      m.set(v.color, (m.get(v.color) || 0) + 1);
+    });
+    const salida = [];
+    votos.forEach((m, k)=>{
+      let mejor = null, n = -1;
+      m.forEach((c, col)=>{ if (c > n){ n = c; mejor = col; } });
+      const p = k.split(',');
+      salida.push({ x:+p[0], y:+p[1], z:+p[2], color:mejor });
+    });
+    return salida;
+  }
+
+  // Agrandar: cada celda nueva mira de qué bloque de origen viene
+  const origen = new Map();
+  voxels.forEach(v=> origen.set(v.x+','+Math.round(v.y)+','+v.z, v.color));
+  const salida = [];
+  const dx = Math.round(nx*f), dy = Math.round(ny*f), dz = Math.round(nz*f);
+  for (let x=0; x<dx; x++)
+    for (let y=0; y<dy; y++)
+      for (let z=0; z<dz; z++){
+        const col = origen.get(Math.floor(x/f)+','+Math.floor(y/f)+','+Math.floor(z/f));
+        if (col) salida.push({ x, y, z, color:col });
+      }
+  return salida;
+}
+
+/* Devuelve el lado más largo del modelo actual, en bloques. Es lo que el control
+   de resolución representa, así que sirve para poner el deslizador donde está. */
+function ladoMayorActual(){
+  let nx=0, ny=0, nz=0;
+  voxels.forEach(v=>{ nx=Math.max(nx,v.x); ny=Math.max(ny,Math.round(v.y)); nz=Math.max(nz,v.z); });
+  return Math.max(nx, ny, nz) + 1;
+}
 
 /* Capas: sale de una cuenta directa. La resolución se reparte según el lado más
    largo, así que si el modelo no es el alto el que manda, hay que escalar. */
@@ -7388,22 +7470,46 @@ async function resolucionParaPiezas(tris, objetivo){
 async function aplicarObjetivo(tipo){
   const tris = trisActuales();
   const salida = document.getElementById('objResultado');
-  if (!tris){ salida.textContent = 'Primero importá una malla (.obj, .stl, .glb o .dae): los .json y .vox ya vienen con sus bloques definidos.'; return; }
+  if (!tris && !voxels.length){ salida.textContent = 'Primero cargá un diseño.'; return; }
+  /* Dos caminos según de dónde venga el modelo:
+       · de una malla (.obj, .stl, .glb, .dae con geometría) -> se voxeliza de nuevo
+       · de bloques (.json, .vox, .3mf, .dae exacto) -> se remuestrea la rejilla
+     El segundo no puede inventar detalle que no está, pero sí permite agrandar o
+     achicar un diseño ya hecho, que es lo que faltaba. */
+  const porMalla = !!tris;
   setLoading(true, 'Buscando la resolución…');
   await new Promise(r=>setTimeout(r,10));
   try{
-    let res, aviso;
+    let res, aviso, list;
     if (tipo === 'capas'){
       const capas = parseInt(document.getElementById('objCapas').value,10) || 30;
-      res = resolucionParaCapas(tris, capas);
+      if (porMalla) res = resolucionParaCapas(tris, capas);
+      else {
+        // El alto en bloques manda: se escala el lado mayor en esa proporción
+        let ny = 0; voxels.forEach(v=> ny = Math.max(ny, Math.round(v.y)));
+        res = Math.max(3, Math.round(capas * ladoMayorActual() / (ny+1)));
+      }
       aviso = 'Pediste ' + capas + ' capas.';
     } else {
       const objetivo = parseInt(document.getElementById('objPiezas').value,10) || 900;
-      const r = await resolucionParaPiezas(tris, objetivo);
-      res = r.res;
+      if (porMalla){
+        res = (await resolucionParaPiezas(tris, objetivo)).res;
+      } else {
+        /* Bisección igual que con las mallas: la cantidad de bloques crece con la
+           resolución, así que se prueba y se parte el intervalo. Doce vueltas. */
+        let bajo = 3, alto = Math.max(20, ladoMayorActual()*3), mejor = null;
+        for (let i=0; i<12 && alto-bajo>1; i++){
+          const medio = Math.round((bajo+alto)/2);
+          const n = remuestrearVoxels(medio).length;
+          if (!mejor || Math.abs(n-objetivo) < Math.abs(mejor.n-objetivo)) mejor = { res:medio, n };
+          if (n > objetivo) alto = medio; else bajo = medio;
+          await new Promise(r=>setTimeout(r,0));
+        }
+        res = mejor.res;
+      }
       aviso = 'Pediste ~' + objetivo + ' piezas.';
     }
-    const { list } = voxelizeTriangles(tris, res);
+    list = porMalla ? voxelizeTriangles(tris, res).list : remuestrearVoxels(res);
     setVoxels(list);
     document.getElementById('resSlider').value = Math.min(260, res);
     document.getElementById('resVal').textContent = Math.min(260, res);
