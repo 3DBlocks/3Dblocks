@@ -582,7 +582,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v109</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v110</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -742,8 +742,18 @@
         </div>
       <p style="font-size:10.5px; color:var(--text-faint); margin:0 0 10px; line-height:1.5;">Ajustá la luz y el acabado hasta que se parezca al render que buscás. Los valores quedan guardados y se usan cada vez que sacás la foto.</p>
 
-      <div class="row"><span class="label-sm">Exposición</span><span class="value-mono" id="rndExpVal">1.15</span></div>
-      <input type="range" id="rndExp" min="0.4" max="2.5" step="0.05" value="1.15" style="width:100%;" />
+      <p class="section-title">Iluminación</p>
+      <div id="rndPresetGrid" style="display:grid; grid-template-columns:repeat(3,1fr); gap:4px; margin-bottom:4px;">
+        <button class="btn sm" data-preset="natural"   title="Luz de estudio suave y color fiel. Es la de fábrica.">Natural</button>
+        <button class="btn sm" data-preset="suave"     title="Sombras más abiertas, todavía menos contraste.">Suave</button>
+        <button class="btn sm" data-preset="contraste" title="Sombras más marcadas y más volumen.">Contraste</button>
+        <button class="btn sm" data-preset="mate"      title="Plástico apagado, sin brillo especular.">Mate</button>
+        <button class="btn sm" data-preset="brillante" title="Plástico inyectado lustroso.">Brillante</button>
+      </div>
+      <p style="font-size:10px; color:var(--text-faint); margin:0 0 10px; line-height:1.4;">Puntos de partida. Podés seguir moviendo cualquier control a mano: el preset queda como &laquo;a medida&raquo; y no se pierde nada.</p>
+
+      <div class="row"><span class="label-sm">Exposición</span><span class="value-mono" id="rndExpVal">0.85</span></div>
+      <input type="range" id="rndExp" min="0.4" max="2.5" step="0.05" value="0.85" style="width:100%;" />
       <p style="font-size:10px; color:var(--text-faint); margin:4px 0 0 0; line-height:1.4;">Es el diafragma de la cámara. La foto usa la misma curva de tono que el cine, así que las luces altas se apagan suave en vez de recortarse en blanco.</p>
 
       <div class="row" style="margin-top:8px;"><span class="label-sm">Desde dónde viene la luz</span></div>
@@ -760,43 +770,44 @@
       </div>
       <p style="font-size:10px; color:var(--text-faint); margin:0 0 8px; line-height:1.4;">Es relativo a la cámara: si elegís arriba a la izquierda, la luz sigue viniendo de ahí aunque gires el modelo.</p>
 
-      <div class="row"><span class="label-sm">Luz principal</span><span class="value-mono" id="rndKeyVal">1.55</span></div>
-      <input type="range" id="rndKey" min="0.4" max="2.6" step="0.05" value="1.55" style="width:100%;" />
+      <div class="row"><span class="label-sm">Luz principal</span><span class="value-mono" id="rndKeyVal">0.70</span></div>
+      <input type="range" id="rndKey" min="0.1" max="2.6" step="0.05" value="0.7" style="width:100%;" />
 
-      <div class="row" style="margin-top:8px;"><span class="label-sm">Luz de relleno</span><span class="value-mono" id="rndFillVal">1.00</span></div>
-      <input type="range" id="rndFill" min="0" max="1.8" step="0.05" value="1" style="width:100%;" />
+      <div class="row" style="margin-top:8px;"><span class="label-sm">Luz de relleno</span><span class="value-mono" id="rndFillVal">0.20</span></div>
+      <input type="range" id="rndFill" min="0.05" max="1.8" step="0.05" value="0.2" style="width:100%;" />
       <p style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">Menos relleno = sombras más marcadas entre bloques y más volumen. Demasiado poco y los rincones quedan negros.</p>
 
-      <div class="row fino" style="margin-top:8px;"><span class="label-sm">Vidriado del plástico</span><span class="value-mono" id="rndVidrioVal">0.55</span></div>
-      <input class="fino" type="range" id="rndVidrio" min="0" max="1" step="0.05" value="0.55" style="width:100%;" />
+      <p class="section-title fino" style="margin-top:14px;">Material y detalle</p>
+      <div class="row fino"><span class="label-sm">Vidriado del plástico</span><span class="value-mono" id="rndVidrioVal">0.15</span></div>
+      <input class="fino" type="range" id="rndVidrio" min="0" max="1" step="0.05" value="0.15" style="width:100%;" />
       <p class="fino" style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">A la izquierda, plástico apagado. A la derecha, el borde de cada pieza se enciende al mirarlo de canto, como el plástico y el vidrio de verdad. Alto cuesta más al generar.</p>
 
-      <div class="row fino" style="margin-top:8px;"><span class="label-sm">Reflejo de arriba</span><span class="value-mono" id="rndTechoVal">0.80</span></div>
-      <input class="fino" type="range" id="rndTecho" min="0" max="1" step="0.05" value="0.8" style="width:100%;" />
+      <div class="row fino" style="margin-top:8px;"><span class="label-sm">Reflejo de arriba</span><span class="value-mono" id="rndTechoVal">0.20</span></div>
+      <input class="fino" type="range" id="rndTecho" min="0" max="1" step="0.05" value="0.2" style="width:100%;" />
       <p class="fino" style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">Sube o baja el techo del estudio. Las caras de arriba y los tachones son las que lo reflejan, así que esto controla su brillo. Con el reflejo alto, bajalo si se queman.</p>
 
-      <div class="row fino" style="margin-top:8px;"><span class="label-sm">Bisel del borde</span><span class="value-mono" id="rndBiselVal">0.03</span></div>
-      <input class="fino" type="range" id="rndBisel" min="0" max="0.09" step="0.005" value="0.03" style="width:100%;" />
+      <div class="row fino" style="margin-top:8px;"><span class="label-sm">Bisel del borde</span><span class="value-mono" id="rndBiselVal">0.06</span></div>
+      <input class="fino" type="range" id="rndBisel" min="0" max="0.09" step="0.005" value="0.06" style="width:100%;" />
       <p class="fino" style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">Separa un poco las piezas para que se vea el contorno de cada una, como en Studio. Muy alto y quedan sueltas.</p>
 
-      <div class="row fino" style="margin-top:8px;"><span class="label-sm">Reflejo del entorno</span><span class="value-mono" id="rndEnvVal">1.20</span></div>
-      <input class="fino" type="range" id="rndEnv" min="0" max="16" step="0.1" value="1.2" style="width:100%;" />
+      <div class="row fino" style="margin-top:8px;"><span class="label-sm">Reflejo del entorno</span><span class="value-mono" id="rndEnvVal">0.25</span></div>
+      <input class="fino" type="range" id="rndEnv" min="0" max="1.5" step="0.05" value="0.25" style="width:100%;" />
       <p class="fino" style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">El estudio va oscuro con dos ventanas de luz. Así el reflejo se ve como un barniz encima y no como una capa de gris que lava el color.</p>
 
-      <div class="row fino" style="margin-top:8px;"><span class="label-sm">Fuerza de las sombras</span><span class="value-mono" id="rndContVal">0.70</span></div>
-      <input class="fino" type="range" id="rndCont" min="0" max="1" step="0.05" value="0.7" style="width:100%;" />
+      <div class="row fino" style="margin-top:8px;"><span class="label-sm">Fuerza de las sombras</span><span class="value-mono" id="rndContVal">0.45</span></div>
+      <input class="fino" type="range" id="rndCont" min="0" max="1" step="0.05" value="0.45" style="width:100%;" />
       <p class="fino" style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">Qué tan oscuras se ven las zonas en sombra. Al subirlo baja el relleno y sube la luz principal.</p>
 
-      <div class="row fino" style="margin-top:8px;"><span class="label-sm">Suavidad de la sombra</span><span class="value-mono" id="rndSuavVal">0.55</span></div>
-      <input class="fino" type="range" id="rndSuav" min="0" max="1" step="0.05" value="0.55" style="width:100%;" />
+      <div class="row fino" style="margin-top:8px;"><span class="label-sm">Suavidad de la sombra</span><span class="value-mono" id="rndSuavVal">0.70</span></div>
+      <input class="fino" type="range" id="rndSuav" min="0" max="1" step="0.05" value="0.7" style="width:100%;" />
       <p class="fino" style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">Borde de la sombra: a la izquierda filoso, a la derecha difuso como el de una foto con luz de ventana.</p>
 
-      <div class="row fino" style="margin-top:8px;"><span class="label-sm">Sombreado de rincones</span><span class="value-mono" id="rndOcluVal">1.00</span></div>
-      <input class="fino" type="range" id="rndOclu" min="0" max="1.2" step="0.05" value="1" style="width:100%;" />
+      <div class="row fino" style="margin-top:8px;"><span class="label-sm">Sombreado de rincones</span><span class="value-mono" id="rndOcluVal">1.05</span></div>
+      <input class="fino" type="range" id="rndOclu" min="0" max="1.2" step="0.05" value="1.05" style="width:100%;" />
       <p class="fino" style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">Oscurece los bloques metidos entre otros, como hace la luz rebotada de verdad. Es lo que más acerca la foto a un render profesional.</p>
 
-      <div class="row fino" style="margin-top:8px;"><span class="label-sm">Brillo del plástico</span><span class="value-mono" id="rndGlossVal">0.45</span></div>
-      <input class="fino" type="range" id="rndGloss" min="0" max="1" step="0.02" value="0.45" style="width:100%;" />
+      <div class="row fino" style="margin-top:8px;"><span class="label-sm">Brillo del plástico</span><span class="value-mono" id="rndGlossVal">0.35</span></div>
+      <input class="fino" type="range" id="rndGloss" min="0" max="1" step="0.02" value="0.35" style="width:100%;" />
       <p class="fino" style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">A la izquierda, mate como pieza recién impresa. A la derecha, brillante como pieza inyectada.</p>
 
       <div class="row" style="margin-top:8px;"><span class="label-sm">Aire alrededor</span><span class="value-mono" id="rndAireVal">1.08</span></div>
@@ -3179,8 +3190,10 @@ function entornoEstudio(){
   }
   ventana(150,  58,  92, 54, 1.0);   // ventana principal
   ventana(392,  78,  52, 34, 0.85);  // ventana de relleno, del otro lado
-  cx.fillStyle = 'rgba(255,255,255,0.16)';
-  cx.fillRect(0, 0, 512, 10);        // franja de techo, apenas insinuada
+  // Franja de techo, atada al control: con el reflejo de arriba bajo casi no se
+  // ve, que es lo que evita que las caras superiores y los tachones se quemen.
+  cx.fillStyle = 'rgba(255,255,255,' + (0.05 + 0.14*t).toFixed(3) + ')';
+  cx.fillRect(0, 0, 512, 10);
 
   const tex = new THREE.CanvasTexture(c);
   tex.mapping = THREE.EquirectangularReflectionMapping;
@@ -3195,12 +3208,46 @@ function entornoEstudio(){
 
 /* Ajustes de la foto de presentación. Antes estaban clavados en el código; se
    guardan en el navegador para no volver a calibrarlos en cada sesión. */
-const RENDER_DEFAULT = { key:1.9, relleno:1.0, brillo:0.45, aire:1.08, calidad:1600, fondo:'estudio', portada:false, sombras:false, pisoSombra:true, sombraOpacidad:0.22, oclusion:1.0, luz:'ai', entorno:1.2, contraste:0.7, techo:0.8, vidrio:0.55, exposicion:1.15, suavidad:0.55, bisel:0.03 };
+/* Presets de iluminación. "Natural" es el de fábrica: luz de estudio suave, poca
+   luz artificial, color fiel. Los demás son variantes; todos los controles manuales
+   siguen funcionando igual y mover cualquiera pasa el preset a "a medida". */
+const PRESETS_RENDER = {
+  natural:   { key:0.70, relleno:0.20, brillo:0.35, entorno:0.25, techo:0.20, exposicion:0.85, oclusion:1.05, contraste:0.45, vidrio:0.15, bisel:0.06,  suavidad:0.85, sombraOpacidad:0 },
+  suave:     { key:0.58, relleno:0.30, brillo:0.28, entorno:0.20, techo:0.16, exposicion:0.88, oclusion:0.85, contraste:0.30, vidrio:0.10, bisel:0.05,  suavidad:0.95, sombraOpacidad:0.06 },
+  contraste: { key:0.90, relleno:0.12, brillo:0.40, entorno:0.30, techo:0.24, exposicion:0.80, oclusion:1.15, contraste:0.62, vidrio:0.18, bisel:0.07,  suavidad:0.45, sombraOpacidad:0.20 },
+  mate:      { key:0.72, relleno:0.22, brillo:0.10, entorno:0.15, techo:0.12, exposicion:0.88, oclusion:1.00, contraste:0.45, vidrio:0.05, bisel:0.06,  suavidad:0.75, sombraOpacidad:0 },
+  brillante: { key:0.75, relleno:0.18, brillo:0.62, entorno:0.40, techo:0.30, exposicion:0.82, oclusion:1.00, contraste:0.50, vidrio:0.30, bisel:0.06,  suavidad:0.65, sombraOpacidad:0.14 },
+};
+const PRESET_NOMBRES = { natural:'Natural', suave:'Suave', contraste:'Contraste', mate:'Mate', brillante:'Brillante' };
+
+/* Al cambiar la calibración de fábrica hay que subir este número. Si no, quien ya
+   tenía valores guardados en el navegador se queda con los viejos para siempre,
+   porque Object.assign deja que lo guardado tape a lo nuevo. */
+const RENDER_CALIBRACION = 4;
+const RENDER_DEFAULT = Object.assign(
+  { aire:1.08, calidad:1600, fondo:'estudio', portada:false, sombras:false, pisoSombra:true,
+    luz:'ai', preset:'natural', cal:RENDER_CALIBRACION },
+  PRESETS_RENDER.natural);
 const RENDER_KEY = '3dblock.render';
+
+/* Curva de tono de la FOTO únicamente. El visor 3D normal se queda en
+   NoToneMapping (línea del arranque del renderer) y no se modifica. */
+let TONO_RENDER = THREE.CineonToneMapping;
 function cargarConfigRender(){
   try{
     const g = JSON.parse(localStorage.getItem(RENDER_KEY) || 'null');
-    return g ? Object.assign({}, RENDER_DEFAULT, g) : Object.assign({}, RENDER_DEFAULT);
+    if (!g) return Object.assign({}, RENDER_DEFAULT);
+    /* Los ajustes que no son de iluminación (calidad, fondo, portada, dirección de
+       la luz) se respetan siempre. Los de luz/material solo se conservan si fueron
+       guardados con esta misma calibración; si no, se vuelve a los de fábrica. */
+    if (g.cal !== RENDER_CALIBRACION){
+      const conservar = {};
+      ['aire','calidad','fondo','portada','sombras','pisoSombra','luz'].forEach(k=>{
+        if (g[k] !== undefined) conservar[k] = g[k];
+      });
+      return Object.assign({}, RENDER_DEFAULT, conservar);
+    }
+    return Object.assign({}, RENDER_DEFAULT, g);
   } catch(err){ return Object.assign({}, RENDER_DEFAULT); }
 }
 let configRender = cargarConfigRender();
@@ -3261,17 +3308,33 @@ function lucesDeEstudio(){
      255 y acá no bajaba de 70. La culpa era del relleno, que iluminaba hasta el
      último rincón y aplanaba el modelo. Con 0.92 el relleno puede quedar en el
      8%, y ahí sí los huecos entre piezas se van a negro como en Studio. */
-  const r = configRender.relleno * (1 - 0.92*k);
-  hemi.color.set(0xffffff); hemi.groundColor.set(0x9a9a9a); hemi.intensity = 0.42 * r;
-  ambient.intensity = 0.30 * r;
-  // Luz principal desde arriba a la izquierda y algo al frente, como la foto de
-  // Studio: marca el volumen de cada bloque sin quemar las caras claras.
-  key.color.set(0xffffff); key.intensity = configRender.key * (1 + 0.55*k); key.position.set(-5, 9, 7);
-  luzCuarto1.intensity = 0.30 * configRender.relleno * (1 - 0.5*k);
-  luzCuarto2.intensity = 0.22 * configRender.relleno * (1 - 0.5*k);
-  // Contraluz neutro (antes era verdoso y teñía los bordes) para despegar la
-  // figura del fondo.
-  rim.color.set(0xffffff); rim.intensity = 0.42; rim.position.set(6, 5, -7);
+  /* Antes el factor era 0.92 y con el relleno bajo de la calibración natural el
+     relleno efectivo quedaba casi en cero: los huecos entre piezas se iban a negro
+     absoluto y se perdía el detalle. Con 0.55 el relleno sigue bajando al subir el
+     contraste, pero nunca se apaga del todo. */
+  const r = configRender.relleno * (1 - 0.55*k);
+  /* Todo blanco neutro. Cualquier tinte acá (cielo azulado, piso cálido) se suma al
+     color de la pieza y lo corre de tono: el azul se va a violeta, el blanco toma
+     color. La luz de la foto es blanca de estudio y nada más. */
+  hemi.color.set(0xffffff); hemi.groundColor.set(0xffffff); hemi.intensity = 1.35 * r;
+  ambient.intensity = 0.90 * r;
+  /* Luz principal: una sola, blanca, suave y de intensidad baja. La posición real
+     la fija más abajo el render (relativa a la cámara, elevada y corrida al
+     costado); esto es solo el valor de arranque por si se usa sin encuadrar. */
+  /* El 2.5 es el factor que traduce el valor del control a la intensidad que pide
+     el motor. Se separa a propósito: el control queda en la escala fotográfica que
+     pediste (0.55 a 0.90 para una luz de estudio suave) y acá se convierte al
+     número que three.js necesita. Medido: con el control en 0.70 la figura queda
+     con el medio tono en 129 sobre 255 y sin un solo píxel quemado. */
+  key.color.set(0xffffff); key.intensity = configRender.key * 2.5 * (1 + 0.55*k); key.position.set(-5, 9, 7);
+  /* Los dos rebotes laterales hacen de softbox: abren la sombra sin aplanar,
+     porque vienen del costado y no de frente. */
+  luzCuarto1.intensity = 0.75 * configRender.relleno * (1 - 0.5*k);
+  luzCuarto2.intensity = 0.55 * configRender.relleno * (1 - 0.5*k);
+  /* Contraluz apenas insinuado. Estaba clavado en 0.42 y era el que encendía de
+     blanco el canto de cada bloque: eso, y no el color base, era buena parte del
+     aspecto lavado en los bordes. */
+  rim.color.set(0xffffff); rim.intensity = 0.10 + 0.12*k; rim.position.set(6, 5, -7);
   fillPt.intensity = 0; // el punto ámbar amarilleaba un lado
 }
 function restaurarLuces(g){
@@ -3427,11 +3490,17 @@ function refrescarPanelRender(){
   document.getElementById('rndOclu').value = configRender.oclusion;
   document.getElementById('rndOcluVal').textContent = Number(configRender.oclusion).toFixed(2);
   document.querySelectorAll('#rndLuzGrid button').forEach(b=>b.classList.toggle('primary', b.dataset.luz === configRender.luz));
+  document.querySelectorAll('#rndPresetGrid button').forEach(b=>b.classList.toggle('primary', b.dataset.preset === configRender.preset));
   document.getElementById('rndAireVal').textContent = Number(configRender.aire).toFixed(2);
   refrescarEstadoPortada();
 }
 function cambiarConfigRender(cambios){
+  /* Mover cualquier control a mano deja el preset en "a medida": el botón se
+     apaga, pero nada se bloquea ni se pierde. Solo aplicarPresetRender() manda el
+     campo `preset`, y esa es la única forma de volver a encenderlo. */
+  if (cambios.preset === undefined) cambios = Object.assign({}, cambios, { preset:'' });
   Object.assign(configRender, cambios);
+  configRender.cal = RENDER_CALIBRACION;
   guardarConfigRender();
   refrescarPanelRender();
   programarPreviaRender();
@@ -3441,9 +3510,11 @@ function cambiarConfigRender(cambios){
    control dispara decenas de cambios por segundo. Se espera a que el control se
    quede quieto un momento, y no se encima una previa con otra. */
 let _timerPrevia = null, _previaEnCurso = false, _previaPendiente = false;
-function programarPreviaRender(){
+const ESPERA_PREVIA = 140;   // ms que se espera a que el control quede quieto
+const REBOTE_PREVIA = 40;    // ms entre una previa y la siguiente si quedó pendiente
+function programarPreviaRender(ms){
   clearTimeout(_timerPrevia);
-  _timerPrevia = setTimeout(actualizarPreviaRender, 140);
+  _timerPrevia = setTimeout(actualizarPreviaRender, ms === undefined ? ESPERA_PREVIA : ms);
 }
 async function actualizarPreviaRender(){
   if (_previaEnCurso){ _previaPendiente = true; return; }
@@ -3464,7 +3535,10 @@ async function actualizarPreviaRender(){
     console.warn('vista previa de render', err);
   } finally {
     _previaEnCurso = false;
-    if (_previaPendiente){ _previaPendiente = false; programarPreviaRender(); }
+    /* Si mientras se dibujaba esta previa el usuario siguió moviendo el control,
+       la siguiente sale casi enseguida en vez de esperar la espera completa: así
+       la imagen acompaña al deslizador en vez de ir a los saltos. */
+    if (_previaPendiente){ _previaPendiente = false; programarPreviaRender(REBOTE_PREVIA); }
   }
 }
 document.getElementById('rndKey').addEventListener('input', e=>cambiarConfigRender({ key: parseFloat(e.target.value) }));
@@ -3497,6 +3571,15 @@ document.getElementById('rndSombras').addEventListener('change', e=>cambiarConfi
 document.getElementById('rndPisoSombra').addEventListener('change', e=>cambiarConfigRender({ pisoSombra: e.target.checked }));
 document.getElementById('rndSombraOp').addEventListener('input', e=>cambiarConfigRender({ sombraOpacidad: parseFloat(e.target.value) }));
 document.getElementById('rndPreviaBtn').addEventListener('click', actualizarPreviaRender);
+function aplicarPresetRender(nombre){
+  const p = PRESETS_RENDER[nombre];
+  if (!p) return;
+  cambiarConfigRender(Object.assign({ preset:nombre }, p));
+  setStatus('Iluminación "' + PRESET_NOMBRES[nombre] + '" aplicada.', 'ok');
+}
+document.querySelectorAll('#rndPresetGrid button').forEach(b=>{
+  b.addEventListener('click', ()=> aplicarPresetRender(b.dataset.preset));
+});
 document.getElementById('rndResetBtn').addEventListener('click', ()=>{
   cambiarConfigRender(Object.assign({}, RENDER_DEFAULT));
   setStatus('Ajustes de render vueltos a los valores de fábrica.', 'ok');
@@ -3509,7 +3592,22 @@ refrescarPanelRender();
    temporal: sin ejes ni grilla, piso gris neutro con sombra suave de verdad, y un
    material de plástico brillante — y lo devolvemos todo a como estaba al terminar.
    Usa la orientación/cámara actual, tal como esté el modelo en pantalla. */
-async function generatePresentationRender(opciones){
+/* Sacar la foto toca el estado de toda la escena (luces, materiales, tamaño del
+   lienzo, fondo) y lo devuelve al final. Si dos llamadas se pisan —por ejemplo la
+   vista previa mientras se está generando la foto final— la segunda guardaría como
+   "estado original" el estado ya modificado por la primera, y al terminar dejaría
+   el visor con las luces de foto puestas. Por eso las llamadas se hacen una atrás
+   de la otra: la cola es de una sola fila y no se pierde ninguna. */
+let _colaRender = Promise.resolve();
+function generatePresentationRender(opciones){
+  const anterior = _colaRender;
+  let liberar;
+  _colaRender = new Promise(res => { liberar = res; });
+  return anterior
+    .then(()=> _generarFotoPresentacion(opciones))
+    .finally(()=> liberar());
+}
+async function _generarFotoPresentacion(opciones){
   opciones = opciones || {};
   const previa = !!opciones.previa; // vista previa chica del panel: sin descarga ni cartel de espera
   if (!voxels.length || !hayModeloEnElVisor()){
@@ -3593,8 +3691,20 @@ async function generatePresentationRender(opciones){
      ACES es la curva que usan cine y los motores fotorrealistas. Con ella una
      luz de 1.5 da 0.88 y una de 4 da 0.97: siguen distinguiéndose en vez de
      empastarse. La exposición hace de diafragma. */
+  /* CAMBIO DE CURVA — solo acá. El visor 3D sigue en NoToneMapping y no se toca.
+
+     ACES es la curva del cine, y hace lo que el cine quiere: además de comprimir
+     las luces altas, las DESATURA a propósito para que un foco fuerte tienda al
+     blanco. En una foto de producto eso es justo lo contrario de lo que se busca:
+     la cara iluminada de una pieza azul salía celeste grisáceo en vez de un azul
+     más claro. Medido sobre la figura de prueba, ACES se llevaba puesta parte de
+     la saturación en el 10% más brillante de la imagen.
+
+     Cineon comprime las luces altas igual de suave pero no toca el tono, así que
+     el azul sigue siendo azul en la parte iluminada. El criterio es el que pediste:
+     color base fiel antes que efecto cinematográfico. */
   const wasTono = renderer.toneMapping, wasExp = renderer.toneMappingExposure;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMapping = TONO_RENDER;
   renderer.toneMappingExposure = configRender.exposicion;
   const wasEnv = scene.environment;
   if (configRender.entorno > 0) scene.environment = entornoEstudio();
@@ -3614,39 +3724,41 @@ async function generatePresentationRender(opciones){
   // pieza recién impresa; en 1, brillante como una inyectada.
   const b = configRender.brillo;
   const realMat = new THREE.MeshPhysicalMaterial({
-    /* Rango llevado al máximo que da el motor. En el tope la rugosidad baja a
-       0.02 y la capa brillante queda pulida: ahí el reflejo del entorno se ve
-       como un espejo. `reflectivity` y `specularIntensity` suben con el mismo
-       control, porque son los que deciden cuánta luz devuelve la superficie —
-       sin ellos, bajar la rugosidad sola no alcanza para un plástico lustroso. */
-    roughness: Math.max(0.02, 0.62 - 0.60*b),
-    metalness: 0.02,
-    /* El barniz se mantiene BAJO a propósito.
-       Una capa transparente refleja la luz tal cual es: blanca. Cuanto más
-       barniz, más se cubre el color con manchas blancas. En Studio el brillo
-       conserva el color porque casi todo es luz difusa — la cara iluminada de
-       una pieza azul es un azul más claro, no un blanco — con apenas un toque
-       especular encima. Antes esto iba al máximo y se comía el color. */
-    clearcoat: 0.08 + 0.30*b,
-    clearcoatRoughness: Math.max(0.10, 0.45 - 0.30*b),
-    reflectivity: 0.25 + 0.35*b,
-    specularIntensity: 0.35 + 0.55*b,
+    /* Rugosidad de un ABS inyectado de verdad: entre 0.52 (satinado, recién
+       desmoldado) y 0.38 (pulido). Antes el control llegaba hasta 0.02, que ya no
+       es plástico sino espejo, y era una de las cosas que daban el aspecto mojado.
+       El rango ahora se queda dentro de lo que hace un plástico real. */
+    roughness: 0.52 - 0.14*b,
+    // Plástico: cero metal. Antes tenía 0.02 y eso ya empieza a teñir el reflejo.
+    metalness: 0,
+    /* El barniz apenas se insinúa (0.05 a 0.15). Una capa transparente refleja la
+       luz tal cual es —blanca—, así que cuanto más barniz, más manchas blancas
+       tapan el color. Antes llegaba a 0.38 y era lo que blanqueaba las caras
+       iluminadas. */
+    clearcoat: 0.05 + 0.10*b,
+    clearcoatRoughness: 0.32 - 0.10*b,
+    reflectivity: 0.18 + 0.22*b,
+    specularIntensity: 0.25 + 0.35*b,
     /* Vidriado. Acá está lo que hacía que las piezas parecieran dibujadas por un
        programa y no plástico de verdad: faltaba el efecto Fresnel.
 
        Un material real refleja poco cuando lo mirás de frente y mucho cuando lo
        mirás de canto — por eso en una pieza de plástico el borde brilla más que
-       el centro. Quien manda ahí es el índice de refracción. El valor que traía
-       el motor equivale a un plástico apagado; llevándolo hasta 2.2 la pieza
-       refleja de frente cuatro veces más y de canto se enciende, que es lo que
-       le da el aspecto vidriado.
+       el centro. Quien manda ahí es el índice de refracción.
 
-       La translucidez va aparte y muy contenida: el plástico de estos bloques
-       deja pasar algo de luz en los cantos finos, pero es cara de calcular y con
-       ocho mil piezas conviene no pasarse. */
-    ior: 1.35 + 0.85 * configRender.vidrio,
-    transmission: 0.10 * configRender.vidrio,
-    thickness: 0.6 * configRender.vidrio,
+       Acá estaba el otro culpable del lavado: el índice llegaba a 1.82 con los
+       valores de fábrica y hasta 2.2 en el tope. Un ABS real ronda 1.52; a 1.82
+       el borde de cada pieza devuelve tanta luz blanca que el color desaparece
+       justo donde el ojo busca la forma. Ahora el rango va de 1.46 a 1.56, que es
+       plástico de verdad, y el control sigue sirviendo para elegir entre apagado
+       y lustroso.
+
+       La translucidez arranca en cero. El plástico opaco de estos bloques no la
+       necesita, y encenderla obliga al motor a redibujar la escena entera en cada
+       cuadro. Solo se activa, y muy contenida, si pedís vidriado alto a propósito. */
+    ior: 1.46 + 0.10 * configRender.vidrio,
+    transmission: configRender.vidrio > 0.3 ? 0.06 * configRender.vidrio : 0,
+    thickness: configRender.vidrio > 0.3 ? 0.5 * configRender.vidrio : 0,
     envMap: configRender.entorno > 0 ? entornoEstudio() : null,
     envMapIntensity: configRender.entorno,
   });
@@ -3678,7 +3790,12 @@ async function generatePresentationRender(opciones){
     // ocupaba menos de un píxel del mapa y desaparecía. Los tachones son el
     // detalle más chico del modelo, así que marcan el mínimo que hay que
     // resolver.
-    key.shadow.mapSize.set(4096, 4096);
+    /* Acá sí está el costo de la vista previa: calcular el mapa de sombras vuelve a
+       recorrer el modelo entero, y a 4096x4096 es la parte más cara de toda la foto.
+       La previa usa 2048: a esa escala la diferencia no se ve, y es lo que permite
+       subir la resolución de la imagen sin que deje de acompañar al deslizador.
+       La foto final mantiene 4096. */
+    key.shadow.mapSize.set(previa ? 2048 : 4096, previa ? 2048 : 4096);
     const cs = key.shadow.camera;
     // El área que calcula la luz tiene que abarcar el modelo Y su sombra en el
     // piso, no solo el modelo. Con la principal a unos 46° de altura, la sombra
@@ -3696,8 +3813,8 @@ async function generatePresentationRender(opciones){
        borde difuso, porque la luz no viene de un punto sino de una ventana
        entera. El radio del mapa imita eso: 1 da borde de navaja, 12 lo vuelve un
        degradado. Es lo que más acerca la sombra a la de una foto. */
-    key.shadow.radius = 1 + 11 * configRender.suavidad;
-    if ('blurSamples' in key.shadow) key.shadow.blurSamples = Math.round(8 + 16*configRender.suavidad);
+    key.shadow.radius = 1 + 17 * configRender.suavidad;
+    if ('blurSamples' in key.shadow) key.shadow.blurSamples = Math.round(8 + 20*configRender.suavidad);
     key.shadow.bias = -0.00025;
     key.shadow.normalBias = Math.max(0.006, R*0.0012);
     cuerpos.forEach(m=>{
@@ -3773,7 +3890,28 @@ async function generatePresentationRender(opciones){
   const origNear = camera.near, origFar = camera.far;
   // La vista previa se saca chica a propósito: es una sola pasada de render, así
   // que mover un control se ve al instante en vez de esperar la foto grande.
-  const anchoFoto = previa ? 1100 : (parseInt(configRender.calidad, 10) || 1600);
+  /* Medido en esta misma escena con 9.400 bloques: dibujar el cuadro cuesta 0.1 ms
+     a 720 px y 0.1 ms a 3200 px — lo hace la placa de video y el tamaño casi no le
+     pesa. Lo único que crece con la resolución es comprimir el PNG (17 ms a 720,
+     36 ms a 1600). O sea que bajar la resolución de la vista previa no era lo que
+     la hacía rápida, y a cambio se veía escalonada.
+
+     Así que la vista previa va a 1600x1200, la misma nitidez que la foto: se ve
+     igual que el render final, solo que sin descargarse. La FOTO FINAL sigue
+     saliendo a la calidad elegida (1600/2400/3200), sin cambios. */
+  /* Medido con cronometro dentro de esta misma funcion, modelo de 9.400 bloques:
+       dibujar el cuadro .............   0,5 ms  (lo hace la placa, el tamano no le pesa)
+       pasar la imagen a PNG a 1600 ... 446 ms
+       pasar la imagen a PNG a 1200 ... 250 ms
+     O sea que bajar la resolucion NO era lo que hacia rapida a la vista previa
+     (por eso los 720 px de antes se veian escalonados sin ganar casi nada), pero
+     con modelos muy grandes el paso a PNG si empieza a notarse mientras arrastras
+     un control. Se probo bajar la previa a 1200 px con los modelos grandes: ahorra
+     apenas 90 ms de 915 (el grueso del tiempo se va en preparar la escena, no en
+     la imagen) y a cambio se pierde nitidez justo en los modelos que mas la
+     necesitan. No compensa: la previa sale SIEMPRE a 1600, la misma nitidez que
+     la foto. La FOTO FINAL sale a la calidad elegida (1600/2400/3200). */
+  const anchoFoto = previa ? 1600 : (parseInt(configRender.calidad, 10) || 1600);
   renderer.setSize(anchoFoto, Math.round(anchoFoto*3/4), false);
   camera.aspect = 4/3;
   {
@@ -3832,6 +3970,10 @@ async function generatePresentationRender(opciones){
   if (seamMesh) seamMesh.visible = false;
 
   renderer.render(scene, camera);
+  /* Probado: la vista previa en JPEG al 94 % pesaba MAS que el PNG (320 KB contra
+     280 KB) en los modelos con estrias, porque el detalle fino es justo lo que el
+     JPEG comprime peor, y encima perdia nitidez. Se queda en PNG, que es ademas
+     lo que hace que la previa se vea igual que la foto final. */
   const dataUrl = renderer.domElement.toDataURL('image/png');
   // Copia en JPEG para la portada del manual: en PNG una foto de 3200 px
   // hacía que el PDF pesara una barbaridad.
