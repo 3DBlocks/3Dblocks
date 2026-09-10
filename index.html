@@ -582,7 +582,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v115</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v117</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -1062,6 +1062,20 @@
       <option value="contorno">Contorno del modelo (lento)</option>
     </select>
     <button class="btn sm ghost" id="wmResetBtn" title="Volver a los valores de fábrica">↺</button>
+    <div class="wm-sep"></div>
+    <span class="wm-lbl" title="La segunda marca: va por el margen de la hoja y nunca encima del modelo">Firma:</span>
+    <select id="fmModo" title="Qué se repite por el margen de la hoja">
+      <option value="logo">Logo RenzoD'sing</option>
+      <option value="texto">Texto propio</option>
+      <option value="ninguna">Ninguna</option>
+    </select>
+    <input type="text" id="fmTexto" placeholder="Texto de la firma" title="Texto que se repite por el margen" style="display:none;" />
+    <span class="wm-lbl">Opacidad</span>
+    <input type="range" id="fmOpac" min="0" max="0.5" step="0.01" value="0.16" />
+    <span class="wm-val" id="fmOpacVal">16%</span>
+    <span class="wm-lbl">Tamaño</span>
+    <input type="range" id="fmEsc" min="0.4" max="2.5" step="0.05" value="1" />
+    <span class="wm-val" id="fmEscVal">1.00</span>
   </div>
   <p style="font-size:10.5px; color:var(--text-faint); margin:0; text-align:center; max-width:640px;">La marca se repite en mosaico por toda la hoja, en diagonal. Los ajustes quedan guardados en este navegador y se aplican al PDF, a los PNG y al video.</p>
 </div>
@@ -4379,6 +4393,19 @@ const MARCA_DEFAULT = {
 };
 const MARCA_KEY = '3dblock.marcaAgua';
 
+/* La SEGUNDA marca: la firma de la casa, por el margen de la hoja. Es otra cosa
+   que la marca de agua — aquella protege el diseño yendo encima del modelo, esta
+   solo firma el manual. Por eso se configura aparte. */
+const FIRMA_DEFAULT = { modo:'logo', texto:MARCA_NOMBRE, opacidad:0.16, escala:1 };
+const FIRMA_KEY = '3dblock.firmaCasa';
+let firmaCasa = (function(){
+  try{ return Object.assign({}, FIRMA_DEFAULT, JSON.parse(localStorage.getItem(FIRMA_KEY) || 'null')); }
+  catch(e){ return Object.assign({}, FIRMA_DEFAULT); }
+})();
+function guardarFirma(){
+  try{ localStorage.setItem(FIRMA_KEY, JSON.stringify(firmaCasa)); } catch(e){}
+}
+
 function cargarConfigMarca(){
   try{
     const guardado = JSON.parse(localStorage.getItem(MARCA_KEY) || 'null');
@@ -4645,7 +4672,7 @@ async function componerHojaConMarca(fuente, opciones){
 /* Capa de marca del tamaño de la hoja del PDF, con fondo transparente. Se genera
    UNA vez y se reusa en todas las páginas con el mismo alias, así el archivo no
    engorda una vez por página. */
-function construirCapaMarcaPagina(pageWmm, pageHmm, huecoMm){
+function construirCapaMarcaPagina(pageWmm, pageHmm, huecoMm, modo){
   if (!marcaEstaActiva()) return null;
   const escalaPx = 4; // ≈100 dpi: suficiente para una marca clarita, sin inflar el PDF
   const c = document.createElement('canvas');
@@ -4657,16 +4684,74 @@ function construirCapaMarcaPagina(pageWmm, pageHmm, huecoMm){
   // así que la marca se borra de ese rectángulo y queda solo alrededor. Se hace
   // recortando después de dibujar (y no dibujando alrededor) para que el mosaico
   // no se corra ni cambie de posición según el tamaño del hueco.
-  // Acepta un hueco o varios: en el manual compacto hay una foto por paso y
-  // cada una necesita el suyo.
+  /* Acepta un hueco o varios, y dos modos opuestos:
+       'fuera'  — se borra la marca DENTRO de los recuadros (la foto queda limpia)
+       'dentro' — se borra TODO menos los recuadros (la marca va sobre la foto)
+     El segundo es el que protege de verdad: una marca en el margen se recorta con
+     unas tijeras, una que cruza el modelo no. */
   const huecos = !huecoMm ? [] : (Array.isArray(huecoMm) ? huecoMm : [huecoMm]);
-  if (huecos.length && marcaAgua.recorte !== 'ninguno'){
-    const m = 1.5 * escalaPx; // respiro para que la marca no roce el borde de la imagen
+  const m = 1.5 * escalaPx; // respiro para que la marca no roce el borde
+  if (huecos.length && modo === 'dentro'){
+    // destination-in deja solo lo que cae bajo los rectángulos
+    ctx.globalCompositeOperation = 'destination-in';
+    ctx.fillStyle = '#000';
+    huecos.forEach(h=>{
+      ctx.fillRect(h.x*escalaPx + m, h.y*escalaPx + m,
+                   h.w*escalaPx - m*2, h.h*escalaPx - m*2);
+    });
+    ctx.globalCompositeOperation = 'source-over';
+  } else if (huecos.length && marcaAgua.recorte !== 'ninguno'){
     huecos.forEach(h=>{
       ctx.clearRect(h.x*escalaPx - m, h.y*escalaPx - m,
                     h.w*escalaPx + m*2, h.h*escalaPx + m*2);
     });
   }
+  return c.toDataURL('image/png');
+}
+
+/* ---------------------------- Marca de la casa ----------------------------
+   La segunda capa: el logo de RenzoD'sing repetido por el margen de la hoja,
+   fuera de las fotos. Es la firma del manual, no la protección del diseño — de
+   eso se encarga la otra, que va encima del modelo. */
+async function construirCapaLogoPagina(pageWmm, pageHmm, huecoMm){
+  const escalaPx = 4;
+  const W = Math.round(pageWmm * escalaPx), H = Math.round(pageHmm * escalaPx);
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+
+  if (firmaCasa.modo === 'ninguna' || firmaCasa.opacidad <= 0) return null;
+  const conLogo = firmaCasa.modo === 'logo';
+  const logo = conLogo ? await logoComoImagen(64) : null;
+  const img = logo ? await new Promise(res=>{ const i = new Image(); i.onload=()=>res(i); i.onerror=()=>res(null); i.src = logo; }) : null;
+
+  const est = getComputedStyle(document.documentElement);
+  const e = firmaCasa.escala;
+  const paso = 190*e, alto = 56*e;
+  ctx.save();
+  ctx.translate(W/2, H/2);
+  ctx.rotate(-28 * Math.PI/180);   // en diagonal, como la otra marca
+  ctx.translate(-W, -H);
+  ctx.globalAlpha = firmaCasa.opacidad;
+  ctx.font = '700 ' + Math.round(26*e) + 'px ' + (est.getPropertyValue('--sans').trim() || 'sans-serif');
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = est.getPropertyValue('--accent').trim() || '#34dff5';
+  for (let y = 0; y < H*2; y += alto*1.9){
+    const corr = ((y / (alto*1.9)) % 2) ? paso/2 : 0;   // filas alternadas
+    for (let x = -paso; x < W*2; x += paso){
+      if (img) ctx.drawImage(img, x + corr, y - 16*e, 32*e, 32*e);
+      ctx.fillText((firmaCasa.texto || MARCA_NOMBRE).toUpperCase(), x + corr + (img ? 38*e : 0), y);
+    }
+  }
+  ctx.restore();
+
+  // Fuera de las fotos: se borra lo que caiga encima de ellas
+  const huecos = !huecoMm ? [] : (Array.isArray(huecoMm) ? huecoMm : [huecoMm]);
+  const m = 1.5 * escalaPx;
+  huecos.forEach(h=>{
+    ctx.clearRect(h.x*escalaPx - m, h.y*escalaPx - m,
+                  h.w*escalaPx + m*2, h.h*escalaPx + m*2);
+  });
   return c.toDataURL('image/png');
 }
 
@@ -4860,6 +4945,37 @@ function pasoPreview(delta){
     const layerSel = document.getElementById('previewLayerSelect');
     if (layerSel && layerSel.options.length) quickAnglePreview(layerSel.value);
   });
+})();
+
+(function firmaCasaUI(){
+  const modo = document.getElementById('fmModo');
+  const texto = document.getElementById('fmTexto');
+  const opac = document.getElementById('fmOpac');
+  const esc = document.getElementById('fmEsc');
+  function pintar(){
+    modo.value = firmaCasa.modo;
+    texto.value = firmaCasa.texto || '';
+    texto.style.display = firmaCasa.modo === 'texto' ? '' : 'none';
+    opac.value = firmaCasa.opacidad;
+    document.getElementById('fmOpacVal').textContent = Math.round(firmaCasa.opacidad*100) + '%';
+    esc.value = firmaCasa.escala;
+    document.getElementById('fmEscVal').textContent = Number(firmaCasa.escala).toFixed(2);
+    // Con la firma apagada, opacidad y tamaño no hacen nada: se atenúan
+    const off = firmaCasa.modo === 'ninguna';
+    [opac, esc].forEach(c=>{ c.disabled = off; c.style.opacity = off ? 0.4 : 1; });
+  }
+  function cambiar(p){
+    Object.assign(firmaCasa, p);
+    guardarFirma(); pintar();
+    // La vista previa se rehace para verlo al instante, como con la otra marca
+    const layerSel = document.getElementById('previewLayerSelect');
+    if (layerSel && layerSel.options.length) quickAnglePreview(layerSel.value);
+  }
+  modo.addEventListener('change', e=> cambiar({ modo: e.target.value }));
+  texto.addEventListener('input', e=> cambiar({ texto: e.target.value }));
+  opac.addEventListener('input', e=> cambiar({ opacidad: parseFloat(e.target.value) }));
+  esc.addEventListener('input', e=> cambiar({ escala: parseFloat(e.target.value) }));
+  pintar();
 })();
 
 (function pasosPorHojaUI(){
@@ -5239,11 +5355,16 @@ async function generateInstructionsPDF(){
     /* Una capa de marca por cada cantidad posible de pasos en la hoja. Se arman a
        demanda y se reusan: casi siempre son dos, la llena y la última. */
     const capasMarca = new Map();
-    function marcaPara(total){
+    async function marcaPara(total){
       if (!capasMarca.has(total)){
         const hs = [];
         for (let k=0; k<total; k++) hs.push(celdaEn(k, total));
-        capasMarca.set(total, construirCapaMarcaPagina(pageW, pageH, hs));
+        capasMarca.set(total, {
+          // Tu marca, SOBRE las fotos: es la que protege el diseño
+          dentro: construirCapaMarcaPagina(pageW, pageH, hs, 'dentro'),
+          // La firma de la casa, por el margen y nunca encima del modelo
+          fuera:  await construirCapaLogoPagina(pageW, pageH, hs),
+        });
       }
       return capasMarca.get(total);
     }
@@ -5293,8 +5414,9 @@ async function generateInstructionsPDF(){
         // Fondo azul noche en toda la hoja, como el resto del programa
         doc.setFillColor(...hexToRgbArr(COLOR_HOJA_MANUAL));
         doc.rect(0, 0, pageW, pageH, 'F');
-        const capaMarca = marcaPara(enEstaHoja);
-        if (capaMarca) doc.addImage(capaMarca, 'PNG', 0, 0, pageW, pageH, 'marcaAgua3DBlock_' + enEstaHoja, 'FAST');
+        const capas = await marcaPara(enEstaHoja);
+        // La firma va primero: queda debajo de las fotos que se dibujan después
+        if (capas.fuera) doc.addImage(capas.fuera, 'PNG', 0, 0, pageW, pageH, 'firmaCasa_' + enEstaHoja, 'FAST');
 
         /* El logo va DESPUÉS de la marca de agua, así queda por encima y siempre
            legible: antes el mosaico le pasaba por arriba. */
@@ -5320,6 +5442,13 @@ async function generateInstructionsPDF(){
       }
       const cel = celdaEn(celdaK, enEstaHoja);
       doc.addImage(imgData, 'JPEG', cel.x, cel.y, cel.w, cel.h);
+      /* Tu marca de agua va DESPUÉS de la foto, así queda encima del modelo. Se
+         estampa la hoja entera pero solo tiene tinta dentro de los recuadros, así
+         que una sola imagen sirve para todas las fotos de la hoja. */
+      if (celdaK === enEstaHoja - 1 || layer === rango.hasta){
+        const capas = await marcaPara(enEstaHoja);
+        if (capas.dentro) doc.addImage(capas.dentro, 'PNG', 0, 0, pageW, pageH, 'marcaDentro_' + enEstaHoja, 'FAST');
+      }
       // Marco: separa la foto del fondo y ordena la hoja cuando hay varias
       doc.setDrawColor(...MANUAL_ACENTO);
       doc.setLineWidth(0.4);
