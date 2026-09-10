@@ -583,7 +583,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v122</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v123</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -5668,9 +5668,11 @@ async function generateAssemblyVideo(){
     setStatus('Tu navegador no permite grabar video. Probá con Chrome o Edge.', 'err');
     return;
   }
-  const SECONDS_PER_LAYER = 2.0;
+  /* El ritmo sale del panel de Video. Antes estaba clavado en 2 segundos por
+     capa y el control del panel no hacía nada: por eso el video duraba 23
+     segundos cuando el panel anunciaba 12. */
   const FPS = 30;
-  const framesPerLayer = Math.round(SECONDS_PER_LAYER * FPS);
+  const framesPerLayer = Math.max(2, Math.round(configVideo.segCapa * FPS));
 
   setLoading(true, 'Grabando el video de armado… (no cierres esta pestaña)');
   await new Promise(r=>setTimeout(r, 30));
@@ -9876,9 +9878,13 @@ function cajaVideo(hastaCapa){
       v.x*voxelSize - offX + voxelSize, v.y*voxelSize + voxelSize, v.z*voxelSize - offZ + voxelSize));
   });
   if (!hay) return centeredBounds();
-  // Respiro arriba para los bloques en el aire
+  /* Respiro arriba para los bloques en el aire, pero CHICO.
+     Con el respiro completo de la caída, ese cielo vacío mandaba en el encuadre:
+     la cámara se abría para él y el modelo quedaba ocupando un 3% del cuadro.
+     Se deja un tercio: se ve de dónde vienen los bloques sin regalar la mitad
+     de la pantalla al aire. */
   if (configVideo.modo === 'caida'){
-    b.max.y += voxelSize * configVideo.alturaCaida * 0.85;
+    b.max.y += voxelSize * Math.min(4, configVideo.alturaCaida * 0.34);
   }
   return b;
 }
@@ -9890,8 +9896,13 @@ function camaraVideo(caja, focusLayer){
   const centro = caja.getCenter(new THREE.Vector3());
   const puntoCapa = focusPointForLayer(caja, focusLayer);
   const foco = centro.clone().lerp(puntoCapa, configVideo.seguir);
-  positionCameraFixedAngle(caja, configVideo.elevacion, configVideo.azimut,
-                           BASE_MARGIN / configVideo.zoom, foco);
+  /* Encuadre por bisección, el mismo que usa la foto de presentación.
+     La fórmula anterior calculaba la distancia con el lado más largo de la caja,
+     sin mirar la FORMA: en una base ancha y chata, el modelo llenaba el ancho y
+     dejaba el 80% de la altura vacía. Al medir dónde caen de verdad las ocho
+     esquinas en la pantalla, el modelo entra ajustado sea cual sea su forma. */
+  encuadrarModeloEnCuadro(caja, configVideo.elevacion, configVideo.azimut,
+                          1.10 / configVideo.zoom, foco);
 }
 
 document.getElementById('closeRenderBtn').addEventListener('click', cerrarPanelRender);
