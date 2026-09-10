@@ -582,7 +582,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v119</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v120</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -5628,7 +5628,7 @@ async function generateAssemblyVideo(){
   const wasGroundVisible = ground.visible;
   const wasGroundColor = ground.material.color.clone();
   const wasGroundScale = ground.scale.clone();
-  ground.visible = true;
+  ground.visible = false;   // sin piso: el horizonte cortaba el cuadro por la mitad
   ground.material.color.copy(studioColor);
   ground.scale.setScalar(Math.max(1, maxDim*3/40));
 
@@ -5695,12 +5695,20 @@ async function generateAssemblyVideo(){
            · No caen todos juntos. Cada bloque arranca un poco después según su
              posición, repartido en el primer tercio del tiempo de la capa. Que
              caigan en bloque parece un ascensor; escalonados, una lluvia. */
-        const alturaCaida = Math.max(6, dims.y*voxelSize*0.9);
+        /* Altura de caída FIJA, no proporcional al modelo.
+           Antes era el 90% del alto del diseño: en uno de 47 capas los bloques
+           arrancaban a 42 bloques de altura, muy fuera del cuadro, y se veían
+           como puntitos dispersos en el cielo antes de entrar. Siete bloques
+           alcanzan para que se lea la caída y no se salen del encuadre. */
+        const alturaCaida = voxelSize * 7;
         if (t <= 0.95){
           newOnes.forEach(({idx,v})=>{
             const hs = Math.sin(v.x*127.1 + v.z*74.7 + v.y*311.7) * 43758.5453;
-            const retraso = (hs - Math.floor(hs)) * 0.33;      // arranque escalonado
-            const tc = Math.min(1, Math.max(0, (t - retraso) / 0.42));
+            /* Escalonado más corto. Con 0.33 de reparto y 0.42 de caída, en
+               cualquier instante había bloques repartidos por toda la altura y
+               se veía una nube en vez de una lluvia que aterriza. */
+            const retraso = (hs - Math.floor(hs)) * 0.16;
+            const tc = Math.min(1, Math.max(0, (t - retraso) / 0.5));
             const caida = alturaCaida * (1 - tc) * (1 - tc);   // acelera al caer
             growDummy.position.set(
               v.x*voxelSize - offX,
