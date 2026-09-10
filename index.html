@@ -350,13 +350,14 @@
   /* El panel de Render es igual al lateral pero independiente: se abre y se
      cierra por su cuenta, para no mezclar la foto de presentación con la
      importación de archivos. */
+  #videoPanel,
   #renderPanel{
     position:fixed; top:0; right:0; bottom:0; width:360px; max-width:92vw;
     background: linear-gradient(180deg, var(--panel), var(--bg-2)); border-left:1px solid var(--border);
     transform:translateX(100%); transition:transform .2s ease; z-index:30; display:flex; flex-direction:column;
     overflow-y:auto; box-shadow:-20px 0 50px rgba(0,0,0,.4);
   }
-  #renderPanel.open{ transform:translateX(0); }
+  #videoPanel.open, #renderPanel.open{ transform:translateX(0); }
   /* Panel simplificado: por defecto se ven la exposición, la dirección de la luz,
      las dos luces y los interruptores. Los ajustes de material quedan plegados
      detrás de un botón, porque son los que uno deja quietos una vez calibrados.
@@ -370,8 +371,8 @@
   #renderSection input[type=range]{ margin:2px 0 0; }
   #renderSection .btn.wide{ margin-top:6px !important; padding:6px 10px; }
   #renderSection label{ margin-top:6px !important; }
-  #renderPanel::-webkit-scrollbar{ width:8px; }
-  #renderPanel::-webkit-scrollbar-thumb{ background:var(--border); border-radius:4px; }
+  #videoPanel::-webkit-scrollbar, #renderPanel::-webkit-scrollbar{ width:8px; }
+  #videoPanel::-webkit-scrollbar-thumb, #renderPanel::-webkit-scrollbar-thumb{ background:var(--border); border-radius:4px; }
   #renderOverlay{
     position:fixed; inset:0; background:rgba(5,7,13,.55); backdrop-filter:blur(2px); z-index:29;
     opacity:0; pointer-events:none; transition:opacity .18s ease;
@@ -582,12 +583,13 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v120</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v121</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
     <button class="btn icon" id="logoutBtn" title="Cerrar sesión" style="display:none;">⎋</button>
     <button class="btn icon admin-only" id="openRenderBtn" title="Foto de presentación: luces, acabado, nitidez y vista previa en vivo">🖼️ <span style="display:inline-block">Render</span></button>
+    <button class="btn icon admin-only" id="openVideoBtn" title="Video del armado: ángulo, distancia, cómo aparecen los bloques y cuánto dura cada capa">🎬 <span style="display:inline-block">Video</span></button>
     <button class="btn icon" id="openSidebarBtn" title="Importar y ajustes">⚙︎ <span style="display:inline-block">Importar</span></button>
   </div>
 
@@ -730,6 +732,53 @@
 
 
   <div id="renderOverlay"></div>
+  <aside id="videoPanel">
+    <div class="section">
+      <div style="position:sticky; top:0; z-index:5; background:var(--panel); padding-bottom:8px; margin-bottom:6px;">
+        <p class="section-title" style="margin-top:0;">Vista previa del video</p>
+        <div id="vidPreviaCaja" style="position:relative; border:1px solid var(--border-soft); border-radius:9px; overflow:hidden; background:var(--panel-2); min-height:300px; display:flex; align-items:center; justify-content:center;">
+          <img id="vidPreviaImg" style="width:100%; display:block;" />
+        </div>
+        <input type="range" id="vidPreviaCapa" min="0" max="100" step="1" value="50" style="width:100%; margin-top:6px;" />
+        <p style="font-size:10px; color:var(--text-faint); margin:2px 0 0; text-align:center;">Movelo para ver cómo queda el encuadre en cualquier momento del armado</p>
+        <button class="btn sm ghost" id="vidPreviaBtn" style="width:100%; margin-top:6px;">🔄 Actualizar vista previa</button>
+      </div>
+
+      <p class="section-title">Cámara</p>
+      <div class="row"><span class="label-sm">Altura de la cámara</span><span class="value-mono" id="vidElevVal">35°</span></div>
+      <input type="range" id="vidElev" min="0" max="80" step="1" value="35" style="width:100%;" />
+      <div class="row" style="margin-top:6px;"><span class="label-sm">Giro alrededor</span><span class="value-mono" id="vidAzimVal">45°</span></div>
+      <input type="range" id="vidAzim" min="0" max="360" step="5" value="45" style="width:100%;" />
+      <div class="row" style="margin-top:6px;"><span class="label-sm">Acercamiento</span><span class="value-mono" id="vidZoomVal">1.00</span></div>
+      <input type="range" id="vidZoom" min="0.5" max="2.5" step="0.05" value="1" style="width:100%;" />
+      <div class="row" style="margin-top:6px;"><span class="label-sm">La cámara sigue la capa</span><span class="value-mono" id="vidSeguirVal">0.35</span></div>
+      <input type="range" id="vidSeguir" min="0" max="1" step="0.05" value="0.35" style="width:100%;" />
+      <p style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">En 0 la cámara queda clavada y el encuadre no se mueve nunca. Era lo que faltaba: al seguir del todo a la capa nueva, el modelo saltaba de tamaño en cada paso.</p>
+
+      <p class="section-title" style="margin-top:14px;">Cómo aparecen los bloques</p>
+      <select id="vidModo" style="width:100%; background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:7px; padding:6px 8px; font-size:12.5px;">
+        <option value="caida">Caen desde arriba</option>
+        <option value="crecer">Crecen en su lugar</option>
+        <option value="directo">Aparecen de golpe</option>
+      </select>
+      <div class="row" style="margin-top:8px;"><span class="label-sm">Altura de la caída</span><span class="value-mono" id="vidAltVal">7</span></div>
+      <input type="range" id="vidAlt" min="1" max="30" step="1" value="7" style="width:100%;" />
+      <div class="row" style="margin-top:6px;"><span class="label-sm">Duración de la caída</span><span class="value-mono" id="vidCaidaVal">50%</span></div>
+      <input type="range" id="vidCaida" min="0.15" max="0.9" step="0.05" value="0.5" style="width:100%;" />
+      <p style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">Qué parte del tiempo de la capa ocupa la caída. El resto queda quieto antes de pasar a la siguiente.</p>
+
+      <p class="section-title" style="margin-top:14px;">Tiempos</p>
+      <div class="row"><span class="label-sm">Segundos por capa</span><span class="value-mono" id="vidSegVal">0.90</span></div>
+      <input type="range" id="vidSeg" min="0.3" max="4" step="0.1" value="0.9" style="width:100%;" />
+      <div class="row" style="margin-top:6px;"><span class="label-sm">Segundos al final</span><span class="value-mono" id="vidFinVal">4</span></div>
+      <input type="range" id="vidFin" min="0" max="12" step="1" value="4" style="width:100%;" />
+      <p id="vidDuracion" style="font-size:10.5px; color:var(--accent); margin:8px 0 0; text-align:center;"></p>
+
+      <button class="btn wide" id="vidResetBtn" style="width:100%; margin-top:10px;">↺ Volver a los valores de fábrica</button>
+      <button class="btn primary wide" id="vidGenerarBtn" style="width:100%; margin-top:6px;">🎬 Generar el video</button>
+    </div>
+  </aside>
+
   <aside id="renderPanel">
     <div class="sb-head"><h2>Render</h2><button class="btn icon ghost" id="closeRenderBtn">✕</button></div>
     <div class="section admin-only" id="renderSection">
@@ -4274,6 +4323,28 @@ function contornoParaInstrucciones(){
    identificado. */
 const PASOS_HOJA_KEY = '3dblock.pasosPorHoja';
 let pasosPorHoja = parseInt(localStorage.getItem(PASOS_HOJA_KEY), 10) || 1;
+/* ---------------------------- Ajustes del video ----------------------------
+   Hasta ahora el video no tenía ningún control: la cámara seguía la capa que se
+   estaba armando y el encuadre se movía en cada paso. Acá se puede fijar. */
+const VIDEO_DEFAULT = {
+  elevacion: 35, azimut: 45,
+  zoom: 1,            // 1 = encuadre normal; más alto, más cerca
+  seguir: 0.35,       // 0 = cámara clavada; 1 = sigue del todo a la capa nueva
+  modo: 'caida',      // 'caida' | 'crecer' | 'directo'
+  segCapa: 0.9,       // segundos por capa
+  segCaida: 0.5,      // parte de la capa que dura la caída
+  alturaCaida: 7,     // en bloques
+  segFinal: 4,        // segundos quieto al terminar
+};
+const VIDEO_KEY = '3dblock.video';
+let configVideo = (function(){
+  try{ return Object.assign({}, VIDEO_DEFAULT, JSON.parse(localStorage.getItem(VIDEO_KEY) || 'null')); }
+  catch(e){ return Object.assign({}, VIDEO_DEFAULT); }
+})();
+function guardarConfigVideo(){
+  try{ localStorage.setItem(VIDEO_KEY, JSON.stringify(configVideo)); } catch(e){}
+}
+
 const BLOQUE_MANUAL_KEY = '3dblock.bloqueManual';
 let bloqueManual = localStorage.getItem(BLOQUE_MANUAL_KEY) || 'auto';
 // Los estilos 'simple' y 'magic' ya no existen: quien los tuviera guardados
@@ -5658,7 +5729,7 @@ async function generateAssemblyVideo(){
     recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
     recorder.start();
 
-    const ang = customInstructionAngle || { elevation: 35, azimuth: 45 };
+    // El ángulo y el ritmo salen del panel de Video, no de constantes fijas
     const rango = rangoPasos();
     const totalFrames = (rango.hasta - rango.desde + 1) * framesPerLayer;
     let frame = 0;
@@ -5700,22 +5771,24 @@ async function generateAssemblyVideo(){
            arrancaban a 42 bloques de altura, muy fuera del cuadro, y se veían
            como puntitos dispersos en el cielo antes de entrar. Siete bloques
            alcanzan para que se lea la caída y no se salen del encuadre. */
-        const alturaCaida = voxelSize * 7;
-        if (t <= 0.95){
+        const alturaCaida = voxelSize * configVideo.alturaCaida;
+        const dur = configVideo.segCaida;
+        if (configVideo.modo !== 'directo' && t <= 0.98){
           newOnes.forEach(({idx,v})=>{
             const hs = Math.sin(v.x*127.1 + v.z*74.7 + v.y*311.7) * 43758.5453;
-            /* Escalonado más corto. Con 0.33 de reparto y 0.42 de caída, en
-               cualquier instante había bloques repartidos por toda la altura y
-               se veía una nube en vez de una lluvia que aterriza. */
-            const retraso = (hs - Math.floor(hs)) * 0.16;
-            const tc = Math.min(1, Math.max(0, (t - retraso) / 0.5));
-            const caida = alturaCaida * (1 - tc) * (1 - tc);   // acelera al caer
+            // Escalonado corto: si se reparte mucho, se ve una nube en vez de una
+            // lluvia que aterriza.
+            const retraso = (hs - Math.floor(hs)) * Math.min(0.16, dur*0.32);
+            const tc = Math.min(1, Math.max(0, (t - retraso) / dur));
+            const caida = configVideo.modo === 'caida' ? alturaCaida * (1-tc) * (1-tc) : 0;
+            const esc = configVideo.modo === 'crecer'
+              ? (0.05 + 0.95*(1 - Math.pow(1-tc, 3)))     // crece en su lugar
+              : (tc < 1 ? 0.92 + 0.08*tc : 1);            // en el aire, apenas más chico
             growDummy.position.set(
               v.x*voxelSize - offX,
               v.y*voxelSize + voxelSize/2 + caida,
               v.z*voxelSize - offZ);
-            // Todavía en el aire: apenas más chico, para dar sensación de lejanía
-            growDummy.scale.setScalar(tc < 1 ? 0.92 + 0.08*tc : 1);
+            growDummy.scale.setScalar(esc);
             growDummy.updateMatrix();
             instMesh.setMatrixAt(idx, growDummy.matrix);
           });
@@ -5726,7 +5799,7 @@ async function generateAssemblyVideo(){
         // una capa a la siguiente. La cámara NO gira durante el armado: se queda
         // quieta para que se vea claro dónde va cada bloque.
         const focusLayer = layer===0 ? layer : (layer-1) + t;
-        positionCameraFixedAngle(fullBox, ang.elevation, ang.azimuth, instructionMargin(), focusPointForLayer(fullBox, focusLayer));
+        camaraVideo(fullBox, focusLayer);
         renderer.render(scene, camera);
         frame++;
         await new Promise(r=>setTimeout(r, 1000/FPS));
@@ -5742,9 +5815,9 @@ async function generateAssemblyVideo(){
     /* Antes acá había una vuelta de 360° con el modelo terminado. Se sacó: giraba
        justo cuando uno quiere quedarse mirando la figura armada, y mareaba. Ahora
        se queda quieto unos segundos en el mismo ángulo de todo el video. */
-    const finalFrames = FPS*4;
+    const finalFrames = Math.round(FPS*configVideo.segFinal);
     for (let f=0; f<finalFrames; f++){
-      positionCameraFixedAngle(fullBox, ang.elevation, ang.azimuth, instructionMargin(), focusPointForLayer(fullBox, maxLayer));
+      camaraVideo(fullBox, maxLayer);
       renderer.render(scene, camera);
       await new Promise(r=>setTimeout(r, 1000/FPS));
     }
@@ -9680,6 +9753,7 @@ document.getElementById('openSidebarBtn').addEventListener('click', openSidebar)
 const renderPanel = document.getElementById('renderPanel');
 const renderOverlay = document.getElementById('renderOverlay');
 function abrirPanelRender(){
+  document.getElementById('videoPanel').classList.remove('open');  // uno por vez
   closeSidebar(); // nunca los dos abiertos a la vez, se superponen
   renderPanel.classList.add('open');
   renderOverlay.classList.add('show');
@@ -9690,6 +9764,106 @@ function cerrarPanelRender(){
   renderOverlay.classList.remove('show');
 }
 document.getElementById('openRenderBtn').addEventListener('click', abrirPanelRender);
+
+/* ---------------------------- Panel de Video ---------------------------- */
+function abrirPanelVideo(){
+  cerrarPanelRender && cerrarPanelRender();
+  document.getElementById('videoPanel').classList.add('open');
+  refrescarPanelVideo();
+  actualizarPreviaVideo();
+}
+function cerrarPanelVideo(){ document.getElementById('videoPanel').classList.remove('open'); }
+document.getElementById('openVideoBtn').addEventListener('click', ()=>{
+  const p = document.getElementById('videoPanel');
+  p.classList.contains('open') ? cerrarPanelVideo() : abrirPanelVideo();
+});
+
+function refrescarPanelVideo(){
+  const c = configVideo, g = id => document.getElementById(id);
+  g('vidElev').value = c.elevacion;   g('vidElevVal').textContent = c.elevacion + '°';
+  g('vidAzim').value = c.azimut;      g('vidAzimVal').textContent = c.azimut + '°';
+  g('vidZoom').value = c.zoom;        g('vidZoomVal').textContent = Number(c.zoom).toFixed(2);
+  g('vidSeguir').value = c.seguir;    g('vidSeguirVal').textContent = Number(c.seguir).toFixed(2);
+  g('vidModo').value = c.modo;
+  g('vidAlt').value = c.alturaCaida;  g('vidAltVal').textContent = c.alturaCaida;
+  g('vidCaida').value = c.segCaida;   g('vidCaidaVal').textContent = Math.round(c.segCaida*100) + '%';
+  g('vidSeg').value = c.segCapa;      g('vidSegVal').textContent = Number(c.segCapa).toFixed(2);
+  g('vidFin').value = c.segFinal;     g('vidFinVal').textContent = c.segFinal;
+  // Los ajustes de caída no hacen nada en los otros modos
+  const off = c.modo !== 'caida';
+  ['vidAlt','vidCaida'].forEach(id=>{ g(id).disabled = off; g(id).style.opacity = off ? 0.4 : 1; });
+  // Duración total, para saber en qué se está metiendo antes de generar
+  const r = rangoPasos();
+  const pasos = r.hasta - r.desde + 1;
+  const dur = pasos * c.segCapa + c.segFinal;
+  g('vidDuracion').textContent = pasos + ' pasos · duración aproximada ' +
+    (dur < 60 ? dur.toFixed(0) + ' segundos' : Math.floor(dur/60) + ' min ' + Math.round(dur%60) + ' s');
+  const capa = g('vidPreviaCapa');
+  capa.max = String(maxLayer);
+  if (+capa.value > maxLayer) capa.value = String(Math.round(maxLayer/2));
+}
+function cambiarConfigVideo(p){
+  Object.assign(configVideo, p);
+  guardarConfigVideo();
+  refrescarPanelVideo();
+  clearTimeout(cambiarConfigVideo._t);
+  cambiarConfigVideo._t = setTimeout(actualizarPreviaVideo, 160);
+}
+[['vidElev','elevacion',parseInt],['vidAzim','azimut',parseInt],['vidZoom','zoom',parseFloat],
+ ['vidSeguir','seguir',parseFloat],['vidAlt','alturaCaida',parseInt],['vidCaida','segCaida',parseFloat],
+ ['vidSeg','segCapa',parseFloat],['vidFin','segFinal',parseInt]].forEach(([id,clave,conv])=>{
+  document.getElementById(id).addEventListener('input', e=> cambiarConfigVideo({ [clave]: conv(e.target.value) }));
+});
+document.getElementById('vidModo').addEventListener('change', e=> cambiarConfigVideo({ modo: e.target.value }));
+document.getElementById('vidPreviaCapa').addEventListener('input', ()=>{
+  clearTimeout(cambiarConfigVideo._t);
+  cambiarConfigVideo._t = setTimeout(actualizarPreviaVideo, 120);
+});
+document.getElementById('vidResetBtn').addEventListener('click', ()=>{
+  configVideo = Object.assign({}, VIDEO_DEFAULT);
+  guardarConfigVideo(); refrescarPanelVideo(); actualizarPreviaVideo();
+  setStatus('Ajustes del video restablecidos.', 'ok');
+});
+document.getElementById('vidGenerarBtn').addEventListener('click', ()=>{ cerrarPanelVideo(); generateAssemblyVideo(); });
+
+/* Un cuadro suelto del video, con la misma cámara y el mismo modo que va a usar
+   la grabación. Sirve para encuadrar sin tener que generar el video entero, que
+   es lo que más tiempo hacía perder. */
+async function actualizarPreviaVideo(){
+  if (!voxels.length) return;
+  const img = document.getElementById('vidPreviaImg');
+  if (!img) return;
+  const capa = Math.min(maxLayer, parseInt(document.getElementById('vidPreviaCapa').value, 10) || 0);
+  const antes = { layer: currentLayer, full: showFullDesign, below: showBelowLayers };
+  const wasSize = renderer.getSize(new THREE.Vector2());
+  try{
+    currentLayer = capa; showFullDesign = false; showBelowLayers = true;
+    rebuildMesh3D({ instrucciones:true });
+    const box = centeredBounds();
+    renderer.setSize(540, 540, false);
+    camera.aspect = 1; camera.updateProjectionMatrix();
+    camaraVideo(box, capa);
+    renderer.render(scene, camera);
+    img.src = renderer.domElement.toDataURL('image/jpeg', 0.85);
+  } finally {
+    renderer.setSize(wasSize.x, wasSize.y, false);
+    camera.aspect = wasSize.x/wasSize.y; camera.updateProjectionMatrix();
+    currentLayer = antes.layer; showFullDesign = antes.full; showBelowLayers = antes.below;
+    rebuildMesh3D();
+  }
+}
+
+/* Cámara del video, en un solo lugar para que la vista previa y la grabación no
+   puedan quedar distintas. El seguimiento es lo importante: mezcla el centro del
+   modelo con la altura de la capa que se está armando. */
+function camaraVideo(fullBox, focusLayer){
+  const centro = fullBox.getCenter(new THREE.Vector3());
+  const puntoCapa = focusPointForLayer(fullBox, focusLayer);
+  const foco = centro.clone().lerp(puntoCapa, configVideo.seguir);
+  positionCameraFixedAngle(fullBox, configVideo.elevacion, configVideo.azimut,
+                           BASE_MARGIN / configVideo.zoom, foco);
+}
+
 document.getElementById('closeRenderBtn').addEventListener('click', cerrarPanelRender);
 renderOverlay.addEventListener('click', cerrarPanelRender);
 document.getElementById('closeSidebarBtn').addEventListener('click', closeSidebar);
