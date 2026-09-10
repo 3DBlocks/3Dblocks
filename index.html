@@ -582,7 +582,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v114</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v115</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -1195,10 +1195,14 @@ scene.fog = new THREE.FogExp2(0x16181d, 0.006);
    que cambiarlo obligaba a acordarse de los cinco. Blanco para que el manual
    salga limpio en papel; si alguna vez hace falta que los bloques blancos se
    despeguen del fondo, un gris muy claro como '#f2f3f5' alcanza. */
-/* Fondo del manual. Pasa de blanco a la paleta del programa: el mismo azul noche
-   del inicio de sesión. La foto del paso se renderiza con ESTE color, así que la
-   imagen se funde con la hoja en vez de quedar como un recuadro blanco pegado. */
-const COLOR_FONDO_MANUAL = '#0e1424';
+/* Dos colores distintos, y esto importa:
+     · COLOR_FONDO_MANUAL es el de la FOTO del paso. Va claro, porque es donde hay
+       que distinguir bloque por bloque y el gris de lo ya armado necesita
+       despegarse del fondo.
+     · COLOR_HOJA_MANUAL es el del PAPEL alrededor. Va azul noche, con la paleta
+       del programa. */
+const COLOR_FONDO_MANUAL = '#ffffff';
+const COLOR_HOJA_MANUAL  = '#0e1424';
 const MANUAL_TINTA       = [235, 240, 250];  // texto principal
 const MANUAL_TINTA_TENUE = [130, 145, 175];  // notas al pie
 const MANUAL_ACENTO      = [52, 223, 245];   // cian del tema
@@ -5212,20 +5216,37 @@ async function generateInstructionsPDF(){
     const fotoLado = compacto ? Math.min(celdaW, celdaH - pieAlto) : imgSize;
     const imgAncho = fotoLado, imgAlto = fotoLado, imgX = margin;
 
-    // Posición de cada celda dentro de la hoja
-    function celdaEn(k){
+    /* Posición de cada celda, según cuántos pasos entran DE VERDAD en la hoja.
+       La última hoja casi nunca se llena, y dejar las celdas vacías reservadas
+       era lo que dibujaba esos recuadros muertos: la marca de agua les hacía el
+       hueco igual. Con el total real, una foto sola queda centrada en la hoja. */
+    function celdaEn(k, total){
       if (!compacto) return { x: imgX, y: topeY, w: imgSize, h: imgSize };
-      const c = k % cols, f = Math.floor(k / cols);
-      return {
-        x: margin + c*(celdaW+gap) + (celdaW - fotoLado)/2,
-        y: topeY + f*(celdaH+gap),
-        w: fotoLado, h: fotoLado
-      };
+      const n = Math.max(1, Math.min(total || pasosPorHoja, pasosPorHoja));
+      const c2 = Math.min(cols, n);
+      const f2 = Math.ceil(n / c2);
+      const cw = (pageW - margin*2 - gap*(c2-1)) / c2;
+      const chh = (pageH - topeY - margin - gap*(f2-1)) / f2;
+      const lado = Math.min(cw, chh - pieAlto);
+      const c = k % c2, f = Math.floor(k / c2);
+      // El bloque de celdas se centra en la hoja, no queda pegado arriba
+      const anchoTotal = c2*lado + gap*(c2-1);
+      const altoTotal  = f2*(lado+pieAlto) + gap*(f2-1);
+      const x0 = (pageW - anchoTotal)/2;
+      const y0 = topeY + Math.max(0, (pageH - topeY - margin - altoTotal)/2);
+      return { x: x0 + c*(lado+gap), y: y0 + f*(lado+pieAlto+gap), w: lado, h: lado };
     }
-    // La marca de agua reserva un hueco por cada foto de la hoja
-    const huecos = [];
-    for (let k=0; k<pasosPorHoja; k++) huecos.push(celdaEn(k));
-    const capaMarca = construirCapaMarcaPagina(pageW, pageH, huecos);
+    /* Una capa de marca por cada cantidad posible de pasos en la hoja. Se arman a
+       demanda y se reusan: casi siempre son dos, la llena y la última. */
+    const capasMarca = new Map();
+    function marcaPara(total){
+      if (!capasMarca.has(total)){
+        const hs = [];
+        for (let k=0; k<total; k++) hs.push(celdaEn(k, total));
+        capasMarca.set(total, construirCapaMarcaPagina(pageW, pageH, hs));
+      }
+      return capasMarca.get(total);
+    }
     const rango = rangoPasos();
 
     const totalPasos = rango.hasta - rango.desde + 1;
@@ -5266,12 +5287,14 @@ async function generateInstructionsPDF(){
          sola vez por hoja, no una por celda. */
       const idx = layer - rango.desde;          // qué número de paso es
       const celdaK = idx % pasosPorHoja;        // qué lugar ocupa en la hoja
+      const enEstaHoja = Math.min(pasosPorHoja, rango.hasta - layer + 1 + celdaK);
       if (celdaK === 0){
         doc.addPage();
         // Fondo azul noche en toda la hoja, como el resto del programa
-        doc.setFillColor(...hexToRgbArr(COLOR_FONDO_MANUAL));
+        doc.setFillColor(...hexToRgbArr(COLOR_HOJA_MANUAL));
         doc.rect(0, 0, pageW, pageH, 'F');
-        if (capaMarca) doc.addImage(capaMarca, 'PNG', 0, 0, pageW, pageH, 'marcaAgua3DBlock', 'FAST');
+        const capaMarca = marcaPara(enEstaHoja);
+        if (capaMarca) doc.addImage(capaMarca, 'PNG', 0, 0, pageW, pageH, 'marcaAgua3DBlock_' + enEstaHoja, 'FAST');
 
         /* El logo va DESPUÉS de la marca de agua, así queda por encima y siempre
            legible: antes el mosaico le pasaba por arriba. */
@@ -5295,7 +5318,7 @@ async function generateInstructionsPDF(){
         doc.setTextColor(...MANUAL_TINTA);
         doc.text(titulo, pageW/2, 12.6, { align:'center' });
       }
-      const cel = celdaEn(celdaK);
+      const cel = celdaEn(celdaK, enEstaHoja);
       doc.addImage(imgData, 'JPEG', cel.x, cel.y, cel.w, cel.h);
       // Marco: separa la foto del fondo y ordena la hoja cuando hay varias
       doc.setDrawColor(...MANUAL_ACENTO);
