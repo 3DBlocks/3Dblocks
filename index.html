@@ -582,7 +582,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v112</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v113</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -1016,6 +1016,13 @@
       <option value="magic2">Magic Block B (704 caras)</option>
       <option value="hama">Hama bead (tubito)</option>
       <option value="muesca">Con muesca (419) — el más liviano</option>
+    </select>
+    <span style="color:var(--text-dim); font-size:12.5px; margin-left:6px;">Pasos por hoja:</span>
+    <select id="pasosPorHojaSel" title="Varios pasos en la misma hoja: ahorra papel en diseños chicos. Con una sola foto por hoja se ve más grande." style="background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:7px; padding:5px 8px; font-size:12.5px;">
+      <option value="1">1 (grande)</option>
+      <option value="2">2</option>
+      <option value="4">4</option>
+      <option value="6">6</option>
     </select>
     <button class="btn primary" id="anglePreviewCloseBtn">Cerrar</button>
   </div>
@@ -4206,6 +4213,8 @@ function contornoParaInstrucciones(){
    Por eso ahora se puede forzar a mano. Es también la forma de saber si el
    cuelgue es por la geometría: si en "simple" genera y en "real" no, ya está
    identificado. */
+const PASOS_HOJA_KEY = '3dblock.pasosPorHoja';
+let pasosPorHoja = parseInt(localStorage.getItem(PASOS_HOJA_KEY), 10) || 1;
 const BLOQUE_MANUAL_KEY = '3dblock.bloqueManual';
 let bloqueManual = localStorage.getItem(BLOQUE_MANUAL_KEY) || 'auto';
 // Los estilos 'simple' y 'magic' ya no existen: quien los tuviera guardados
@@ -4637,10 +4646,15 @@ function construirCapaMarcaPagina(pageWmm, pageHmm, huecoMm){
   // así que la marca se borra de ese rectángulo y queda solo alrededor. Se hace
   // recortando después de dibujar (y no dibujando alrededor) para que el mosaico
   // no se corra ni cambie de posición según el tamaño del hueco.
-  if (huecoMm && marcaAgua.recorte !== 'ninguno'){
+  // Acepta un hueco o varios: en el manual compacto hay una foto por paso y
+  // cada una necesita el suyo.
+  const huecos = !huecoMm ? [] : (Array.isArray(huecoMm) ? huecoMm : [huecoMm]);
+  if (huecos.length && marcaAgua.recorte !== 'ninguno'){
     const m = 1.5 * escalaPx; // respiro para que la marca no roce el borde de la imagen
-    ctx.clearRect(huecoMm.x*escalaPx - m, huecoMm.y*escalaPx - m,
-                  huecoMm.w*escalaPx + m*2, huecoMm.h*escalaPx + m*2);
+    huecos.forEach(h=>{
+      ctx.clearRect(h.x*escalaPx - m, h.y*escalaPx - m,
+                    h.w*escalaPx + m*2, h.h*escalaPx + m*2);
+    });
   }
   return c.toDataURL('image/png');
 }
@@ -4834,6 +4848,18 @@ function pasoPreview(delta){
     localStorage.setItem(BLOQUE_MANUAL_KEY, bloqueManual);
     const layerSel = document.getElementById('previewLayerSelect');
     if (layerSel && layerSel.options.length) quickAnglePreview(layerSel.value);
+  });
+})();
+
+(function pasosPorHojaUI(){
+  const sel = document.getElementById('pasosPorHojaSel');
+  sel.value = String(pasosPorHoja);
+  sel.addEventListener('change', e=>{
+    pasosPorHoja = parseInt(e.target.value, 10) || 1;
+    localStorage.setItem(PASOS_HOJA_KEY, String(pasosPorHoja));
+    setStatus(pasosPorHoja === 1
+      ? 'Manual de una foto por hoja: se ve más grande.'
+      : 'Manual compacto: ' + pasosPorHoja + ' pasos por hoja.', 'ok');
   });
 })();
 
@@ -5158,11 +5184,38 @@ async function generateInstructionsPDF(){
     await prepararImagenMarca();
     const imgSize = pageW - margin*2;
 
-    // Foto cuadrada de lado fijo y hoja vertical, como hasta la v69.
-    const imgAncho = imgSize, imgAlto = imgSize, imgX = margin;
-    // La imagen del paso va en (margin, 18) con lado imgSize: ese rectángulo
-    // queda libre de marca de agua para no estorbar la lectura del armado.
-    const capaMarca = construirCapaMarcaPagina(pageW, pageH, { x: imgX, y: 18, w: imgAncho, h: imgAlto });
+    /* ---------------------------- Retícula de pasos ----------------------------
+       Con 1 paso por hoja la foto va grande, como siempre. Con 2, 4 o 6 se
+       reparte la hoja en celdas: en diseños chicos una capa por hoja desperdicia
+       papel, y a ese tamaño la definición alcanza igual.
+       El reparto de columnas y filas se elige para que cada celda quede lo más
+       cuadrada posible, que es la forma de la foto. */
+    const RETICULA = { 1:[1,1], 2:[1,2], 4:[2,2], 6:[2,3] };
+    const [cols, filas] = RETICULA[pasosPorHoja] || [1,1];
+    const compacto = pasosPorHoja > 1;
+    const topeY = 18;                       // debajo del título de la hoja
+    const pieAlto = compacto ? 12 : 0;      // espacio para la lista de piezas de cada celda
+    const gap = compacto ? 5 : 0;
+    const celdaW = (pageW - margin*2 - gap*(cols-1)) / cols;
+    const celdaH = (pageH - topeY - margin - gap*(filas-1)) / filas;
+    // La foto es cuadrada: manda el lado más chico de la celda una vez descontado el pie
+    const fotoLado = compacto ? Math.min(celdaW, celdaH - pieAlto) : imgSize;
+    const imgAncho = fotoLado, imgAlto = fotoLado, imgX = margin;
+
+    // Posición de cada celda dentro de la hoja
+    function celdaEn(k){
+      if (!compacto) return { x: imgX, y: topeY, w: imgSize, h: imgSize };
+      const c = k % cols, f = Math.floor(k / cols);
+      return {
+        x: margin + c*(celdaW+gap) + (celdaW - fotoLado)/2,
+        y: topeY + f*(celdaH+gap),
+        w: fotoLado, h: fotoLado
+      };
+    }
+    // La marca de agua reserva un hueco por cada foto de la hoja
+    const huecos = [];
+    for (let k=0; k<pasosPorHoja; k++) huecos.push(celdaEn(k));
+    const capaMarca = construirCapaMarcaPagina(pageW, pageH, huecos);
     const rango = rangoPasos();
 
     const totalPasos = rango.hasta - rango.desde + 1;
@@ -5198,20 +5251,38 @@ async function generateInstructionsPDF(){
                                      { margen: 0, formato: 'image/jpeg', calidad: 0.9 })
         : renderer.domElement.toDataURL('image/jpeg', 0.9);
 
-      doc.addPage();
-      doc.setFontSize(14);
-      doc.setTextColor(20,20,20);
-      doc.text(modelName + ' — Paso ' + (layer+1) + ' de ' + (maxLayer+1), pageW/2, 12, { align:'center' });
-      doc.addImage(imgData, 'JPEG', imgX, 18, imgAncho, imgAlto);
+      /* Hoja nueva solo cuando toca: con la retícula, una hoja aguanta varios
+         pasos y recién se cambia al llenarla. La marca de agua se estampa una
+         sola vez por hoja, no una por celda. */
+      const idx = layer - rango.desde;          // qué número de paso es
+      const celdaK = idx % pasosPorHoja;        // qué lugar ocupa en la hoja
+      if (celdaK === 0){
+        doc.addPage();
+        doc.setFontSize(compacto ? 11 : 14);
+        doc.setTextColor(20,20,20);
+        const desdeP = layer+1, hastaP = Math.min(maxLayer+1, layer+pasosPorHoja);
+        doc.text(compacto
+            ? modelName + ' — Pasos ' + desdeP + ' a ' + hastaP + ' de ' + (maxLayer+1)
+            : modelName + ' — Paso ' + (layer+1) + ' de ' + (maxLayer+1),
+          pageW/2, 12, { align:'center' });
+        if (capaMarca) doc.addImage(capaMarca, 'PNG', 0, 0, pageW, pageH, 'marcaAgua3DBlock', 'FAST');
+      }
+      const cel = celdaEn(celdaK);
+      doc.addImage(imgData, 'JPEG', cel.x, cel.y, cel.w, cel.h);
 
-      // Marca de agua configurable (se calibra desde ⚡ Vista previa). Es la misma
-      // imagen para todas las páginas y va con alias, así jsPDF la guarda una
-      // sola vez en el archivo en vez de repetirla por página.
-      if (capaMarca) doc.addImage(capaMarca, 'PNG', 0, 0, pageW, pageH, 'marcaAgua3DBlock', 'FAST');
-
-      doc.setFontSize(8.5);
-      doc.setTextColor(120,130,150);
-      doc.text('En color: los bloques NUEVOS de este paso. En gris: lo que ya tenías armado.', pageW/2, 18+imgAlto+6, { align:'center' });
+      if (compacto){
+        /* Número del paso en un círculo, como en los manuales impresos: con
+           varias fotos en la hoja hay que poder ubicarse de un vistazo. */
+        doc.setFillColor(38,74,140);
+        doc.circle(cel.x + 4.5, cel.y + 4.5, 3.4, 'F');
+        doc.setTextColor(255,255,255);
+        doc.setFontSize(8);
+        doc.text(String(layer+1), cel.x + 4.5, cel.y + 5.7, { align:'center' });
+      } else {
+        doc.setFontSize(8.5);
+        doc.setTextColor(120,130,150);
+        doc.text('En color: los bloques NUEVOS de este paso. En gris: lo que ya tenías armado.', pageW/2, cel.y+cel.h+6, { align:'center' });
+      }
 
       // Lista de piezas de ESTE paso: cada una dibujada con su forma real
       // (1x1 cuadrada, 1x2 y 1x3 alargadas) y su color, con la cantidad.
@@ -5224,9 +5295,9 @@ async function generateInstructionsPDF(){
           .sort((a,b)=>b[1]-a[1])
           .forEach(([k,count])=>stepEntries.push({ size, color:k.split('|')[1], count }));
       });
-      let ly = 18 + imgAlto + 14;
-      let lx = margin;
-      doc.setFontSize(9.5);
+      let ly = compacto ? (cel.y + cel.h + 4.5) : (18 + imgAlto + 14);
+      let lx = compacto ? cel.x : margin;
+      doc.setFontSize(compacto ? 7 : 9.5);
       stepEntries.forEach(({size,color,count})=>{
         const [r,g,b] = hexToRgbArr(color);
         const len = parseInt(size.split('x')[1],10) || 1;
@@ -5239,16 +5310,25 @@ async function generateInstructionsPDF(){
         }
         doc.setTextColor(40,40,40);
         doc.text('×' + count, lx + len*bw + 2, ly);
-        lx += 26;
-        if (lx > pageW - margin - 22){ lx = margin; ly += 6.5; }
+        lx += compacto ? 19 : 26;
+        // El salto de línea respeta el ancho de la celda, no el de la hoja
+        const limite = compacto ? (cel.x + cel.w - 16) : (pageW - margin - 22);
+        if (lx > limite){ lx = compacto ? cel.x : margin; ly += compacto ? 5 : 6.5; }
       });
-      doc.setFontSize(8.5);
-      doc.setTextColor(150,150,150);
-      const resumenPaso = ['1x3','1x2','1x1'].filter(s=>pcHere.bySize.get(s))
-        .map(s=>pcHere.bySize.get(s)+' de '+s).join(' · ');
-      doc.text('Piezas en esta capa: ' + pcHere.total + (resumenPaso ? ' (' + resumenPaso + ')' : '') +
-        '  ·  Bloques acumulados: ' + voxels.filter(v=>Math.round(v.y)<=layer).length + ' / ' + voxels.length,
-        pageW/2, pageH-10, { align:'center' });
+      if (!compacto){
+        doc.setFontSize(8.5);
+        doc.setTextColor(150,150,150);
+        const resumenPaso = ['1x3','1x2','1x1'].filter(s=>pcHere.bySize.get(s))
+          .map(s=>pcHere.bySize.get(s)+' de '+s).join(' · ');
+        doc.text('Piezas en esta capa: ' + pcHere.total + (resumenPaso ? ' (' + resumenPaso + ')' : '') +
+          '  ·  Bloques acumulados: ' + voxels.filter(v=>Math.round(v.y)<=layer).length + ' / ' + voxels.length,
+          pageW/2, pageH-10, { align:'center' });
+      } else if (celdaK === pasosPorHoja-1 || layer === rango.hasta){
+        // En compacto, un solo pie por hoja en vez de uno por celda
+        doc.setFontSize(7.5);
+        doc.setTextColor(150,150,150);
+        doc.text('En color: los bloques NUEVOS de cada paso. En gris: lo ya armado.', pageW/2, pageH-6, { align:'center' });
+      }
     }
 
     const baseName = modelName.replace(/[^\w\-]+/g,'_') || 'diseno';
