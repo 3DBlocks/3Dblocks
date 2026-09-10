@@ -583,7 +583,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v123</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v124</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -745,14 +745,14 @@
       </div>
 
       <p class="section-title">Cámara</p>
-      <div class="row"><span class="label-sm">Altura de la cámara</span><span class="value-mono" id="vidElevVal">35°</span></div>
-      <input type="range" id="vidElev" min="0" max="80" step="1" value="35" style="width:100%;" />
+      <div class="row"><span class="label-sm">Altura de la cámara</span><span class="value-mono" id="vidElevVal">30°</span></div>
+      <input type="range" id="vidElev" min="0" max="80" step="1" value="30" style="width:100%;" />
       <div class="row" style="margin-top:6px;"><span class="label-sm">Giro alrededor</span><span class="value-mono" id="vidAzimVal">45°</span></div>
       <input type="range" id="vidAzim" min="0" max="360" step="5" value="45" style="width:100%;" />
       <div class="row" style="margin-top:6px;"><span class="label-sm">Acercamiento</span><span class="value-mono" id="vidZoomVal">1.00</span></div>
       <input type="range" id="vidZoom" min="0.5" max="2.5" step="0.05" value="1" style="width:100%;" />
-      <div class="row" style="margin-top:6px;"><span class="label-sm">La cámara sigue la capa</span><span class="value-mono" id="vidSeguirVal">0.35</span></div>
-      <input type="range" id="vidSeguir" min="0" max="1" step="0.05" value="0.35" style="width:100%;" />
+      <div class="row" style="margin-top:6px;"><span class="label-sm">La cámara sigue la capa</span><span class="value-mono" id="vidSeguirVal">0.00</span></div>
+      <input type="range" id="vidSeguir" min="0" max="1" step="0.05" value="0" style="width:100%;" />
       <p style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">En 0 la cámara queda clavada y el encuadre no se mueve nunca. Era lo que faltaba: al seguir del todo a la capa nueva, el modelo saltaba de tamaño en cada paso.</p>
 
       <p class="section-title" style="margin-top:14px;">Cómo aparecen los bloques</p>
@@ -761,17 +761,17 @@
         <option value="crecer">Crecen en su lugar</option>
         <option value="directo">Aparecen de golpe</option>
       </select>
-      <div class="row" style="margin-top:8px;"><span class="label-sm">Altura de la caída</span><span class="value-mono" id="vidAltVal">7</span></div>
-      <input type="range" id="vidAlt" min="1" max="30" step="1" value="7" style="width:100%;" />
-      <div class="row" style="margin-top:6px;"><span class="label-sm">Duración de la caída</span><span class="value-mono" id="vidCaidaVal">50%</span></div>
-      <input type="range" id="vidCaida" min="0.15" max="0.9" step="0.05" value="0.5" style="width:100%;" />
+      <div class="row" style="margin-top:8px;"><span class="label-sm">Altura de la caída</span><span class="value-mono" id="vidAltVal">5</span></div>
+      <input type="range" id="vidAlt" min="1" max="30" step="1" value="5" style="width:100%;" />
+      <div class="row" style="margin-top:6px;"><span class="label-sm">Duración de la caída</span><span class="value-mono" id="vidCaidaVal">80%</span></div>
+      <input type="range" id="vidCaida" min="0.15" max="0.9" step="0.05" value="0.8" style="width:100%;" />
       <p style="font-size:10px; color:var(--text-faint); margin:4px 0 0; line-height:1.4;">Qué parte del tiempo de la capa ocupa la caída. El resto queda quieto antes de pasar a la siguiente.</p>
 
       <p class="section-title" style="margin-top:14px;">Tiempos</p>
-      <div class="row"><span class="label-sm">Segundos por capa</span><span class="value-mono" id="vidSegVal">0.90</span></div>
-      <input type="range" id="vidSeg" min="0.3" max="4" step="0.1" value="0.9" style="width:100%;" />
-      <div class="row" style="margin-top:6px;"><span class="label-sm">Segundos al final</span><span class="value-mono" id="vidFinVal">4</span></div>
-      <input type="range" id="vidFin" min="0" max="12" step="1" value="4" style="width:100%;" />
+      <div class="row"><span class="label-sm">Segundos por capa</span><span class="value-mono" id="vidSegVal">0.80</span></div>
+      <input type="range" id="vidSeg" min="0.3" max="4" step="0.1" value="0.8" style="width:100%;" />
+      <div class="row" style="margin-top:6px;"><span class="label-sm">Segundos al final</span><span class="value-mono" id="vidFinVal">3</span></div>
+      <input type="range" id="vidFin" min="0" max="12" step="1" value="3" style="width:100%;" />
       <p id="vidDuracion" style="font-size:10.5px; color:var(--accent); margin:8px 0 0; text-align:center;"></p>
 
       <button class="btn wide" id="vidResetBtn" style="width:100%; margin-top:10px;">↺ Volver a los valores de fábrica</button>
@@ -4326,22 +4326,43 @@ let pasosPorHoja = parseInt(localStorage.getItem(PASOS_HOJA_KEY), 10) || 1;
 /* ---------------------------- Ajustes del video ----------------------------
    Hasta ahora el video no tenía ningún control: la cámara seguía la capa que se
    estaba armando y el encuadre se movía en cada paso. Acá se puede fijar. */
+/* Valores de fábrica pensados para que el video salga bien SIN tocar nada.
+   Cada uno está elegido por una razón concreta:
+
+   · seguir en 0 — la cámara queda clavada. Cualquier valor mayor la hace subir
+     con la capa que se arma y el encuadre se mueve en cada paso: eso era lo que
+     se veía como saltos.
+   · zoom en 1 — el modelo llena el 91% del cuadro. Con la bisección esto vale
+     igual para una base ancha y chata que para una figura alta.
+   · caída de 5 bloques y 80% del tiempo de la capa — la caída ocupa casi toda la
+     capa, así no queda ese silencio muerto entre una y otra que se sentía como
+     una pausa.
+   · 0.8 segundos por capa — 45 capas dan 39 segundos, que es una duración que se
+     mira entera. */
 const VIDEO_DEFAULT = {
-  elevacion: 35, azimut: 45,
-  zoom: 1,            // 1 = encuadre normal; más alto, más cerca
-  seguir: 0.35,       // 0 = cámara clavada; 1 = sigue del todo a la capa nueva
-  modo: 'caida',      // 'caida' | 'crecer' | 'directo'
-  segCapa: 0.9,       // segundos por capa
-  segCaida: 0.5,      // parte de la capa que dura la caída
-  alturaCaida: 7,     // en bloques
-  segFinal: 4,        // segundos quieto al terminar
+  elevacion: 30, azimut: 45,
+  zoom: 1,
+  seguir: 0,
+  modo: 'caida',
+  segCapa: 0.8,
+  segCaida: 0.8,
+  alturaCaida: 5,
+  segFinal: 3,
 };
 const VIDEO_KEY = '3dblock.video';
+/* Igual que con el render: al cambiar los valores de fábrica hay que invalidar lo
+   guardado, si no quien ya usó el panel se queda con los viejos para siempre y
+   los defaults nuevos no le llegan nunca. */
+const VIDEO_CALIBRACION = 2;
 let configVideo = (function(){
-  try{ return Object.assign({}, VIDEO_DEFAULT, JSON.parse(localStorage.getItem(VIDEO_KEY) || 'null')); }
-  catch(e){ return Object.assign({}, VIDEO_DEFAULT); }
+  try{
+    const g = JSON.parse(localStorage.getItem(VIDEO_KEY) || 'null');
+    if (!g || g._cal !== VIDEO_CALIBRACION) return Object.assign({}, VIDEO_DEFAULT, { _cal: VIDEO_CALIBRACION });
+    return Object.assign({}, VIDEO_DEFAULT, g);
+  } catch(e){ return Object.assign({}, VIDEO_DEFAULT, { _cal: VIDEO_CALIBRACION }); }
 })();
 function guardarConfigVideo(){
+  configVideo._cal = VIDEO_CALIBRACION;
   try{ localStorage.setItem(VIDEO_KEY, JSON.stringify(configVideo)); } catch(e){}
 }
 
@@ -9822,7 +9843,7 @@ document.getElementById('vidPreviaCapa').addEventListener('input', ()=>{
   cambiarConfigVideo._t = setTimeout(actualizarPreviaVideo, 120);
 });
 document.getElementById('vidResetBtn').addEventListener('click', ()=>{
-  configVideo = Object.assign({}, VIDEO_DEFAULT);
+  configVideo = Object.assign({}, VIDEO_DEFAULT, { _cal: VIDEO_CALIBRACION });
   guardarConfigVideo(); refrescarPanelVideo(); actualizarPreviaVideo();
   setStatus('Ajustes del video restablecidos.', 'ok');
 });
