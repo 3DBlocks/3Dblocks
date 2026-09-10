@@ -582,7 +582,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v118</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v119</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -3081,6 +3081,36 @@ function refreshUsedColorsPanel(){
          visor 3D, los pinta; y si no, pinta la selección por color del plano 2D.
          La rama de la selección 3D faltaba acá: se podía seleccionar y elegir un
          color del modelo, y no pasaba nada. */
+      /* Ctrl (o Cmd) = marcar este color para unirlo después.
+         Sin Ctrl, si hay colores marcados, este es el destino: todos pasan a él
+         de una sola vez. */
+      if (e.ctrlKey || e.metaKey){
+        if (coloresMarcados.has(hex)) coloresMarcados.delete(hex);
+        else coloresMarcados.add(hex);
+        const n = coloresMarcados.size;
+        setStatus(n
+          ? n + ' color(es) marcados. Tocá SIN Ctrl el color al que querés pasarlos.'
+          : 'No quedan colores marcados.', 'ok');
+        refreshUsedColorsPanel();
+        return;
+      }
+      if (coloresMarcados.size){
+        if (coloresMarcados.has(hex) && coloresMarcados.size === 1){
+          coloresMarcados.clear(); refreshUsedColorsPanel();
+          setStatus('Marca quitada.', 'ok');
+          return;
+        }
+        pushUndoSnapshot();
+        let n = 0;
+        voxels.forEach(v=>{
+          if (coloresMarcados.has(cleanColor(v.color)) && cleanColor(v.color) !== hex){ v.color = hex; n++; }
+        });
+        const cuantos = coloresMarcados.size;
+        coloresMarcados.clear();
+        drawLayerDiagram(); rebuildMesh3D(); refreshLayerUI(); refreshUsedColorsPanel();
+        setStatus('Se unieron ' + cuantos + ' colores: ' + n + ' bloques pasaron al color elegido.', 'ok');
+        return;
+      }
       if (replaceSourceColor) applyGlobalColorReplace(hex);
       else if (boxSelection) applyColorToBoxSelection(hex);
       else applyColorToMagicSelection(hex);
@@ -3106,12 +3136,16 @@ function refreshUsedColorsPanel(){
       refreshUsedColorsPanel();
     });
 
+    if (coloresMarcados.has(hex)){
+      sw.style.outline = '2px solid var(--accent-2)';
+      sw.style.outlineOffset = '2px';
+    }
     // El color elegido como origen se marca, para saber cuál estás uniendo
     if (replaceSourceColor === hex){
       sw.style.outline = '2px solid var(--accent)';
       sw.style.outlineOffset = '2px';
     }
-    sw.title = hex + ' — clic para pintar, clic derecho para unir con otro color';
+    sw.title = hex + ' — clic para pintar · Ctrl+clic para marcar y unir varios · clic derecho para unir este solo';
     grid.appendChild(sw);
   });
 }
@@ -4418,6 +4452,11 @@ function cargarConfigMarca(){
   } catch(err){ return Object.assign({}, MARCA_DEFAULT); }
 }
 let marcaAgua = cargarConfigMarca();
+/* Colores marcados con Ctrl en la paleta del modelo. Se unen todos de una vez
+   al tocar el color destino, que es mucho más rápido que ir de a uno cuando hay
+   media docena de tonos casi iguales para juntar. */
+let coloresMarcados = new Set();
+
 let marcaImagenEl = null; // la imagen ya decodificada y lista para dibujar
 
 function guardarConfigMarca(){
@@ -5646,15 +5685,29 @@ async function generateAssemblyVideo(){
       for (let f=0; f<framesPerLayer; f++){
         const t = f/framesPerLayer; // 0 → 1 dentro de esta capa
 
-        // Los bloques nuevos crecen durante el primer 45% de la capa, con un
-        // arranque suave — así aparecen en vez de saltar de golpe (eso era el
-        // "pestañeo" que se veía en cada cambio de capa).
-        const growT = Math.min(1, t/0.6);
-        const s = growT<1 ? (0.05 + 0.95*(1-Math.pow(1-growT,3))) : 1;
-        if (growT <= 1){
+        /* Los bloques nuevos CAEN desde arriba en vez de crecer en el lugar.
+           Dos detalles hacen la diferencia:
+
+           · La caída acelera, como la gravedad de verdad: la altura sobrante va
+             con el cuadrado del tiempo restante. Una caída a velocidad constante
+             se ve de dibujo animado barato.
+
+           · No caen todos juntos. Cada bloque arranca un poco después según su
+             posición, repartido en el primer tercio del tiempo de la capa. Que
+             caigan en bloque parece un ascensor; escalonados, una lluvia. */
+        const alturaCaida = Math.max(6, dims.y*voxelSize*0.9);
+        if (t <= 0.95){
           newOnes.forEach(({idx,v})=>{
-            growDummy.position.set(v.x*voxelSize - offX, v.y*voxelSize + voxelSize/2, v.z*voxelSize - offZ);
-            growDummy.scale.setScalar(s);
+            const hs = Math.sin(v.x*127.1 + v.z*74.7 + v.y*311.7) * 43758.5453;
+            const retraso = (hs - Math.floor(hs)) * 0.33;      // arranque escalonado
+            const tc = Math.min(1, Math.max(0, (t - retraso) / 0.42));
+            const caida = alturaCaida * (1 - tc) * (1 - tc);   // acelera al caer
+            growDummy.position.set(
+              v.x*voxelSize - offX,
+              v.y*voxelSize + voxelSize/2 + caida,
+              v.z*voxelSize - offZ);
+            // Todavía en el aire: apenas más chico, para dar sensación de lejanía
+            growDummy.scale.setScalar(tc < 1 ? 0.92 + 0.08*tc : 1);
             growDummy.updateMatrix();
             instMesh.setMatrixAt(idx, growDummy.matrix);
           });
@@ -5678,10 +5731,12 @@ async function generateAssemblyVideo(){
     rebuildMesh3D({ instrucciones:true });
     materialParaInstrucciones(realMat);
     contornoParaInstrucciones();
-    const spinFrames = FPS*6; // 6 segundos para dar la vuelta completa, bien pausado
-    for (let f=0; f<spinFrames; f++){
-      const spin = (f/spinFrames) * 360;
-      positionCameraFixedAngle(fullBox, ang.elevation, ang.azimuth + spin, instructionMargin(), focusPointForLayer(fullBox, maxLayer));
+    /* Antes acá había una vuelta de 360° con el modelo terminado. Se sacó: giraba
+       justo cuando uno quiere quedarse mirando la figura armada, y mareaba. Ahora
+       se queda quieto unos segundos en el mismo ángulo de todo el video. */
+    const finalFrames = FPS*4;
+    for (let f=0; f<finalFrames; f++){
+      positionCameraFixedAngle(fullBox, ang.elevation, ang.azimuth, instructionMargin(), focusPointForLayer(fullBox, maxLayer));
       renderer.render(scene, camera);
       await new Promise(r=>setTimeout(r, 1000/FPS));
     }
