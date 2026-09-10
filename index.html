@@ -583,7 +583,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v121</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v122</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -5693,7 +5693,7 @@ async function generateAssemblyVideo(){
   scene.background = studioColor;
   const wasFog = scene.fog; scene.fog = null;
 
-  const fullBox = centeredBounds();
+  const fullBox = cajaVideo(rangoPasos().hasta);   // solo el tramo que se va a armar
   const fullSize = new THREE.Vector3(); fullBox.getSize(fullSize);
   const maxDim = Math.max(fullSize.x, fullSize.y, fullSize.z, 1);
   const wasGroundVisible = ground.visible;
@@ -9839,7 +9839,8 @@ async function actualizarPreviaVideo(){
   try{
     currentLayer = capa; showFullDesign = false; showBelowLayers = true;
     rebuildMesh3D({ instrucciones:true });
-    const box = centeredBounds();
+    const r = rangoPasos();
+    const box = cajaVideo(r.hasta);      // el mismo encuadre que va a usar el video
     renderer.setSize(540, 540, false);
     camera.aspect = 1; camera.updateProjectionMatrix();
     camaraVideo(box, capa);
@@ -9853,14 +9854,43 @@ async function actualizarPreviaVideo(){
   }
 }
 
+/* Caja de encuadre del video: SOLO lo que se va a armar.
+
+   Acá estaba el error que hacía "parpadear" el video. Yo encuadraba con el modelo
+   entero, aunque estuvieras generando un tramo. Pidiendo los pasos 1 a 9 de un
+   diseño de 41 capas, la cámara se abría para las 41 y esas 9 capas quedaban
+   diminutas en una esquina, entrando y saliendo del cuadro.
+
+   Ahora la caja llega hasta la última capa del tramo, más un respiro arriba para
+   que los bloques que caen no queden fuera. */
+function cajaVideo(hastaCapa){
+  const b = new THREE.Box3();
+  const offX = (dims.x*voxelSize)/2, offZ = (dims.z*voxelSize)/2;
+  let hay = false;
+  voxels.forEach(v=>{
+    if (Math.round(v.y) > hastaCapa) return;
+    hay = true;
+    b.expandByPoint(new THREE.Vector3(
+      v.x*voxelSize - offX, v.y*voxelSize, v.z*voxelSize - offZ));
+    b.expandByPoint(new THREE.Vector3(
+      v.x*voxelSize - offX + voxelSize, v.y*voxelSize + voxelSize, v.z*voxelSize - offZ + voxelSize));
+  });
+  if (!hay) return centeredBounds();
+  // Respiro arriba para los bloques en el aire
+  if (configVideo.modo === 'caida'){
+    b.max.y += voxelSize * configVideo.alturaCaida * 0.85;
+  }
+  return b;
+}
+
 /* Cámara del video, en un solo lugar para que la vista previa y la grabación no
-   puedan quedar distintas. El seguimiento es lo importante: mezcla el centro del
-   modelo con la altura de la capa que se está armando. */
-function camaraVideo(fullBox, focusLayer){
-  const centro = fullBox.getCenter(new THREE.Vector3());
-  const puntoCapa = focusPointForLayer(fullBox, focusLayer);
+   puedan quedar distintas. El seguimiento mezcla el centro de la caja con la
+   altura de la capa que se está armando. */
+function camaraVideo(caja, focusLayer){
+  const centro = caja.getCenter(new THREE.Vector3());
+  const puntoCapa = focusPointForLayer(caja, focusLayer);
   const foco = centro.clone().lerp(puntoCapa, configVideo.seguir);
-  positionCameraFixedAngle(fullBox, configVideo.elevacion, configVideo.azimut,
+  positionCameraFixedAngle(caja, configVideo.elevacion, configVideo.azimut,
                            BASE_MARGIN / configVideo.zoom, foco);
 }
 
