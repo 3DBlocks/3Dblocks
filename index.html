@@ -582,7 +582,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v130</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v131</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -9570,6 +9570,21 @@ requestAnimationFrame(loop);
      aterrizar. El rebote es lo que lo saca de "animación de programa": nada
      pesado se detiene en seco.
 */
+/* Apaga los contornos y las costuras.
+   Los contornos NO son instancias: sus vértices se calculan al armar la malla y
+   quedan fijos. Si después se mueven los bloques, las líneas se quedan donde
+   estaban — se veían caer las rayas negras por un lado y los bloques por otro.
+
+   Además, un video de presentación no los necesita: la foto de presentación
+   tampoco los usa, porque el volumen lo dan la luz y el sombreado de rincones. */
+function apagarContornosVideo(){
+  scene.traverse(o=>{
+    if (o.isLineSegments) o.visible = false;
+  });
+  if (typeof seamMesh !== 'undefined' && seamMesh) seamMesh.visible = false;
+  pieceMeshes.forEach(m=>{ if (m.isLineSegments) m.visible = false; });
+}
+
 async function generateAssemblyVideo(){
   if (!voxels.length){ setStatus('No hay ningún diseño cargado.', 'err'); return; }
   if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream){
@@ -9679,6 +9694,21 @@ async function generateAssemblyVideo(){
     currentLayer = rango.desde;
     rebuildMesh3D({ instrucciones:true, oclusion: 0.85, coloresReales:true });
     materialParaInstrucciones(realMat);
+    apagarContornosVideo();
+    /* La primera capa arranca YA EN EL AIRE. Antes se dibujaba en su sitio
+       durante la pausa inicial y al empezar la animación pegaba un salto hacia
+       arriba: ese era el parpadeo de los primeros segundos. */
+    (function subirPrimeraCapa(){
+      const d = new THREE.Object3D();
+      const ox = (dims.x*voxelSize)/2, oz = (dims.z*voxelSize)/2;
+      lastVisibleVoxels.forEach((v, idx)=>{
+        if (Math.round(v.y) !== rango.desde) return;
+        d.position.set(v.x*voxelSize - ox, v.y*voxelSize + voxelSize/2 + ALTURA_CAIDA, v.z*voxelSize - oz);
+        d.updateMatrix();
+        instMesh.setMatrixAt(idx, d.matrix);
+      });
+      instMesh.instanceMatrix.needsUpdate = true;
+    })();
     for (let k = 0; k < 3; k++){
       fijarCamara();
       renderer.render(scene, camera);
@@ -9687,7 +9717,7 @@ async function generateAssemblyVideo(){
     recorder.start();
     // Medio segundo con la primera capa ya puesta, para que el video no arranque
     // en movimiento: da tiempo a que el ojo se ubique antes de que caiga nada.
-    for (let k = 0; k < Math.round(FPS*0.5); k++){
+    for (let k = 0; k < Math.round(FPS*0.35); k++){
       renderer.render(scene, camera);
       await new Promise(r=>setTimeout(r, 1000/FPS));
     }
@@ -9699,6 +9729,7 @@ async function generateAssemblyVideo(){
       currentLayer = capa;
       rebuildMesh3D({ instrucciones:true, oclusion: 0.85, coloresReales:true });
       materialParaInstrucciones(realMat);
+      apagarContornosVideo();
 
       const nuevos = [];
       lastVisibleVoxels.forEach((v, idx)=>{ if (Math.round(v.y) === capa) nuevos.push({ idx, v }); });
@@ -9743,6 +9774,7 @@ async function generateAssemblyVideo(){
     showFullDesign = true;
     rebuildMesh3D({ instrucciones:true, oclusion: 0.85, coloresReales:true });
     materialParaInstrucciones(realMat);
+    apagarContornosVideo();
     for (let f = 0; f < FPS*segFinal; f++){
       fijarCamara();
       renderer.render(scene, camera);
