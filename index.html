@@ -582,7 +582,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v133</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v134</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -3393,7 +3393,11 @@ function fondoCicloramaTextura(){
 function guardarLuces(){
   return {
     hemiColor: hemi.color.clone(), hemiGround: hemi.groundColor.clone(), hemiInt: hemi.intensity,
-    ambInt: ambient.intensity,
+    ambInt: ambient.intensity, ambColor: ambient.color.clone(),
+    // Los colores de estas tres también hay que guardarlos: el video las tiñe
+    // para separar la temperatura de luces y sombras, y sin esto el visor
+    // quedaba con el tinte puesto al terminar.
+    cuarto1Color: luzCuarto1.color.clone(), cuarto2Color: luzCuarto2.color.clone(),
     keyInt: key.intensity, keyColor: key.color.clone(), keyPos: key.position.clone(),
     rimInt: rim.intensity, rimColor: rim.color.clone(), rimPos: rim.position.clone(),
     fillInt: fillPt.intensity,
@@ -3448,6 +3452,9 @@ function restaurarLuces(g){
   key.intensity = g.keyInt; key.color.copy(g.keyColor); key.position.copy(g.keyPos);
   rim.intensity = g.rimInt; rim.color.copy(g.rimColor); rim.position.copy(g.rimPos);
   fillPt.intensity = g.fillInt;
+  ambient.color.copy(g.ambColor);
+  luzCuarto1.color.copy(g.cuarto1Color);
+  luzCuarto2.color.copy(g.cuarto2Color);
 }
 
 /* Encuadre de la foto: acerca la cámara hasta que el modelo llene el cuadro sin
@@ -3814,6 +3821,22 @@ async function _generarFotoPresentacion(opciones){
   if (configRender.entorno > 0) scene.environment = entornoEstudio();
   const luces = guardarLuces();
   lucesDeEstudio();
+  /* LUZ CÁLIDA CON SOMBRAS FRÍAS.
+     Medido sobre una filmación real de un armado: en las zonas iluminadas el
+     rojo supera al azul por 37 puntos, y en las sombras el azul gana por 19. Eso
+     es lo que pasa en el mundo: la lámpara o el sol tiran a amarillo, y lo que
+     queda en sombra se ilumina con el rebote del cielo, que es azul.
+
+     Nuestro render usaba blanco puro en todas las luces, y por eso se leía
+     sintético por más bien iluminado que estuviera. Separar la temperatura del
+     foco principal de la del relleno es el cambio que más acerca la imagen a una
+     foto, y no cuesta nada. */
+  key.color.set(0xfff0d2);            // foco principal, cálido
+  hemi.color.set(0xbfd6ff);           // cielo, frío
+  hemi.groundColor.set(0xffe0b8);     // rebote del piso, cálido
+  ambient.color.set(0xc8d8f5);        // relleno general, frío
+  luzCuarto1.color.set(0xd8e6ff);
+  luzCuarto2.color.set(0xffe8cc);
 
   // Sin sombras proyectadas por defecto: con modelos vaciados por dentro ("Vaciar
   // interior"), la sombra dura dejaba el hueco pintado de negro total. Por eso las
@@ -9598,6 +9621,31 @@ requestAnimationFrame(loop);
 
    Además, un video de presentación no los necesita: la foto de presentación
    tampoco los usa, porque el volumen lo dan la luz y el sombreado de rincones. */
+/* Luces propias del video.
+   El video no puede depender del panel de Render: ahí uno calibra para una foto
+   de estudio, con poco relleno y mucho contraste, y eso en movimiento queda
+   oscuro. Medido contra una filmación real, el brillo medio del modelo daba
+   0.30 contra 0.55 de la referencia.
+
+   Además el reparto cálido/frío: la luz principal tira apenas a ámbar y el
+   relleno apenas a azul, como el sol y el cielo. Es el detalle que más acerca
+   una imagen generada a una filmada — con todo blanco neutro se nota que es
+   computadora aunque no se sepa por qué. */
+function lucesDeVideo(){
+  hemi.color.set(0xdceaff);           // cielo, apenas frío
+  hemi.groundColor.set(0xfff0d8);     // rebote del piso, cálido
+  hemi.intensity = 1.55;
+  ambient.color.set(0xffffff);
+  ambient.intensity = 0.75;
+  key.color.set(0xfff4e2);            // principal cálida
+  key.intensity = 2.6;
+  key.position.set(-5, 9, 7);
+  luzCuarto1.color.set(0xe8f0ff);     // rebotes laterales, fríos
+  luzCuarto1.intensity = 0.55;
+  luzCuarto2.color.set(0xe8f0ff);
+  luzCuarto2.intensity = 0.40;
+}
+
 function apagarContornosVideo(){
   scene.traverse(o=>{
     if (o.isLineSegments) o.visible = false;
@@ -9652,10 +9700,14 @@ async function generateAssemblyVideo(){
 
   /* Estudio fotográfico, igual que la foto de presentación: ciclorama de fondo,
      entorno reflejado y curva de tono. Sin esto el video sale plano. */
-  scene.background = fondoCicloramaTextura();
+  /* Fondo crema, no gris neutro. Medido en la filmación de referencia: su fondo
+     es (213,206,172), cálido, con el rojo un 24% por encima del azul. Un gris
+     neutro se lee como estudio de render; un crema, como una mesa con luz de
+     ventana. */
+  scene.background = new THREE.Color('#d6cfae');
   scene.environment = entornoEstudio();
   renderer.toneMapping = THREE.CineonToneMapping;
-  renderer.toneMappingExposure = 1.0;
+  renderer.toneMappingExposure = 1.25;
 
   // Bloque con detalle: los tachones son lo que hace que se lea como pieza real
   if (!esMagic()) blockStyle = 'magic2';
@@ -9666,7 +9718,7 @@ async function generateAssemblyVideo(){
   showBelowLayers = true;
 
   const luces = guardarLuces();
-  lucesDeEstudio();
+  lucesDeVideo();
 
   const realMat = new THREE.MeshPhysicalMaterial({
     roughness: 0.38, metalness: 0.02,
@@ -9717,7 +9769,7 @@ async function generateAssemblyVideo(){
        salen negros o a medio dibujar — ese era el "margen negro" del arranque.
        Tres cuadros y 120 ms alcanzan y no se notan en el resultado. */
     currentLayer = rango.desde;
-    rebuildMesh3D({ instrucciones:true, oclusion: 0.85, coloresReales:true });
+    rebuildMesh3D({ instrucciones:true, oclusion: 0.55, coloresReales:true });
     materialParaInstrucciones(realMat);
     apagarContornosVideo();
     /* La primera capa arranca YA EN EL AIRE. Antes se dibujaba en su sitio
@@ -9756,7 +9808,7 @@ async function generateAssemblyVideo(){
          Sin eso solo se puede animar la capa actual y nunca hay más de una capa
          de bloques en el aire. */
       currentLayer = porLluvia ? Math.min(rango.hasta, capa + ADELANTO) : capa;
-      rebuildMesh3D({ instrucciones:true, oclusion: 0.85, coloresReales:true });
+      rebuildMesh3D({ instrucciones:true, oclusion: 0.55, coloresReales:true });
       materialParaInstrucciones(realMat);
       apagarContornosVideo();
 
@@ -9862,7 +9914,7 @@ async function generateAssemblyVideo(){
        giro a velocidad constante empieza y termina de golpe y se nota. */
     setLoading(true, 'Cerrando el video…');
     showFullDesign = true;
-    rebuildMesh3D({ instrucciones:true, oclusion: 0.85, coloresReales:true });
+    rebuildMesh3D({ instrucciones:true, oclusion: 0.55, coloresReales:true });
     materialParaInstrucciones(realMat);
     apagarContornosVideo();
 
