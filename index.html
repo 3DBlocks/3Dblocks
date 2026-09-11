@@ -582,7 +582,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v125</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v126</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -1077,7 +1077,7 @@
     <input type="range" id="fmEsc" min="0.4" max="2.5" step="0.05" value="1" />
     <span class="wm-val" id="fmEscVal">1.00</span>
   </div>
-  <p style="font-size:10.5px; color:var(--text-faint); margin:0; text-align:center; max-width:640px;">La marca se repite en mosaico por toda la hoja, en diagonal. Los ajustes quedan guardados en este navegador y se aplican al PDF, a los PNG y al video.</p>
+  <p style="font-size:10.5px; color:var(--text-faint); margin:0; text-align:center; max-width:640px;">La marca se repite en mosaico por toda la hoja, en diagonal. Los ajustes quedan guardados en este navegador y se aplican al PDF y a los PNG.</p>
 </div>
 <script type="module">
 import * as THREE from "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.js";
@@ -4136,6 +4136,7 @@ async function _generarFotoPresentacion(opciones){
   setStatus('Foto de presentación descargada: ' + baseName + '_render.png', 'ok');
 }
 document.getElementById('renderBtnFloating').addEventListener('click', generatePresentationRender);
+document.getElementById('closeSidebarBtn').addEventListener('click', closeSidebar);
 document.getElementById('renderBtnPanel').addEventListener('click', ()=>{ cerrarPanelRender(); generatePresentationRender(); });
 
 // Ubica la cámara en un ángulo fijo tipo isométrico, mirando a un punto dado.
@@ -9482,7 +9483,8 @@ function abrirPanelRender(){
 function cerrarPanelRender(){
   renderPanel.classList.remove('open');
   renderOverlay.classList.remove('show');
-}
+}document.getElementById('closeRenderBtn').addEventListener('click', cerrarPanelRender);
+
 document.getElementById('openRenderBtn').addEventListener('click', abrirPanelRender);
 
 /* ---------------------------- Panel de Video ---------------------------- */
