@@ -582,7 +582,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v126</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v127</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -4972,7 +4972,7 @@ function pasoPreview(delta){
 }
 /* Cambiar la orientación cambia la forma del hueco, así que hay que volver a
    sacar la foto: si no, se seguiría viendo la vista previa con la forma vieja. */
-(function bloqueManualUI(){
+(function bloqueManualUI(){ try{
   const sel = document.getElementById('bloqueManualSel');
   sel.value = bloqueManual;
   sel.addEventListener('change', e=>{
@@ -4981,9 +4981,10 @@ function pasoPreview(delta){
     const layerSel = document.getElementById('previewLayerSelect');
     if (layerSel && layerSel.options.length) quickAnglePreview(layerSel.value);
   });
+} catch(e){ console.error("Falló la interfaz de bloqueManualUI:", e); }
 })();
 
-(function firmaCasaUI(){
+(function firmaCasaUI(){ try{
   const modo = document.getElementById('fmModo');
   const texto = document.getElementById('fmTexto');
   const opac = document.getElementById('fmOpac');
@@ -5012,9 +5013,10 @@ function pasoPreview(delta){
   opac.addEventListener('input', e=> cambiar({ opacidad: parseFloat(e.target.value) }));
   esc.addEventListener('input', e=> cambiar({ escala: parseFloat(e.target.value) }));
   pintar();
+} catch(e){ console.error("Falló la interfaz de firmaCasaUI:", e); }
 })();
 
-(function pasosPorHojaUI(){
+(function pasosPorHojaUI(){ try{
   const sel = document.getElementById('pasosPorHojaSel');
   sel.value = String(pasosPorHoja);
   sel.addEventListener('change', e=>{
@@ -5024,6 +5026,7 @@ function pasoPreview(delta){
       ? 'Manual de una foto por hoja: se ve más grande.'
       : 'Manual compacto: ' + pasosPorHoja + ' pasos por hoja.', 'ok');
   });
+} catch(e){ console.error("Falló la interfaz de pasosPorHojaUI:", e); }
 })();
 
 document.getElementById('previewPrevBtn').addEventListener('click', ()=>pasoPreview(-1));
@@ -9529,6 +9532,16 @@ requestAnimationFrame(loop);
 
 /* ---------------------------- Inicio ---------------------------- */
 voxelSize = 1;
+/* El inicio de sesión va aislado: si algo del resto del arranque falla, no puede
+   dejarte fuera del programa. Antes un solo error acá arriba cortaba la
+   ejecución y el login no llegaba a resolverse nunca. */
+window.addEventListener('error', ev=>{
+  const st = document.getElementById('loginStatus');
+  if (st && !document.getElementById('loginOverlay').classList.contains('hide')){
+    st.className = 'err';
+    st.textContent = 'Error al cargar: ' + (ev.message || '') + ' (' + (ev.filename||'').split('/').pop() + ':' + ev.lineno + ')';
+  }
+});
 waitForAuth().then(async () => {
   const loaded = await tryLoadModelFromUrl();
   // La vista plana tiene que quedar puesta ANTES de encuadrar: el encuadre
