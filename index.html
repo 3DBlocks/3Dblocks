@@ -582,7 +582,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v132</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v133</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -617,6 +617,7 @@
           <select id="videoCaidaSel" title="Cómo caen los bloques en el video" style="background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:7px; padding:5px 8px; font-size:12px;">
             <option value="capa">Caída por capa</option>
             <option value="bloque">Caída bloque por bloque</option>
+            <option value="lluvia">Lluvia de bloques</option>
           </select>
           <button class="btn sm" id="videoInstructionsBtn" title="Video del armado, listo para mostrar: piezas renderizadas, bloques que caen y cámara quieta. No hay nada que configurar.">🎬 Video del armado</button>
         </div>
@@ -9690,7 +9691,8 @@ async function generateAssemblyVideo(){
     rebuildMesh3D({ instrucciones:true });
     const cajaFinal = centeredBounds();
     const ALTURA_CAIDA = voxelSize * 5;
-    cajaFinal.max.y += ALTURA_CAIDA * 0.5;
+    // En lluvia los bloques vienen de mucho más arriba y hay que dejarlos entrar
+    cajaFinal.max.y += (videoCaida === 'lluvia' ? voxelSize * 9 : ALTURA_CAIDA * 0.5);
     const ELEV = 28, AZIM = 40;
     const focoFijo = cajaFinal.getCenter(new THREE.Vector3());
     const fijarCamara = ()=> encuadrarModeloEnCuadro(cajaFinal, ELEV, AZIM, 1.12, focoFijo);
@@ -9705,6 +9707,9 @@ async function generateAssemblyVideo(){
     const offX = (dims.x*voxelSize)/2, offZ = (dims.z*voxelSize)/2;
     const dummy = new THREE.Object3D();
     const porBloque = (videoCaida === 'bloque');
+    const porLluvia = (videoCaida === 'lluvia');
+    const ADELANTO = 3;              // cuántas capas se ven cayendo a la vez
+    const ALTO_LLUVIA = voxelSize * 16;
 
     /* Antes de grabar: se dibuja la escena varias veces con una pausa.
        El lienzo acaba de cambiar de tamaño a 960x960 y el navegador necesita un
@@ -9746,7 +9751,11 @@ async function generateAssemblyVideo(){
       setLoading(true, 'Grabando — paso ' + (capa - rango.desde + 1) + ' de ' + pasos + '…');
       await new Promise(r=>setTimeout(r, 0));
 
-      currentLayer = capa;
+      /* En modo lluvia se arma la malla con capas de MÁS: las que todavía no
+         tocan el suelo tienen que estar en la escena para poder verse cayendo.
+         Sin eso solo se puede animar la capa actual y nunca hay más de una capa
+         de bloques en el aire. */
+      currentLayer = porLluvia ? Math.min(rango.hasta, capa + ADELANTO) : capa;
       rebuildMesh3D({ instrucciones:true, oclusion: 0.85, coloresReales:true });
       materialParaInstrucciones(realMat);
       apagarContornosVideo();
@@ -9772,7 +9781,44 @@ async function generateAssemblyVideo(){
           return voxelSize * 0.14 * Math.sin(r * Math.PI) * (1 - r);  // rebote corto
         };
 
-        if (porBloque){
+        if (porLluvia){
+          /* LLUVIA. Cada bloque tiene su momento de aterrizaje, medido en capas.
+             En cualquier instante hay bloques de tres capas distintas en el
+             aire, cada uno a la altura que le toca según cuánto le falta: el
+             cielo queda lleno de piezas bajando, como en una filmación real.
+
+             Los que todavía faltan mucho se achican a cero en vez de esconderse:
+             una instancia no se puede ocultar de a una, pero con tamaño cero no
+             se dibuja. */
+          const ahora = capa + t;
+          lastVisibleVoxels.forEach((v, idx)=>{
+            const cy = Math.round(v.y);
+            const faltan = cy - ahora;          // en capas
+            /* Los que ya aterrizaron hace rato no se tocan: al armar la malla
+               quedaron en su sitio. Sin este corte se reescribían todas las
+               matrices en cada cuadro, y en un modelo de miles de bloques eso
+               solo es trabajo tirado. */
+            if (faltan <= -0.18) return;
+            let altura = 0, esc = 1;
+            if (faltan > 0){
+              if (faltan > ADELANTO){ esc = 0; }
+              else {
+                const p = Math.min(1, faltan / ADELANTO);
+                altura = ALTO_LLUVIA * p * p;   // acelera al acercarse al suelo
+              }
+            } else if (faltan > -0.18){
+              const r = (-faltan) / 0.18;
+              altura = voxelSize * 0.14 * Math.sin(r * Math.PI) * (1 - r);  // rebote
+            }
+            dummy.position.set(
+              v.x*voxelSize - offX,
+              v.y*voxelSize + voxelSize/2 + altura,
+              v.z*voxelSize - offZ);
+            dummy.scale.setScalar(esc);
+            dummy.updateMatrix();
+            instMesh.setMatrixAt(idx, dummy.matrix);
+          });
+        } else if (porBloque){
           /* Cascada: cada bloque arranca un poco después que el anterior, en el
              orden en que fueron ordenados. Con muchos bloques la cascada es casi
              continua y se ve como una lluvia que barre la capa. */
