@@ -582,7 +582,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v134</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v135</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -9747,7 +9747,11 @@ async function generateAssemblyVideo(){
     cajaFinal.max.y += (videoCaida === 'lluvia' ? voxelSize * 9 : ALTURA_CAIDA * 0.5);
     const ELEV = 28, AZIM = 40;
     const focoFijo = cajaFinal.getCenter(new THREE.Vector3());
-    const fijarCamara = ()=> encuadrarModeloEnCuadro(cajaFinal, ELEV, AZIM, 1.12, focoFijo);
+    // 1.30 en vez de 1.12: el modelo llena el 77% del cuadro y no el 89%. Con la
+    // lluvia hacía falta ese aire de más, si no los bloques altos entraban
+    // rozando el borde.
+    const HOLGURA = 1.30;
+    const fijarCamara = ()=> encuadrarModeloEnCuadro(cajaFinal, ELEV, AZIM, HOLGURA, focoFijo);
 
     showFullDesign = false;
 
@@ -9762,6 +9766,29 @@ async function generateAssemblyVideo(){
     const porLluvia = (videoCaida === 'lluvia');
     const ADELANTO = 3;              // cuántas capas se ven cayendo a la vez
     const ALTO_LLUVIA = voxelSize * 16;
+
+    /* Momento de aterrizaje de CADA bloque, no de cada capa.
+       Antes toda la capa tocaba el suelo en el mismo instante y se veía como una
+       plancha que baja. Ahora cada pieza tiene su hora: dentro de la capa se
+       reparten en el 85% de su tiempo, ordenadas en diagonal para que se lea
+       como una ola que barre y no como un desorden.
+       Se calcula una vez para todo el modelo y se guarda. */
+    const aterriza = new Map();
+    if (porLluvia){
+      const porCapa = new Map();
+      voxels.forEach(v=>{
+        const c = Math.round(v.y);
+        if (!porCapa.has(c)) porCapa.set(c, []);
+        porCapa.get(c).push(v);
+      });
+      porCapa.forEach((lista, c)=>{
+        lista.sort((a,b)=> (a.x + a.z) - (b.x + b.z));
+        const n = lista.length;
+        lista.forEach((v, i)=>{
+          aterriza.set(v.x+','+c+','+v.z, c + (n > 1 ? (i/(n-1))*0.85 : 0));
+        });
+      });
+    }
 
     /* Antes de grabar: se dibuja la escena varias veces con una pausa.
        El lienzo acaba de cambiar de tamaño a 960x960 y el navegador necesita un
@@ -9845,7 +9872,8 @@ async function generateAssemblyVideo(){
           const ahora = capa + t;
           lastVisibleVoxels.forEach((v, idx)=>{
             const cy = Math.round(v.y);
-            const faltan = cy - ahora;          // en capas
+            const destino = aterriza.get(v.x+','+cy+','+v.z);
+            const faltan = (destino === undefined ? cy : destino) - ahora;
             /* Los que ya aterrizaron hace rato no se tocan: al armar la malla
                quedaron en su sitio. Sin este corte se reescribían todas las
                matrices en cada cuadro, y en un modelo de miles de bloques eso
@@ -9923,7 +9951,7 @@ async function generateAssemblyVideo(){
     for (let f = 0; f < cuadrosGiro; f++){
       const p = f / cuadrosGiro;
       const suave = p - Math.sin(2*Math.PI*p) / (2*Math.PI);   // acelera y frena
-      encuadrarModeloEnCuadro(cajaFinal, ELEV, AZIM + suave*360, 1.12, focoFijo);
+      encuadrarModeloEnCuadro(cajaFinal, ELEV, AZIM + suave*360, HOLGURA, focoFijo);
       renderer.render(scene, camera);
       await new Promise(r=>setTimeout(r, 1000/FPS));
     }
