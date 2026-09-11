@@ -582,7 +582,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v128</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v129</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -4276,9 +4276,19 @@ function contornoParaInstrucciones(){
    identificado. */
 const PASOS_HOJA_KEY = '3dblock.pasosPorHoja';
 let pasosPorHoja = parseInt(localStorage.getItem(PASOS_HOJA_KEY), 10) || 1;
-/* ---------------------------- Ajustes del video ----------------------------
-   Hasta ahora el video no tenía ningún control: la cámara seguía la capa que se
-   estaba armando y el encuadre se movía en cada paso. Acá se puede fijar. */
+/* Qué bloque usa el manual. 'auto' lo elige según el peso del modelo; el resto
+   fuerza uno. Estas tres líneas se habían perdido al quitar el video, y sin
+   ellas el arranque moría con "bloqueManual is not defined" — que es lo que
+   dejaba la pantalla de login para siempre. */
+const BLOQUE_MANUAL_KEY = '3dblock.bloqueManual';
+let bloqueManual = localStorage.getItem(BLOQUE_MANUAL_KEY) || 'auto';
+// Los estilos 'simple' y 'magic' ya no existen: quien los tuviera guardados
+// pasa al de muesca, si no el selector quedaba vacío.
+if (bloqueManual === 'simple' || bloqueManual === 'magic') bloqueManual = 'muesca';
+// Caras por bloque de cada estilo, para estimar el peso antes de generar.
+// También se perdió al quitar el video.
+const CARAS_POR_ESTILO = { simple: 12, muesca: 419, magic: 472, magic2: 704, hama: 176 };
+
 function estiloParaInstrucciones(esVideo){
   if (bloqueManual !== 'auto'){
     blockStyle = bloqueManual;
