@@ -582,7 +582,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v127</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v128</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -614,6 +614,7 @@
           <div id="diagramTitle">Plano de la capa — vista superior</div>
           <button class="btn sm" id="printInstructionsBtn" title="Descargar un PDF con todas las capas, listo para imprimir">🖨️ Imprimir instrucciones</button>
           <button class="btn sm" id="printInstructionsPngBtn" title="Descargar las instrucciones como imágenes PNG (un archivo .zip) — mucho más liviano que el PDF, sin perder nitidez">🖼️ Instrucciones en PNG (.zip)</button>
+          <button class="btn sm" id="videoInstructionsBtn" title="Video del armado, listo para mostrar: piezas renderizadas, bloques que caen y cámara quieta. No hay nada que configurar.">🎬 Video del armado</button>
         </div>
         <div id="rangoPasosRow" class="admin-only" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:11px; color:var(--text-dim); margin-top:6px;">
           <span>Generar del paso</span>
@@ -9529,6 +9530,246 @@ function loop(t){
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
+
+/* ---------------------------- Video de armado ----------------------------
+   Un solo botón, sin ajustes. Todo está decidido acá y calibrado para que el
+   resultado sirva para mostrarle a un cliente.
+
+   Las decisiones y por qué:
+
+   · SE VE RENDERIZADO, no como el manual. Usa el mismo material físico, el
+     entorno reflejado y la curva de tono de la foto de presentación, más el
+     sombreado de rincones. El manual va plano a propósito para distinguir
+     bloque por bloque; un video para cliente tiene que verse bonito.
+
+   · CÁMARA QUIETA. Ni sigue la capa ni gira. Se encuadra UNA vez sobre el
+     modelo terminado y no se mueve más. Todo lo que probamos con cámara en
+     movimiento terminaba mareando o desencuadrando.
+
+   · DURACIÓN PAREJA. El video apunta a unos 30 segundos sea cual sea el
+     diseño: un modelo de 9 capas y otro de 72 no pueden durar lo mismo por
+     capa. El tiempo por capa sale de dividir, con topes para que no quede ni
+     frenético ni eterno.
+
+   · LOS BLOQUES CAEN escalonados y acelerando, con un rebote corto al
+     aterrizar. El rebote es lo que lo saca de "animación de programa": nada
+     pesado se detiene en seco.
+*/
+async function generateAssemblyVideo(){
+  if (!voxels.length){ setStatus('No hay ningún diseño cargado.', 'err'); return; }
+  if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream){
+    setStatus('Tu navegador no permite grabar video. Probá con Chrome o Edge.', 'err');
+    return;
+  }
+
+  const FPS = 30;
+  const rango = rangoPasos();
+  const pasos = rango.hasta - rango.desde + 1;
+
+  /* Ritmo. Se busca un video de unos 30 segundos, con topes: nunca menos de
+     0.35 s por capa (más rápido no se entiende qué pasó) ni más de 1.2 s (más
+     lento aburre). Un diseño de 9 capas queda en 1.2 y uno de 72 en 0.42. */
+  const segCapa = Math.min(1.2, Math.max(0.35, 30 / Math.max(1, pasos)));
+  const framesPorCapa = Math.max(3, Math.round(segCapa * FPS));
+  const segFinal = 3;
+
+  setLoading(true, 'Preparando el video…');
+  await new Promise(r=>setTimeout(r, 30));
+
+  const wasShow2D = mainSplit.classList.contains('show-2d');
+  if (wasShow2D) setView('3d');
+  await new Promise(r=>setTimeout(r, wasShow2D ? 120 : 30));
+
+  // --- Estado que hay que devolver al terminar ---
+  const prev = {
+    capa: currentLayer, full: showFullDesign, below: showBelowLayers,
+    camPos: camera.position.clone(), camQuat: camera.quaternion.clone(),
+    ejes: axesHelper.visible, grilla: grid.visible,
+    marcoCapa: layerPlaneEdge.visible, marcoSel: selectionBoxHelper.visible,
+    fondo: scene.background, niebla: scene.fog, entorno: scene.environment,
+    tono: renderer.toneMapping, exposicion: renderer.toneMappingExposure,
+    piso: ground.visible, pisoColor: ground.material.color.clone(), pisoEsc: ground.scale.clone(),
+    plano: flatBlockMode, estilo: blockStyle, piezas: renderAsPieces,
+    sombras: renderer.shadowMap.enabled,
+  };
+
+  axesHelper.visible = false;
+  grid.visible = false;
+  layerPlaneEdge.visible = false;
+  selectionBoxHelper.visible = false;
+  scene.fog = null;
+  ground.visible = false;
+
+  /* Estudio fotográfico, igual que la foto de presentación: ciclorama de fondo,
+     entorno reflejado y curva de tono. Sin esto el video sale plano. */
+  scene.background = fondoCicloramaTextura();
+  scene.environment = entornoEstudio();
+  renderer.toneMapping = THREE.CineonToneMapping;
+  renderer.toneMappingExposure = 1.0;
+
+  // Bloque con detalle: los tachones son lo que hace que se lea como pieza real
+  if (!esMagic()) blockStyle = 'magic2';
+  flatBlockMode = false;
+  renderAsPieces = true;
+  ensurePieceGrouping();
+  showFullDesign = false;
+  showBelowLayers = true;
+
+  const luces = guardarLuces();
+  lucesDeEstudio();
+
+  const realMat = new THREE.MeshPhysicalMaterial({
+    roughness: 0.38, metalness: 0.02,
+    clearcoat: 0.22, clearcoatRoughness: 0.30,
+    reflectivity: 0.45, specularIntensity: 0.6,
+    ior: 1.75,
+    envMap: entornoEstudio(), envMapIntensity: 1.1,
+  });
+
+  const tamOrig = new THREE.Vector2(); renderer.getSize(tamOrig);
+  const aspectoOrig = camera.aspect;
+  renderer.setSize(960, 960, false);
+  camera.aspect = 1; camera.updateProjectionMatrix();
+
+  let recorder = null, chunks = [];
+  try{
+    /* ENCUADRE: una sola vez, sobre el modelo TERMINADO más un respiro arriba
+       para los bloques en el aire. Calculado con bisección, que mide dónde caen
+       de verdad las esquinas y funciona igual con una figura alta que con una
+       base ancha y chata. */
+    showFullDesign = true;
+    rebuildMesh3D({ instrucciones:true });
+    const cajaFinal = centeredBounds();
+    const ALTURA_CAIDA = voxelSize * 5;
+    cajaFinal.max.y += ALTURA_CAIDA * 0.5;
+    const ELEV = 28, AZIM = 40;
+    const focoFijo = cajaFinal.getCenter(new THREE.Vector3());
+    const fijarCamara = ()=> encuadrarModeloEnCuadro(cajaFinal, ELEV, AZIM, 1.12, focoFijo);
+
+    showFullDesign = false;
+
+    const stream = renderer.domElement.captureStream(FPS);
+    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+    recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 10000000 });
+    recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+
+    const offX = (dims.x*voxelSize)/2, offZ = (dims.z*voxelSize)/2;
+    const dummy = new THREE.Object3D();
+
+    // Primer cuadro dibujado ANTES de arrancar a grabar: si no, el video empieza
+    // con el lienzo en blanco mientras se arma la primera capa.
+    currentLayer = rango.desde;
+    rebuildMesh3D({ instrucciones:true, oclusion: 0.85 });
+    materialParaInstrucciones(realMat);
+    fijarCamara();
+    renderer.render(scene, camera);
+    recorder.start();
+
+    for (let capa = rango.desde; capa <= rango.hasta; capa++){
+      setLoading(true, 'Grabando — paso ' + (capa - rango.desde + 1) + ' de ' + pasos + '…');
+      await new Promise(r=>setTimeout(r, 0));
+
+      currentLayer = capa;
+      rebuildMesh3D({ instrucciones:true, oclusion: 0.85 });
+      materialParaInstrucciones(realMat);
+
+      const nuevos = [];
+      lastVisibleVoxels.forEach((v, idx)=>{ if (Math.round(v.y) === capa) nuevos.push({ idx, v }); });
+
+      for (let f = 0; f < framesPorCapa; f++){
+        const t = f / framesPorCapa;
+        nuevos.forEach(({idx, v})=>{
+          // Arranque escalonado, sacado de la posición: siempre el mismo para el
+          // mismo bloque, así no titila entre cuadros.
+          const h = Math.sin(v.x*127.1 + v.z*74.7 + v.y*311.7) * 43758.5453;
+          const retraso = (h - Math.floor(h)) * 0.22;
+          const tc = Math.min(1, Math.max(0, (t - retraso) / 0.62));
+
+          let alturaExtra;
+          if (tc < 0.82){
+            // Caída: acelera, como la gravedad
+            const c = tc / 0.82;
+            alturaExtra = ALTURA_CAIDA * (1 - c) * (1 - c);
+          } else {
+            /* Rebote corto al aterrizar. Nada pesado frena en seco, y ese
+               detalle es lo que separa una animación creíble de una de
+               programa. Media onda de seno que se apaga sola. */
+            const r = (tc - 0.82) / 0.18;
+            alturaExtra = voxelSize * 0.16 * Math.sin(r * Math.PI) * (1 - r);
+          }
+          dummy.position.set(
+            v.x*voxelSize - offX,
+            v.y*voxelSize + voxelSize/2 + alturaExtra,
+            v.z*voxelSize - offZ);
+          dummy.scale.setScalar(tc < 1 ? 0.94 + 0.06*tc : 1);
+          dummy.updateMatrix();
+          instMesh.setMatrixAt(idx, dummy.matrix);
+        });
+        instMesh.instanceMatrix.needsUpdate = true;
+
+        fijarCamara();
+        renderer.render(scene, camera);
+        await new Promise(r=>setTimeout(r, 1000/FPS));
+      }
+    }
+
+    // Cierre: el modelo terminado, quieto, para que se lo pueda mirar
+    setLoading(true, 'Cerrando el video…');
+    showFullDesign = true;
+    rebuildMesh3D({ instrucciones:true, oclusion: 0.85 });
+    materialParaInstrucciones(realMat);
+    for (let f = 0; f < FPS*segFinal; f++){
+      fijarCamara();
+      renderer.render(scene, camera);
+      await new Promise(r=>setTimeout(r, 1000/FPS));
+    }
+
+    await new Promise(res=>{ recorder.onstop = res; recorder.stop(); });
+    const blob = new Blob(chunks, { type: 'video/webm' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const nombre = (document.getElementById('modelNameText').textContent || 'diseno').trim();
+    const base = nombre.replace(/[^\w\-]+/g,'_') || 'diseno';
+    a.href = url; a.download = base + '_armado' + sufijoRango() + '.webm';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    const dur = Math.round(pasos*segCapa + segFinal);
+    setStatus('Video listo: ' + base + '_armado.webm — ' + dur + ' segundos.', 'ok');
+  } catch(err){
+    console.error(err);
+    if (recorder && recorder.state !== 'inactive'){ try{ recorder.stop(); }catch(e){} }
+    setStatus('No se pudo grabar el video: ' + err.message, 'err');
+  } finally {
+    realMat.dispose();
+    restaurarLuces(luces);
+    renderer.toneMapping = prev.tono;
+    renderer.toneMappingExposure = prev.exposicion;
+    scene.environment = prev.entorno;
+    scene.background = prev.fondo;
+    scene.fog = prev.niebla;
+    renderer.shadowMap.enabled = prev.sombras;
+    ground.visible = prev.piso;
+    ground.material.color.copy(prev.pisoColor);
+    ground.scale.copy(prev.pisoEsc);
+    axesHelper.visible = prev.ejes;
+    grid.visible = prev.grilla;
+    layerPlaneEdge.visible = prev.marcoCapa;
+    selectionBoxHelper.visible = prev.marcoSel;
+    currentLayer = prev.capa; showFullDesign = prev.full; showBelowLayers = prev.below;
+    flatBlockMode = prev.plano; blockStyle = prev.estilo; renderAsPieces = prev.piezas;
+    renderer.setSize(tamOrig.x, tamOrig.y, false);
+    camera.aspect = aspectoOrig; camera.updateProjectionMatrix();
+    rebuildMesh3D();
+    camera.position.copy(prev.camPos);
+    camera.quaternion.copy(prev.camQuat);
+    if (wasShow2D) setView('2d');
+    refreshLayerUI();
+    renderer.render(scene, camera);
+    setLoading(false);
+  }
+}
+
+document.getElementById('videoInstructionsBtn').addEventListener('click', generateAssemblyVideo);
 
 /* ---------------------------- Inicio ---------------------------- */
 voxelSize = 1;
