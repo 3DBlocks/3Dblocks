@@ -582,7 +582,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v131</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v132</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -614,6 +614,10 @@
           <div id="diagramTitle">Plano de la capa — vista superior</div>
           <button class="btn sm" id="printInstructionsBtn" title="Descargar un PDF con todas las capas, listo para imprimir">🖨️ Imprimir instrucciones</button>
           <button class="btn sm" id="printInstructionsPngBtn" title="Descargar las instrucciones como imágenes PNG (un archivo .zip) — mucho más liviano que el PDF, sin perder nitidez">🖼️ Instrucciones en PNG (.zip)</button>
+          <select id="videoCaidaSel" title="Cómo caen los bloques en el video" style="background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:7px; padding:5px 8px; font-size:12px;">
+            <option value="capa">Caída por capa</option>
+            <option value="bloque">Caída bloque por bloque</option>
+          </select>
           <button class="btn sm" id="videoInstructionsBtn" title="Video del armado, listo para mostrar: piezas renderizadas, bloques que caen y cámara quieta. No hay nada que configurar.">🎬 Video del armado</button>
         </div>
         <div id="rangoPasosRow" class="admin-only" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:11px; color:var(--text-dim); margin-top:6px;">
@@ -4279,6 +4283,12 @@ function contornoParaInstrucciones(){
    Por eso ahora se puede forzar a mano. Es también la forma de saber si el
    cuelgue es por la geometría: si en "simple" genera y en "real" no, ya está
    identificado. */
+/* Cómo caen los bloques en el video: la capa entera de una, o uno por uno en
+   cascada. La segunda queda más vistosa y además hace más difícil pausar el
+   video y copiar una capa completa de un vistazo. */
+const VIDEO_CAIDA_KEY = '3dblock.videoCaida';
+let videoCaida = localStorage.getItem(VIDEO_CAIDA_KEY) || 'capa';
+
 const PASOS_HOJA_KEY = '3dblock.pasosPorHoja';
 let pasosPorHoja = parseInt(localStorage.getItem(PASOS_HOJA_KEY), 10) || 1;
 /* Qué bloque usa el manual. 'auto' lo elige según el peso del modelo; el resto
@@ -5030,6 +5040,16 @@ function pasoPreview(delta){
   esc.addEventListener('input', e=> cambiar({ escala: parseFloat(e.target.value) }));
   pintar();
 } catch(e){ console.error("Falló la interfaz de firmaCasaUI:", e); }
+})();
+
+(function videoCaidaUI(){ try{
+  const sel = document.getElementById('videoCaidaSel');
+  sel.value = videoCaida;
+  sel.addEventListener('change', e=>{
+    videoCaida = e.target.value;
+    localStorage.setItem(VIDEO_CAIDA_KEY, videoCaida);
+  });
+} catch(e){ console.error("Falló la interfaz de videoCaidaUI:", e); }
 })();
 
 (function pasosPorHojaUI(){ try{
@@ -9601,7 +9621,6 @@ async function generateAssemblyVideo(){
      lento aburre). Un diseño de 9 capas queda en 1.2 y uno de 72 en 0.42. */
   const segCapa = Math.min(1.2, Math.max(0.35, 30 / Math.max(1, pasos)));
   const framesPorCapa = Math.max(3, Math.round(segCapa * FPS));
-  const segFinal = 3;
 
   setLoading(true, 'Preparando el video…');
   await new Promise(r=>setTimeout(r, 30));
@@ -9685,6 +9704,7 @@ async function generateAssemblyVideo(){
 
     const offX = (dims.x*voxelSize)/2, offZ = (dims.z*voxelSize)/2;
     const dummy = new THREE.Object3D();
+    const porBloque = (videoCaida === 'bloque');
 
     /* Antes de grabar: se dibuja la escena varias veces con una pausa.
        El lienzo acaba de cambiar de tamaño a 960x960 y el navegador necesita un
@@ -9733,34 +9753,52 @@ async function generateAssemblyVideo(){
 
       const nuevos = [];
       lastVisibleVoxels.forEach((v, idx)=>{ if (Math.round(v.y) === capa) nuevos.push({ idx, v }); });
+      /* Para la cascada, los bloques se ordenan en diagonal por la capa. Un orden
+         en diagonal se lee como una ola que barre; por índice del archivo, como
+         un desorden sin sentido. */
+      if (porBloque) nuevos.sort((a,b)=> (a.v.x + a.v.z) - (b.v.x + b.v.z));
 
       for (let f = 0; f < framesPorCapa; f++){
         const t = f / framesPorCapa;
-        /* La capa entera cae JUNTA y con el tamaño definitivo.
-           Dos cambios respecto de antes:
-           · Sin escalonado: la capa baja como una pieza sola. Escalonado se veía
-             desprolijo en capas chicas, donde tres bloques llegando uno detrás
-             del otro parece un error.
-           · Sin animación de tamaño. Los bloques venían creciendo del 94% al
-             100% y ese salto al aterrizar es el parpadeo que se notaba. */
-        const tc = Math.min(1, t / 0.7);
-        let alturaExtra;
-        if (tc < 0.82){
-          const c = tc / 0.82;
-          alturaExtra = ALTURA_CAIDA * (1 - c) * (1 - c);   // acelera, como la gravedad
-        } else {
-          // Rebote corto: nada pesado frena en seco
+        /* Altura del bloque i en el momento t de la capa.
+           Sin animación de tamaño: los bloques venían creciendo del 94% al 100%
+           y ese salto al aterrizar era el parpadeo que se notaba. */
+        const alturaDe = (tc)=>{
+          if (tc < 0.82){
+            const c = tc / 0.82;
+            return ALTURA_CAIDA * (1 - c) * (1 - c);   // acelera, como la gravedad
+          }
           const r = (tc - 0.82) / 0.18;
-          alturaExtra = voxelSize * 0.14 * Math.sin(r * Math.PI) * (1 - r);
+          return voxelSize * 0.14 * Math.sin(r * Math.PI) * (1 - r);  // rebote corto
+        };
+
+        if (porBloque){
+          /* Cascada: cada bloque arranca un poco después que el anterior, en el
+             orden en que fueron ordenados. Con muchos bloques la cascada es casi
+             continua y se ve como una lluvia que barre la capa. */
+            const n = nuevos.length;
+            nuevos.forEach(({idx, v}, i)=>{
+              const inicio = n > 1 ? (i / (n - 1)) * 0.60 : 0;
+              const tc = Math.min(1, Math.max(0, (t - inicio) / 0.38));
+              dummy.position.set(
+                v.x*voxelSize - offX,
+                v.y*voxelSize + voxelSize/2 + alturaDe(tc),
+                v.z*voxelSize - offZ);
+              dummy.updateMatrix();
+              instMesh.setMatrixAt(idx, dummy.matrix);
+            });
+        } else {
+          // La capa entera baja como una sola pieza
+          const alturaExtra = alturaDe(Math.min(1, t / 0.7));
+          nuevos.forEach(({idx, v})=>{
+            dummy.position.set(
+              v.x*voxelSize - offX,
+              v.y*voxelSize + voxelSize/2 + alturaExtra,
+              v.z*voxelSize - offZ);
+            dummy.updateMatrix();
+            instMesh.setMatrixAt(idx, dummy.matrix);
+          });
         }
-        nuevos.forEach(({idx, v})=>{
-          dummy.position.set(
-            v.x*voxelSize - offX,
-            v.y*voxelSize + voxelSize/2 + alturaExtra,
-            v.z*voxelSize - offZ);
-          dummy.updateMatrix();
-          instMesh.setMatrixAt(idx, dummy.matrix);
-        });
         instMesh.instanceMatrix.needsUpdate = true;
 
         fijarCamara();
@@ -9769,13 +9807,30 @@ async function generateAssemblyVideo(){
       }
     }
 
-    // Cierre: el modelo terminado, quieto, para que se lo pueda mirar
+    /* Cierre: vuelta completa de 360° alrededor del modelo terminado.
+       Se hace SOLO acá, al final. Durante el armado la cámara queda quieta
+       porque ahí lo que importa es ver dónde va cada bloque; una vez terminado,
+       el giro es lo que deja ver la pieza por todos lados.
+
+       El arranque y el final del giro son suaves — acelera y frena — porque un
+       giro a velocidad constante empieza y termina de golpe y se nota. */
     setLoading(true, 'Cerrando el video…');
     showFullDesign = true;
     rebuildMesh3D({ instrucciones:true, oclusion: 0.85, coloresReales:true });
     materialParaInstrucciones(realMat);
     apagarContornosVideo();
-    for (let f = 0; f < FPS*segFinal; f++){
+
+    const SEG_GIRO = 5;
+    const cuadrosGiro = Math.round(FPS * SEG_GIRO);
+    for (let f = 0; f < cuadrosGiro; f++){
+      const p = f / cuadrosGiro;
+      const suave = p - Math.sin(2*Math.PI*p) / (2*Math.PI);   // acelera y frena
+      encuadrarModeloEnCuadro(cajaFinal, ELEV, AZIM + suave*360, 1.12, focoFijo);
+      renderer.render(scene, camera);
+      await new Promise(r=>setTimeout(r, 1000/FPS));
+    }
+    // Un segundo quieto al terminar la vuelta, de nuevo en el ángulo original
+    for (let f = 0; f < FPS; f++){
       fijarCamara();
       renderer.render(scene, camera);
       await new Promise(r=>setTimeout(r, 1000/FPS));
@@ -9790,7 +9845,7 @@ async function generateAssemblyVideo(){
     a.href = url; a.download = base + '_armado' + sufijoRango() + '.webm';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    const dur = Math.round(pasos*segCapa + segFinal);
+    const dur = Math.round(pasos*segCapa + 6);
     setStatus('Video listo: ' + base + '_armado.webm — ' + dur + ' segundos.', 'ok');
   } catch(err){
     console.error(err);
