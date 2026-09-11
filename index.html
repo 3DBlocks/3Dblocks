@@ -582,7 +582,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v129</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v130</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -2552,7 +2552,7 @@ function buildPieceMeshes(visible){
       dummy.rotation.y = (axis === 'z') ? Math.PI/2 : 0;
       dummy.updateMatrix();
       mesh.setMatrixAt(i, dummy.matrix);
-      const isCurrentLayer = showFullDesign || Math.round(v0.y) === currentLayer;
+      const isCurrentLayer = showFullDesign || coloresReales || Math.round(v0.y) === currentLayer;
       if (isCurrentLayer){ tmpColor.set(cleanColor(v0.color)); } else { tmpColor.copy(belowLayerColor); }
       mesh.setColorAt(i, tmpColor);
     });
@@ -2583,7 +2583,7 @@ function buildPieceMeshes(visible){
              reconoce como negro aunque esté en gris. */
           const v0 = list[i][0];
           if (contornoInstrucciones){
-            const esActual = showFullDesign || Math.round(v0.y) === currentLayer;
+            const esActual = showFullDesign || coloresReales || Math.round(v0.y) === currentLayer;
             if (esActual) tc.set(cleanColor(v0.color)); else tc.copy(belowLayerColor);
           } else {
             tc.set(cleanColor(v0.color));
@@ -2610,6 +2610,11 @@ function rebuildMesh3D(opts){
   // presentación). En el visor de edición conviene ver los colores planos, sin
   // sombreado, para saber exactamente de qué color es cada bloque.
   const fuerzaOclusion = (opts && opts.oclusion) || 0;
+  /* Colores reales en TODAS las capas visibles, no solo en la actual.
+     El gris de lo ya armado es una convención del manual: sirve para ver qué
+     bloque va ahora. En un video para cliente produce un parpadeo en cada capa,
+     porque lo recién puesto cambia de su color a gris de un cuadro al otro. */
+  const coloresReales = !!(opts && opts.coloresReales);
   const mapaOclusion = fuerzaOclusion > 0 ? calcularOclusion() : null;
   clearModelMeshes();
   const visible = showFullDesign
@@ -2768,7 +2773,7 @@ function rebuildMesh3D(opts){
     dummy.updateMatrix();
     seamMesh.setMatrixAt(i, dummy.matrix);
     dummy.scale.setScalar(encoge);
-    const isCurrentLayer = showFullDesign || Math.round(v.y) === currentLayer;
+    const isCurrentLayer = showFullDesign || coloresReales || Math.round(v.y) === currentLayer;
     // cleanColor() como red de seguridad: si un color viniera en un formato raro
     // (con transparencia, nombre CSS, etc.), acá se normaliza en vez de romper el
     // dibujado o quedar en negro.
@@ -9666,21 +9671,33 @@ async function generateAssemblyVideo(){
     const offX = (dims.x*voxelSize)/2, offZ = (dims.z*voxelSize)/2;
     const dummy = new THREE.Object3D();
 
-    // Primer cuadro dibujado ANTES de arrancar a grabar: si no, el video empieza
-    // con el lienzo en blanco mientras se arma la primera capa.
+    /* Antes de grabar: se dibuja la escena varias veces con una pausa.
+       El lienzo acaba de cambiar de tamaño a 960x960 y el navegador necesita un
+       momento para rehacer su búfer. Si se graba enseguida, los primeros cuadros
+       salen negros o a medio dibujar — ese era el "margen negro" del arranque.
+       Tres cuadros y 120 ms alcanzan y no se notan en el resultado. */
     currentLayer = rango.desde;
-    rebuildMesh3D({ instrucciones:true, oclusion: 0.85 });
+    rebuildMesh3D({ instrucciones:true, oclusion: 0.85, coloresReales:true });
     materialParaInstrucciones(realMat);
-    fijarCamara();
-    renderer.render(scene, camera);
+    for (let k = 0; k < 3; k++){
+      fijarCamara();
+      renderer.render(scene, camera);
+      await new Promise(r=>setTimeout(r, 40));
+    }
     recorder.start();
+    // Medio segundo con la primera capa ya puesta, para que el video no arranque
+    // en movimiento: da tiempo a que el ojo se ubique antes de que caiga nada.
+    for (let k = 0; k < Math.round(FPS*0.5); k++){
+      renderer.render(scene, camera);
+      await new Promise(r=>setTimeout(r, 1000/FPS));
+    }
 
     for (let capa = rango.desde; capa <= rango.hasta; capa++){
       setLoading(true, 'Grabando — paso ' + (capa - rango.desde + 1) + ' de ' + pasos + '…');
       await new Promise(r=>setTimeout(r, 0));
 
       currentLayer = capa;
-      rebuildMesh3D({ instrucciones:true, oclusion: 0.85 });
+      rebuildMesh3D({ instrucciones:true, oclusion: 0.85, coloresReales:true });
       materialParaInstrucciones(realMat);
 
       const nuevos = [];
@@ -9688,30 +9705,28 @@ async function generateAssemblyVideo(){
 
       for (let f = 0; f < framesPorCapa; f++){
         const t = f / framesPorCapa;
+        /* La capa entera cae JUNTA y con el tamaño definitivo.
+           Dos cambios respecto de antes:
+           · Sin escalonado: la capa baja como una pieza sola. Escalonado se veía
+             desprolijo en capas chicas, donde tres bloques llegando uno detrás
+             del otro parece un error.
+           · Sin animación de tamaño. Los bloques venían creciendo del 94% al
+             100% y ese salto al aterrizar es el parpadeo que se notaba. */
+        const tc = Math.min(1, t / 0.7);
+        let alturaExtra;
+        if (tc < 0.82){
+          const c = tc / 0.82;
+          alturaExtra = ALTURA_CAIDA * (1 - c) * (1 - c);   // acelera, como la gravedad
+        } else {
+          // Rebote corto: nada pesado frena en seco
+          const r = (tc - 0.82) / 0.18;
+          alturaExtra = voxelSize * 0.14 * Math.sin(r * Math.PI) * (1 - r);
+        }
         nuevos.forEach(({idx, v})=>{
-          // Arranque escalonado, sacado de la posición: siempre el mismo para el
-          // mismo bloque, así no titila entre cuadros.
-          const h = Math.sin(v.x*127.1 + v.z*74.7 + v.y*311.7) * 43758.5453;
-          const retraso = (h - Math.floor(h)) * 0.22;
-          const tc = Math.min(1, Math.max(0, (t - retraso) / 0.62));
-
-          let alturaExtra;
-          if (tc < 0.82){
-            // Caída: acelera, como la gravedad
-            const c = tc / 0.82;
-            alturaExtra = ALTURA_CAIDA * (1 - c) * (1 - c);
-          } else {
-            /* Rebote corto al aterrizar. Nada pesado frena en seco, y ese
-               detalle es lo que separa una animación creíble de una de
-               programa. Media onda de seno que se apaga sola. */
-            const r = (tc - 0.82) / 0.18;
-            alturaExtra = voxelSize * 0.16 * Math.sin(r * Math.PI) * (1 - r);
-          }
           dummy.position.set(
             v.x*voxelSize - offX,
             v.y*voxelSize + voxelSize/2 + alturaExtra,
             v.z*voxelSize - offZ);
-          dummy.scale.setScalar(tc < 1 ? 0.94 + 0.06*tc : 1);
           dummy.updateMatrix();
           instMesh.setMatrixAt(idx, dummy.matrix);
         });
@@ -9726,7 +9741,7 @@ async function generateAssemblyVideo(){
     // Cierre: el modelo terminado, quieto, para que se lo pueda mirar
     setLoading(true, 'Cerrando el video…');
     showFullDesign = true;
-    rebuildMesh3D({ instrucciones:true, oclusion: 0.85 });
+    rebuildMesh3D({ instrucciones:true, oclusion: 0.85, coloresReales:true });
     materialParaInstrucciones(realMat);
     for (let f = 0; f < FPS*segFinal; f++){
       fijarCamara();
