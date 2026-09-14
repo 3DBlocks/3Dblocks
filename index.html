@@ -6,8 +6,17 @@
 <title>RenzoD'sing · Guía de armado por capas</title>
 <link rel="manifest" href="manifest.json" />
 <link rel="icon" href="icon-192.png" />
-<link rel="apple-touch-icon" href="icon-192.png" />
-<meta name="theme-color" content="#16181d" />
+<!-- iPhone y iPad no leen el manifiesto: necesitan sus propias etiquetas.
+     Sin estas tres, al agregar a la pantalla de inicio se abre igual con la
+     barra de Safari arriba y sigue pareciendo una página. -->
+<link rel="apple-touch-icon" sizes="180x180" href="icon-180.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="RenzoD'sing" />
+<meta name="mobile-web-app-capable" content="yes" />
+<!-- El color de la barra del sistema, igual al fondo de la app: así el borde
+     superior del teléfono se funde con la pantalla en vez de cortarla. -->
+<meta name="theme-color" content="#080b13" />
 <style>
   :root{
     /* Paleta futurista: azul de noche muy profundo con acento cian y un
@@ -33,11 +42,29 @@
     --sans: 'Inter', ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   }
   *{ box-sizing: border-box; }
+  /* Modo aplicación en el teléfono.
+     · `overscroll-behavior:none` quita el rebote elástico al llegar al borde,
+       que es lo que más delata a una página web dentro de una app.
+     · Sin resaltado azul al tocar y sin el menú de "copiar imagen" al mantener
+       apretado: en una app nativa eso no existe.
+     · `user-select:none` en la interfaz evita que al arrastrar en el visor se
+       seleccionen los textos de los botones. */
   html,body{
     margin:0; padding:0; height:100%; background:var(--bg); color:var(--text);
     font-family: var(--sans); overflow:hidden; -webkit-font-smoothing:antialiased;
+    overscroll-behavior:none;
+    -webkit-tap-highlight-color:transparent;
+    -webkit-touch-callout:none;
+    user-select:none; -webkit-user-select:none;
   }
-  #app{ position:relative; height:100vh; height:100dvh; width:100vw; display:flex; flex-direction:column; overflow:hidden; }
+  /* En los campos de texto sí se puede seleccionar, si no no se puede ni copiar
+     el nombre de un diseño. */
+  input, textarea, [contenteditable]{ user-select:text; -webkit-user-select:text; }
+  #app{ position:relative; height:100vh; height:100dvh; width:100vw;
+    /* Respeta la muesca del teléfono y la barra de gestos de abajo: sin esto,
+       en pantalla completa los botones de arriba quedan bajo la cámara. */
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    box-sizing:border-box; display:flex; flex-direction:column; overflow:hidden; }
 
   /* ---------- Top identity bar (slim) ---------- */
   #idBar{
@@ -582,7 +609,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v135</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v138</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -9704,10 +9731,15 @@ async function generateAssemblyVideo(){
      es (213,206,172), cálido, con el rojo un 24% por encima del azul. Un gris
      neutro se lee como estudio de render; un crema, como una mesa con luz de
      ventana. */
-  scene.background = new THREE.Color('#d6cfae');
+  /* Ciclorama gris de estudio, el mismo de la foto de presentación.
+     Estaba puesto un beige liso: un fondo de color tiñe la percepción de todos
+     los colores del modelo y delata que es un render, porque ningún estudio
+     fotografía sobre cartulina beige. El gris neutro deja que los colores de las
+     piezas se lean como son. */
+  scene.background = fondoCicloramaTextura();
   scene.environment = entornoEstudio();
   renderer.toneMapping = THREE.CineonToneMapping;
-  renderer.toneMappingExposure = 1.25;
+  renderer.toneMappingExposure = 1.05;   // 1.25 quemaba las caras iluminadas
 
   // Bloque con detalle: los tachones son lo que hace que se lea como pieza real
   if (!esMagic()) blockStyle = 'magic2';
@@ -9730,7 +9762,14 @@ async function generateAssemblyVideo(){
 
   const tamOrig = new THREE.Vector2(); renderer.getSize(tamOrig);
   const aspectoOrig = camera.aspect;
-  renderer.setSize(960, 960, false);
+  /* EL VIDEO SE ADAPTA A LA FORMA DEL MODELO.
+     Un cuadro cuadrado para una figura alta y flaca es tirar la pantalla: medido
+     sobre un muñeco de 4,7 de alto por 1 de ancho, el modelo usaba el 4,4% del
+     cuadro y el resto era fondo. Por eso se veía chiquito y perdido.
+     Se mide la silueta proyectada y se elige la forma del video: vertical para
+     figuras altas, apaisado para barcos, cuadrado para lo que esté en el medio.
+     El lado largo queda en 1080, que es lo que pide cualquier red social. */
+  renderer.setSize(1080, 1080, false);
   camera.aspect = 1; camera.updateProjectionMatrix();
 
   let recorder = null, chunks = [];
@@ -9751,7 +9790,40 @@ async function generateAssemblyVideo(){
     // lluvia hacía falta ese aire de más, si no los bloques altos entraban
     // rozando el borde.
     const HOLGURA = 1.30;
-    const fijarCamara = ()=> encuadrarModeloEnCuadro(cajaFinal, ELEV, AZIM, HOLGURA, focoFijo);
+    let fijarCamara = ()=> encuadrarModeloEnCuadro(cajaFinal, ELEV, AZIM, HOLGURA, focoFijo);
+
+    /* Forma del video según la silueta del modelo.
+       Se encuadra una vez en cuadrado, se proyectan las ocho esquinas de la caja
+       sobre la pantalla y se mide cuánto ocupa de ancho y de alto. Esa relación
+       decide la forma del video.
+
+       Se acota entre 9:16 y 16:9: más estirado que eso no lo acepta ninguna red
+       social, y un video de 200 píxeles de ancho no sirve para nada. */
+    fijarCamara();
+    camera.updateMatrixWorld();
+    {
+      let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+      for (const x of [cajaFinal.min.x, cajaFinal.max.x])
+        for (const y of [cajaFinal.min.y, cajaFinal.max.y])
+          for (const z of [cajaFinal.min.z, cajaFinal.max.z]){
+            const p = new THREE.Vector3(x, y, z).project(camera);
+            minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+            minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+          }
+      const anchoRel = Math.max(0.05, maxX - minX);
+      const altoRel  = Math.max(0.05, maxY - minY);
+      // Relación alto/ancho de la silueta, acotada a lo que sirve para publicar
+      const rel = Math.min(1.78, Math.max(0.56, altoRel / anchoRel));
+      let W, H;
+      if (rel >= 1){ H = 1080; W = Math.round(1080 / rel / 2) * 2; }
+      else        { W = 1080; H = Math.round(1080 * rel / 2) * 2; }
+      renderer.setSize(W, H, false);
+      camera.aspect = W / H;
+      camera.updateProjectionMatrix();
+      // Con el cuadro ya en su forma final, se vuelve a encuadrar
+      fijarCamara = ()=> encuadrarModeloEnCuadro(cajaFinal, ELEV, AZIM, HOLGURA, focoFijo);
+      fijarCamara();
+    }
 
     showFullDesign = false;
 
@@ -9796,7 +9868,7 @@ async function generateAssemblyVideo(){
        salen negros o a medio dibujar — ese era el "margen negro" del arranque.
        Tres cuadros y 120 ms alcanzan y no se notan en el resultado. */
     currentLayer = rango.desde;
-    rebuildMesh3D({ instrucciones:true, oclusion: 0.55, coloresReales:true });
+    rebuildMesh3D({ instrucciones:true, oclusion: 0.85, coloresReales:true });
     materialParaInstrucciones(realMat);
     apagarContornosVideo();
     /* La primera capa arranca YA EN EL AIRE. Antes se dibujaba en su sitio
@@ -9835,7 +9907,7 @@ async function generateAssemblyVideo(){
          Sin eso solo se puede animar la capa actual y nunca hay más de una capa
          de bloques en el aire. */
       currentLayer = porLluvia ? Math.min(rango.hasta, capa + ADELANTO) : capa;
-      rebuildMesh3D({ instrucciones:true, oclusion: 0.55, coloresReales:true });
+      rebuildMesh3D({ instrucciones:true, oclusion: 0.85, coloresReales:true });
       materialParaInstrucciones(realMat);
       apagarContornosVideo();
 
@@ -9942,7 +10014,7 @@ async function generateAssemblyVideo(){
        giro a velocidad constante empieza y termina de golpe y se nota. */
     setLoading(true, 'Cerrando el video…');
     showFullDesign = true;
-    rebuildMesh3D({ instrucciones:true, oclusion: 0.55, coloresReales:true });
+    rebuildMesh3D({ instrucciones:true, oclusion: 0.85, coloresReales:true });
     materialParaInstrucciones(realMat);
     apagarContornosVideo();
 
@@ -10021,6 +10093,13 @@ window.addEventListener('error', ev=>{
     st.textContent = 'Error al cargar: ' + (ev.message || '') + ' (' + (ev.filename||'').split('/').pop() + ':' + ev.lineno + ')';
   }
 });
+/* Registro del trabajador de servicio: es lo que habilita "Instalar aplicación"
+   y lo que deja que arranque sin señal. Va aparte y sin await, para que si falla
+   —por ejemplo abriendo el archivo local, donde no se permite— no frene nada. */
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')){
+  navigator.serviceWorker.register('sw.js').catch(e=> console.warn('Sin trabajador de servicio:', e.message));
+}
+
 waitForAuth().then(async () => {
   const loaded = await tryLoadModelFromUrl();
   // La vista plana tiene que quedar puesta ANTES de encuadrar: el encuadre
