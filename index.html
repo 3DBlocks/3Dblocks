@@ -2379,7 +2379,12 @@ function buildPieceGeometry(size, len){
       parts.forEach(p=>p.dispose());
       return merged;
     } catch(err){
+      /* Devolver la malla de UN bloque para una pieza de dos o tres es lo peor
+         que se puede hacer: el modelo aparece con agujeros donde estaban las
+         piezas largas, y nada lo avisa. Se informa en pantalla. */
       console.warn('No se pudo armar la pieza larga en Magic Block, se usa 1x1:', err);
+      setStatus('Aviso: no se pudo unir la malla de las piezas de ' + len +
+                ' bloques (' + err.message + '). Van a faltar bloques en la foto.', 'err');
       return buildMagicBlockGeometry(size);
     }
   }
@@ -2600,14 +2605,7 @@ function buildPieceMeshes(visible){
     const juntas = [];
     for (let j=1; j<len; j++) juntas.push(-voxelSize*len/2 + voxelSize*j);
     const bandaJunta = voxelSize*0.10; // cubre los dientes, que sobresalen ~7%
-    // OJO: acá NO hay que pedir además `showMeshTexture` cuando es para el manual.
-    // Ese flag es el botón "Contorno" del visor (una preferencia de PANTALLA); si
-    // el usuario lo deja en "sin contorno" para mirar cómodo mientras edita, esta
-    // condición se apagaba también en las instrucciones — y sin esta línea una
-    // pieza 1x2/1x3 se ve IDÉNTICA a dos o tres bloques 1x1 sueltos (los tachones
-    // quedan separados igual en los dos casos). En el manual el contorno no es
-    // decoración, es la única forma de saber qué bloques van juntos.
-    if (usarContornoReal() || contornoInstrucciones){
+    if (usarContornoReal() || (contornoInstrucciones && showMeshTexture)){
       try{
         const tc = new THREE.Color();
         const lineas = buildEdgesForInstances(geo, mesh, list.length, i=>{
@@ -2686,7 +2684,12 @@ function rebuildMesh3D(opts){
     } catch(err){
       // Si el armado por piezas falla por lo que sea, seguimos con el dibujado
       // normal bloque por bloque en vez de dejar el programa colgado.
+      /* Esto se veía SOLO en la consola, y el usuario se quedaba mirando un
+         manual sin las piezas agrupadas sin entender por qué. Ahora avisa en
+         pantalla: si el modo piezas se cae, hay que saberlo. */
       console.warn('Falló el dibujado por piezas, se usa bloque por bloque:', err);
+      setStatus('Aviso: no se pudieron dibujar las piezas 1x2 y 1x3 (' + err.message +
+                '). Se dibuja bloque por bloque.', 'err');
       clearModelMeshes();
     }
   }
