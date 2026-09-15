@@ -609,7 +609,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v144</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v145</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -1702,13 +1702,11 @@ function rgbAHsl(r, g, b){          // r,g,b en sRGB 0..1
    incluido el azul, va con línea oscura, que es lo que pidió el uso real. */
 function esNegroCafeOAzul(r, g, b){ // r,g,b en sRGB 0..1
   const { l } = rgbAHsl(r, g, b);
-  /* Bajado de 0.16 a 0.05 a pedido: con 0.16 entraban grises bastante claros
-     (no solo el negro/casi negro), así que terminaban con línea clara TODOS
-     esos bloques — y con la malla real del Magic Block (~260 aristas por
-     bloque) esa línea clara de más, repetida en cada diente y muesca, hacía
-     que el modelo entero se viera "lavado"/blanquecino en el visor 3D, no
-     solo el pelo negro. Con 0.05 solo entra el negro de verdad. */
-  return l <= 0.05;
+  // Vuelto a 0.16 (como era antes de v144): esta función es la que usan el
+  // MANUAL y el plano 2D impreso — el ajuste más estricto que pidió el
+  // usuario es SOLO para la pantalla de edición, ver `UMBRAL_NEGRO_VISOR`
+  // más abajo, en `colorDeContorno`.
+  return l <= 0.16;
 }
 
 /* ⚠️ OJO CON EL ESPACIO DE COLOR — es fácil equivocarse acá y el error no se ve.
@@ -1769,15 +1767,22 @@ let coloresReales = false;
    muchas que se junten, ninguna puede pasar de ese gris. El tope deja de depender
    de cuán lejos estés mirando.
    (Idea del usuario, mirando su propio modelo de lejos y de cerca.) */
-/* Bajado de #8a8a8a a #4d4d4d a pedido: seguía leyéndose "blanco" contra el
-   negro. Sigue siendo gris OPACO, no blanco transparente — ver la explicación
-   de arriba sobre por qué tiene que ser opaco (si no, de lejos se acumula y
-   se ve blanco de verdad, sin importar qué tan oscuro sea el gris de base). */
-const LINEA_CLARA = '#4d4d4d';      // gris oscuro: la línea en el negro / casi negro
-const LINEA_OSCURA = '#000000';     // negra, en TODOS los demás colores
+const LINEA_CLARA = '#8a8a8a';      // gris de la línea en bloques negros / oscuros — EL MANUAL, sin cambios
+const LINEA_OSCURA = '#000000';     // negra, en los colores claros
+
+/* Ajuste pedido, PERO SOLO PARA LA PANTALLA DE EDICIÓN (no para el manual):
+   con el Magic Block real (~260 aristas por bloque, dientes+muesca+botón)
+   cualquier color "bastante oscuro" que entrara en la excepción de línea
+   clara se notaba de más — cada diente repite la línea, y el modelo se veía
+   lavado/blanquecino en el visor 3D. Por eso en el visor el umbral es mucho
+   más estricto (solo negro de verdad) y el gris es más oscuro que en el
+   manual, que sigue exactamente como estaba. */
+const UMBRAL_NEGRO_VISOR = 0.05;    // antes 0.18 — solo para `colorDeContorno`, rama de pantalla
+const LINEA_CLARA_VISOR = '#4d4d4d'; // antes iba a LINEA_CLARA (#8a8a8a) — solo para la pantalla
 
 function colorDeContorno(c){        // recibe un THREE.Color
   if (contornoInstrucciones){
+    // EL MANUAL: sin cambios, se sigue viendo exactamente como antes de v144.
     const [r,g,b] = sRGBDeColor(c);
     return esNegroCafeOAzul(r,g,b) ? LINEA_CLARA : LINEA_OSCURA;
   }
@@ -1787,9 +1792,12 @@ function colorDeContorno(c){        // recibe un THREE.Color
      no en sRGB, y el umbral estaba pensado para sRGB. En lineal un marrón como
      #573826 vale 0.09 y caía por debajo de 0.18 como si fuera negro: por eso el
      marrón, el azul oscuro y los grises salían todos con marco blanco y el
-     modelo se veía lavado. Convertir a sRGB antes de comparar lo arregla. */
+     modelo se veía lavado. Convertir a sRGB antes de comparar lo arregla.
+
+     El umbral bajó de 0.18 a `UMBRAL_NEGRO_VISOR` (0.05) y el gris de
+     `LINEA_CLARA` a `LINEA_CLARA_VISOR`: solo en esta rama, solo en pantalla. */
   const [r,g,b] = sRGBDeColor(c);
-  return Math.max(r, g, b) < 0.18 ? LINEA_CLARA : LINEA_OSCURA;
+  return Math.max(r, g, b) < UMBRAL_NEGRO_VISOR ? LINEA_CLARA_VISOR : LINEA_OSCURA;
 }
 
 /* Peso de cada línea (la transparencia por vértice: el atributo `color` de las
