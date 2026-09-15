@@ -609,7 +609,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v139</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v140</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -2517,7 +2517,7 @@ function piezaSigueSiendoValida(cells){
   const c0 = cells[0];
   const y = Math.round(c0.y);
   for (const c of cells){
-    if (c.color !== c0.color) return false;       // le pintaron una celda
+    if (cleanColor(c.color) !== cleanColor(c0.color)) return false; // le pintaron una celda
     if (Math.round(c.y) !== y) return false;       // quedaron en capas distintas
   }
   // Tienen que estar en fila y pegadas, a lo largo de X o de Z
@@ -2605,7 +2605,14 @@ function buildPieceMeshes(visible){
     const juntas = [];
     for (let j=1; j<len; j++) juntas.push(-voxelSize*len/2 + voxelSize*j);
     const bandaJunta = voxelSize*0.10; // cubre los dientes, que sobresalen ~7%
-    if (usarContornoReal() || (contornoInstrucciones && showMeshTexture)){
+    // OJO: acá NO hay que pedir además `showMeshTexture` cuando es para el manual.
+    // Ese flag es el botón "Contorno" del visor (una preferencia de PANTALLA); si
+    // el usuario lo deja en "sin contorno" para mirar cómodo mientras edita, esta
+    // condición se apagaba también en las instrucciones — y sin esta línea una
+    // pieza 1x2/1x3 se ve IDÉNTICA a dos o tres bloques 1x1 sueltos (los tachones
+    // quedan separados igual en los dos casos). En el manual el contorno no es
+    // decoración, es la única forma de saber qué bloques van juntos.
+    if (usarContornoReal() || contornoInstrucciones){
       try{
         const tc = new THREE.Color();
         const lineas = buildEdgesForInstances(geo, mesh, list.length, i=>{
@@ -7525,7 +7532,17 @@ function groupVoxelsIntoPieces(list, lengths){
           const nx = v.x + dir[0]*i, nz = v.z + dir[1]*i;
           const nk = nx+','+y+','+nz;
           const nv = byKey.get(nk);
-          if (!nv || used.has(nk) || nv.color !== v.color) break;
+          // Comparación por color YA LIMPIO (cleanColor): dos bloques del MISMO
+          // color visual pueden tener el string guardado distinto —
+          // '#8B7355' vs '#8b7355', con o sin canal de transparencia, o un
+          // nombre CSS en vez de hex — según de dónde vino cada bloque
+          // (pintado a mano, importado de una malla, voxelizado de una
+          // imagen). Comparando el string CRUDO, dos vecinos del mismo color
+          // no calzaban nunca y no se armaba NINGUNA pieza 1x2/1x3 — quedaba
+          // todo en 1x1 aunque estuvieran tildados 2x1/3x1. Por eso acá se
+          // limpian los dos antes de comparar, igual que hace el resto del
+          // programa (el plano 2D, el conteo de piezas) al mostrar colores.
+          if (!nv || used.has(nk) || cleanColor(nv.color) !== cleanColor(v.color)) break;
           cells.push({k:nk, v:nv});
         }
         if (cells.length === len){
