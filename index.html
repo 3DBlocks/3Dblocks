@@ -2600,7 +2600,14 @@ function buildPieceMeshes(visible){
     const juntas = [];
     for (let j=1; j<len; j++) juntas.push(-voxelSize*len/2 + voxelSize*j);
     const bandaJunta = voxelSize*0.10; // cubre los dientes, que sobresalen ~7%
-    if (usarContornoReal() || (contornoInstrucciones && showMeshTexture)){
+    // OJO: acá NO hay que pedir además `showMeshTexture` cuando es para el manual.
+    // Ese flag es el botón "Contorno" del visor (una preferencia de PANTALLA); si
+    // el usuario lo deja en "sin contorno" para mirar cómodo mientras edita, esta
+    // condición se apagaba también en las instrucciones — y sin esta línea una
+    // pieza 1x2/1x3 se ve IDÉNTICA a dos o tres bloques 1x1 sueltos (los tachones
+    // quedan separados igual en los dos casos). En el manual el contorno no es
+    // decoración, es la única forma de saber qué bloques van juntos.
+    if (usarContornoReal() || contornoInstrucciones){
       try{
         const tc = new THREE.Color();
         const lineas = buildEdgesForInstances(geo, mesh, list.length, i=>{
