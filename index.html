@@ -609,7 +609,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v143</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v144</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -1702,7 +1702,13 @@ function rgbAHsl(r, g, b){          // r,g,b en sRGB 0..1
    incluido el azul, va con línea oscura, que es lo que pidió el uso real. */
 function esNegroCafeOAzul(r, g, b){ // r,g,b en sRGB 0..1
   const { l } = rgbAHsl(r, g, b);
-  return l <= 0.16;
+  /* Bajado de 0.16 a 0.05 a pedido: con 0.16 entraban grises bastante claros
+     (no solo el negro/casi negro), así que terminaban con línea clara TODOS
+     esos bloques — y con la malla real del Magic Block (~260 aristas por
+     bloque) esa línea clara de más, repetida en cada diente y muesca, hacía
+     que el modelo entero se viera "lavado"/blanquecino en el visor 3D, no
+     solo el pelo negro. Con 0.05 solo entra el negro de verdad. */
+  return l <= 0.05;
 }
 
 /* ⚠️ OJO CON EL ESPACIO DE COLOR — es fácil equivocarse acá y el error no se ve.
@@ -1763,8 +1769,12 @@ let coloresReales = false;
    muchas que se junten, ninguna puede pasar de ese gris. El tope deja de depender
    de cuán lejos estés mirando.
    (Idea del usuario, mirando su propio modelo de lejos y de cerca.) */
-const LINEA_CLARA = '#8a8a8a';      // gris de la línea en bloques negros / oscuros
-const LINEA_OSCURA = '#000000';     // negra, en los colores claros
+/* Bajado de #8a8a8a a #4d4d4d a pedido: seguía leyéndose "blanco" contra el
+   negro. Sigue siendo gris OPACO, no blanco transparente — ver la explicación
+   de arriba sobre por qué tiene que ser opaco (si no, de lejos se acumula y
+   se ve blanco de verdad, sin importar qué tan oscuro sea el gris de base). */
+const LINEA_CLARA = '#4d4d4d';      // gris oscuro: la línea en el negro / casi negro
+const LINEA_OSCURA = '#000000';     // negra, en TODOS los demás colores
 
 function colorDeContorno(c){        // recibe un THREE.Color
   if (contornoInstrucciones){
