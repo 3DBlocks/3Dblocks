@@ -609,7 +609,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v142</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v143</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -3172,14 +3172,25 @@ function refreshUsedColorsPanel(){
   // seleccionabas en el visor y la paleta del modelo desaparecía justo cuando la
   // necesitabas.
   panel.style.display = (paintMode || (boxSelection && boxSelection.size)) ? 'flex' : 'none';
-  const used = Array.from(new Set(voxels.map(v=>v.color)));
+  /* cleanColor() ACÁ TAMBIÉN: según el archivo del que vino el modelo (.json
+     propio, .dae, .3mf, una imagen voxelizada…) el mismo color visual puede
+     quedar guardado como '#8B7355', '#8b7355ff' o incluso un nombre CSS. Sin
+     limpiar antes de armar el Set, un solo color aparecía repetido como 2 o 3
+     cuadraditos distintos en "Colores del modelo" — y unir uno de esos
+     duplicados no tocaba los bloques que quedaron con el string distinto.
+     Limpiando acá, la paleta muestra un cuadradito por color de VERDAD sin
+     importar de qué formato de archivo salió. */
+  const used = Array.from(new Set(voxels.map(v=>cleanColor(v.color))));
   grid.innerHTML = '';
   used.forEach(hex=>{
     const sw = document.createElement('div');
-    sw.className = 'palette-swatch' + (hex === paintColor ? ' active' : '');
+    sw.className = 'palette-swatch' + (hex === cleanColor(paintColor) ? ' active' : '');
     sw.style.background = hex;
     sw.title = hex;
-    sw.addEventListener('click', ()=>{
+    // El clic necesita el evento (Ctrl/Cmd+clic marca en vez de pintar, más
+    // abajo) — sin el parámetro `e`, `e.ctrlKey` tiraba "e is not defined" y
+    // rompía TODO el clic izquierdo de esta paleta: ni pintaba ni fusionaba.
+    sw.addEventListener('click', (e)=>{
       paintColor = hex;
       document.getElementById('customColorInput').value = hex;
       document.querySelectorAll('.palette-swatch').forEach(s=>s.classList.remove('active'));
@@ -8302,9 +8313,15 @@ function applyColorToMagicSelection(color){
 function applyGlobalColorReplace(newColor){
   if (!replaceSourceColor) return false;
   pushUndoSnapshot();
-  const sourceColor = replaceSourceColor;
+  // cleanColor() de los dos lados: `replaceSourceColor` ya viene limpio desde
+  // el panel "Colores del modelo", pero `v.color` puede seguir con el string
+  // tal cual entró del archivo importado (.json, .dae, .3mf…). Comparando el
+  // string crudo, "unir" solo agarraba los bloques que por casualidad tenían
+  // EXACTAMENTE el mismo texto guardado, y dejaba afuera al resto del mismo
+  // color visual — que es justo lo que se rompía según el archivo de origen.
+  const sourceColor = cleanColor(replaceSourceColor);
   let count = 0;
-  voxels.forEach(v=>{ if (v.color === sourceColor){ v.color = newColor; count++; } });
+  voxels.forEach(v=>{ if (cleanColor(v.color) === sourceColor){ v.color = newColor; count++; } });
   endColorReplace();
   drawLayerDiagram(); rebuildMesh3D(); refreshLayerUI();
   refreshUsedColorsPanel();   // el color de origen ya no está en el modelo
