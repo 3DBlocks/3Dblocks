@@ -609,7 +609,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v140</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v141</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -2530,6 +2530,30 @@ function piezaSigueSiendoValida(cells){
   return true;
 }
 
+/* DIAGNÓSTICO temporal (no cambia el dibujado, solo explica en la consola):
+   `piezaSigueSiendoValida` dice SÍ/NO pero no dice por qué rechazó un grupo.
+   Si el manual sigue mostrando piezas de 1x1 sueltas a pesar de que "Reagrupar"
+   e la lista de piezas dicen que hay 2x1/3x1, esta función repite las MISMAS
+   condiciones pero devolviendo el motivo como texto, para verlo en F12 →
+   Console en vez de tener que adivinar leyendo el código. */
+function motivoInvalidezDePieza(cells){
+  if (cells.length > 3) return 'el grupo tiene ' + cells.length + ' celdas (máximo permitido: 3)';
+  const c0 = cells[0];
+  const y = Math.round(c0.y);
+  for (const c of cells){
+    if (cleanColor(c.color) !== cleanColor(c0.color)) return 'colores distintos dentro del grupo: "' + c.color + '" vs "' + c0.color + '" (limpios: ' + cleanColor(c.color) + ' vs ' + cleanColor(c0.color) + ')';
+    if (Math.round(c.y) !== y) return 'celdas en capas distintas: y=' + c.y + ' vs y=' + c0.y;
+  }
+  const mismaX = cells.every(c => c.x === c0.x);
+  const mismaZ = cells.every(c => c.z === c0.z);
+  if (!mismaX && !mismaZ) return 'las celdas no están alineadas en línea recta (ni todas con la misma X ni todas con la misma Z)';
+  const eje = mismaX ? cells.map(c=>c.z) : cells.map(c=>c.x);
+  eje.sort((a,b)=>a-b);
+  for (let i=1;i<eje.length;i++) if (eje[i] !== eje[i-1]+1) return 'hay un hueco entre las celdas del grupo (posiciones: ' + eje.join(',') + ')';
+  return 'motivo no identificado por este diagnóstico (revisar a mano)';
+}
+let avisoDiagnosticoPiezasDado = false;
+
 function buildPieceMeshes(visible){
   // Junta los bloques por pieza
   const groups = new Map();
@@ -2541,8 +2565,20 @@ function buildPieceMeshes(visible){
   // Las que ya no son una pieza válida se dibujan como bloques sueltos
   for (const [id, cells] of Array.from(groups)){
     if (piezaSigueSiendoValida(cells)) continue;
+    if (cells.length > 1){
+      // Se loguean máximo 12 para no inundar la consola en diseños grandes.
+      if (!window.__piezasRotasLogueadas) window.__piezasRotasLogueadas = 0;
+      if (window.__piezasRotasLogueadas < 12){
+        window.__piezasRotasLogueadas++;
+        console.warn('[piezas] El grupo "' + id + '" (' + cells.length + ' celdas, se esperaba pieza 1x' + cells.length + ') se dibuja SUELTO en vez de una sola pieza. Motivo:', motivoInvalidezDePieza(cells), 'Celdas:', cells.map(c=>({x:c.x,y:c.y,z:c.z,color:c.color,piece:c.piece,pieceSize:c.pieceSize})));
+      }
+    }
     groups.delete(id);
     cells.forEach(c=>{ groups.set('roto:'+c.x+','+Math.round(c.y)+','+c.z, [c]); });
+  }
+  if (window.__piezasRotasLogueadas > 0 && !avisoDiagnosticoPiezasDado){
+    avisoDiagnosticoPiezasDado = true;
+    console.warn('[piezas] En total se rompieron ' + window.__piezasRotasLogueadas + '+ grupo(s) al dibujar. Mandale a Claude estas líneas que empiezan con "[piezas]" (podés filtrar la consola escribiendo "piezas" en el buscador de F12).');
   }
 
   // Separa por (largo, orientación): cada combinación necesita su propia geometría
