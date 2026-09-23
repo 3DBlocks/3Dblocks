@@ -609,7 +609,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v149</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v150</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -1063,6 +1063,11 @@
       <option value="2">2</option>
       <option value="4">4</option>
       <option value="6">6</option>
+    </select>
+    <span style="color:var(--text-dim); font-size:12.5px; margin-left:6px;">Tema del manual:</span>
+    <select id="temaManualSel" title="Elegí cómo se ve el 'papel' del PDF: Oscuro (el de siempre, con la identidad del programa) o Claro/blanco (mejor para imprimir sin gastar tinta de fondo)." style="background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:7px; padding:5px 8px; font-size:12.5px;">
+      <option value="oscuro">Oscuro</option>
+      <option value="claro">Claro (blanco)</option>
     </select><button class="btn primary" id="anglePreviewCloseBtn">Cerrar</button>
   </div>
 
@@ -1248,18 +1253,49 @@ scene.fog = new THREE.FogExp2(0x16181d, 0.006);
    que cambiarlo obligaba a acordarse de los cinco. Blanco para que el manual
    salga limpio en papel; si alguna vez hace falta que los bloques blancos se
    despeguen del fondo, un gris muy claro como '#f2f3f5' alcanza. */
-/* Dos colores distintos, y esto importa:
-     · COLOR_FONDO_MANUAL es el de la FOTO del paso. Va claro, porque es donde hay
-       que distinguir bloque por bloque y el gris de lo ya armado necesita
-       despegarse del fondo.
-     · COLOR_HOJA_MANUAL es el del PAPEL alrededor. Va azul noche, con la paleta
-       del programa. */
+/* COLOR_FONDO_MANUAL es el de la FOTO del paso. Va SIEMPRE claro, sin importar
+   el tema elegido, porque es donde hay que distinguir bloque por bloque y el
+   gris de lo ya armado necesita despegarse del fondo. */
 const COLOR_FONDO_MANUAL = '#ffffff';
-const COLOR_HOJA_MANUAL  = '#0e1424';
-const MANUAL_TINTA       = [235, 240, 250];  // texto principal
-const MANUAL_TINTA_TENUE = [130, 145, 175];  // notas al pie
-const MANUAL_ACENTO      = [52, 223, 245];   // cian del tema
-const MANUAL_ACENTO_2    = [162, 113, 255];  // violeta
+
+/* El resto de los colores (el "papel" alrededor de la foto, el texto, los
+   acentos) SÍ cambian según el tema que elija la persona — ver paletaManual()
+   más abajo, cerca de donde se arma el PDF. */
+const TEMA_MANUAL_KEY = '3dblock.temaManual';
+let temaManual = localStorage.getItem(TEMA_MANUAL_KEY) || 'oscuro'; // 'oscuro' | 'claro'
+
+/* Paleta de colores del PDF de instrucciones. Antes eran cinco constantes fijas
+   (azul noche siempre); ahora dependen de `temaManual`, para poder ofrecer un
+   manual oscuro (el de siempre, con la identidad del programa) o uno claro /
+   blanco (más parecido a una hoja impresa de verdad, mejor para imprimir sin
+   gastar tinta de fondo). */
+function paletaManual(){
+  if (temaManual === 'claro'){
+    return {
+      hoja:      [247, 248, 251],  // "papel" casi blanco
+      portada:   [255, 255, 255],  // fondo de la portada
+      tinta:     [28, 32, 46],     // texto principal, oscuro sobre claro
+      tintaTenue:[100, 108, 130],  // notas al pie
+      acento:    [8, 130, 146],    // el mismo cian, oscurecido para que se lea sobre blanco
+      acento2:   [105, 60, 190],   // el mismo violeta, oscurecido
+      pastilla:  [214, 227, 247],  // círculo del número de paso (modo compacto)
+      pastillaTexto: [20, 40, 90],
+      marcoPieza:[175, 175, 175],
+    };
+  }
+  // 'oscuro' — el tema de siempre, con la identidad del programa
+  return {
+    hoja:      [14, 20, 36],     // #0e1424
+    portada:   [8, 11, 19],
+    tinta:     [235, 240, 250],
+    tintaTenue:[130, 145, 175],
+    acento:    [52, 223, 245],
+    acento2:   [162, 113, 255],
+    pastilla:  [38, 74, 140],
+    pastillaTexto: [255, 255, 255],
+    marcoPieza:[120, 120, 120],
+  };
+}
 
 /* ---------------------------- Vista plana (sin perspectiva) ----------------------------
    Con la perspectiva de siempre (42°), mirando de frente los bloques del centro
@@ -5405,6 +5441,19 @@ function pasoPreview(delta){
 } catch(e){ console.error("Falló la interfaz de pasosPorHojaUI:", e); }
 })();
 
+(function temaManualUI(){ try{
+  const sel = document.getElementById('temaManualSel');
+  sel.value = temaManual;
+  sel.addEventListener('change', e=>{
+    temaManual = e.target.value;
+    localStorage.setItem(TEMA_MANUAL_KEY, temaManual);
+    setStatus(temaManual === 'claro'
+      ? 'Manual en tema claro (blanco): así va a salir el próximo PDF que generes.'
+      : 'Manual en tema oscuro: así va a salir el próximo PDF que generes.', 'ok');
+  });
+} catch(e){ console.error("Falló la interfaz de temaManualUI:", e); }
+})();
+
 document.getElementById('previewPrevBtn').addEventListener('click', ()=>pasoPreview(-1));
 document.getElementById('previewNextBtn').addEventListener('click', ()=>pasoPreview(1));
 window.addEventListener('keydown', e=>{
@@ -5565,12 +5614,14 @@ async function generateInstructionsPDF(){
     const doc = new jsPDF({ unit:'mm', format:'a4', orientation:'portrait' });
     const pageW = 210, pageH = 297;
     const modelName = (document.getElementById('modelNameText').textContent || ('Diseño ' + MARCA_NOMBRE)).trim();
+    const pal = paletaManual(); // colores del "papel": cambian según Oscuro/Claro
 
     /* ---- Portada ----
-       Con la identidad del programa: azul noche de fondo, cian de acento y el
-       violeta secundario. El nombre del diseño manda: va grande y primero,
-       porque es lo que uno busca cuando tiene varios manuales sobre la mesa. */
-    doc.setFillColor(8,11,19);
+       Con la identidad del programa: de fondo (oscuro o claro, según el tema
+       elegido), cian de acento y el violeta secundario. El nombre del diseño
+       manda: va grande y primero, porque es lo que uno busca cuando tiene
+       varios manuales sobre la mesa. */
+    doc.setFillColor(...pal.portada);
     doc.rect(0,0,pageW,pageH,'F');
 
     // Logo: el MISMO del programa, rasterizado desde su SVG. Dibujarlo a mano con
@@ -5586,12 +5637,12 @@ async function generateInstructionsPDF(){
 
     /* Línea de acento partida al medio, con el hueco donde va el nombre. Es un
        recurso simple pero es lo que le da el aire de interfaz al conjunto. */
-    doc.setDrawColor(52,223,245); doc.setLineWidth(0.5);
+    doc.setDrawColor(...pal.acento); doc.setLineWidth(0.5);
     doc.line(28, 45, 88, 45);
     doc.line(pageW-88, 45, pageW-28, 45);
-    doc.setFillColor(162,113,255);
+    doc.setFillColor(...pal.acento2);
     doc.circle(93, 45, 0.9, 'F'); doc.circle(pageW-93, 45, 0.9, 'F');
-    doc.setFillColor(52,223,245);
+    doc.setFillColor(...pal.acento);
     doc.circle(pageW/2, 45, 1.3, 'F');
 
     /* El nombre del diseño, en grande y con la MISMA letra del logo: mismo peso,
@@ -5601,11 +5652,11 @@ async function generateInstructionsPDF(){
     const nomH = Math.min(17, (pageW - 44) / tNombre.prop), nomW = nomH * tNombre.prop;
     doc.addImage(tNombre.png, 'PNG', pageW/2 - nomW/2, 50, nomW, nomH);
     doc.setFontSize(10);
-    doc.setTextColor(140,150,175);
+    doc.setTextColor(...pal.tintaTenue);
     doc.text(voxels.length + ' BLOQUES   ·   ' + (maxLayer+1) + ' CAPAS', pageW/2, 74, { align:'center' });
 
     // Marcas de esquina, como las de un visor
-    doc.setDrawColor(52,223,245); doc.setLineWidth(0.4);
+    doc.setDrawColor(...pal.acento); doc.setLineWidth(0.4);
     [[10,10,1,1],[pageW-10,10,-1,1],[10,pageH-10,1,-1],[pageW-10,pageH-10,-1,-1]].forEach(([x,y,dx,dy])=>{
       doc.line(x, y, x+7*dx, y); doc.line(x, y, x, y+7*dy);
     });
@@ -5618,7 +5669,7 @@ async function generateInstructionsPDF(){
            en la misma altura y se pisaban, que es lo que se veía como texto
            superpuesto en la portada. */
         doc.setFontSize(11);
-        doc.setTextColor(...MANUAL_ACENTO_2);
+        doc.setTextColor(...pal.acento2);
         doc.text('Pasos ' + (rPortada.desde+1) + ' a ' + (rPortada.hasta+1) + ' de ' + (maxLayer+1), pageW/2, 81, { align:'center' });
       }
     }
@@ -5680,14 +5731,14 @@ async function generateInstructionsPDF(){
     const rows = Math.ceil(entries.length / perRow);
     const boxY = coverY + coverW + 10, titleH = 19, rowH = 9;
     const boxH = titleH + rows*rowH + 8;
-    doc.setDrawColor(52,223,245);
+    doc.setDrawColor(...pal.acento);
     doc.setLineWidth(0.5);
     doc.rect(boxX, boxY, boxW, boxH, 'S');
     doc.setFontSize(12);
-    doc.setTextColor(52,223,245);
+    doc.setTextColor(...pal.acento);
     doc.text('CODIFICACIÓN DE PIEZAS', pageW/2, boxY+9, { align:'center' });
     doc.setFontSize(9);
-    doc.setTextColor(180,186,204);
+    doc.setTextColor(...pal.tintaTenue);
     const resumen = sizeOrder.map(s=>pc.bySize.get(s)+' de ' + s).join('   ·   ');
     doc.text('Total: ' + pc.total + ' piezas   —   ' + resumen, pageW/2, boxY+15.5, { align:'center' });
     doc.setFontSize(9.5);
@@ -5700,10 +5751,10 @@ async function generateInstructionsPDF(){
       for (let i=0;i<len;i++){
         doc.setFillColor(r,g,b);
         doc.rect(cx + i*bw, cy-4, bw, bh, 'F');
-        doc.setDrawColor(120,120,120);
+        doc.setDrawColor(...pal.marcoPieza);
         doc.rect(cx + i*bw, cy-4, bw, bh);
       }
-      doc.setTextColor(230,230,230);
+      doc.setTextColor(...pal.tinta);
       doc.text('x'+count, cx + len*bw + 2.5, cy);
       cx += colW;
       if (cx > boxX+boxW-colW+padX){ cx = boxX+padX; cy += rowH; }
@@ -5720,7 +5771,7 @@ async function generateInstructionsPDF(){
       const qrSize = 34, qrY = boxY + boxH + 12;
       doc.addImage(qrImg, 'GIF', pageW/2 - qrSize/2, qrY, qrSize, qrSize);
       doc.setFontSize(9.5);
-      doc.setTextColor(180,186,204);
+      doc.setTextColor(...pal.tintaTenue);
       doc.text('Escaneá para ver más diseños en nuestro catálogo', pageW/2, qrY + qrSize + 6, { align:'center' });
     } catch(e){ /* si falla el QR, la portada igual queda bien */ }
 
@@ -5823,7 +5874,7 @@ async function generateInstructionsPDF(){
       if (celdaK === 0){
         doc.addPage();
         // Fondo azul noche en toda la hoja, como el resto del programa
-        doc.setFillColor(...hexToRgbArr(COLOR_HOJA_MANUAL));
+        doc.setFillColor(...pal.hoja);
         doc.rect(0, 0, pageW, pageH, 'F');
         const capas = await marcaPara(enEstaHoja);
         // La firma va primero: queda debajo de las fotos que se dibujan después
@@ -5833,7 +5884,7 @@ async function generateInstructionsPDF(){
            legible: antes el mosaico le pasaba por arriba. */
         if (logoPNG) doc.addImage(logoPNG, 'PNG', margin, 5, 9, 9);
         doc.setFontSize(7.5);
-        doc.setTextColor(...MANUAL_ACENTO);
+        doc.setTextColor(...pal.acento);
         doc.text(MARCA_NOMBRE.toUpperCase(), margin + 11, 11);
 
         /* Título de la hoja, resaltado con una barra cian a la izquierda.
@@ -5846,9 +5897,9 @@ async function generateInstructionsPDF(){
           : 'Paso ' + (layer+1) + ' de ' + (maxLayer+1);
         doc.setFontSize(compacto ? 11 : 13);
         const anchoT = doc.getTextWidth(titulo);
-        doc.setFillColor(...MANUAL_ACENTO);
+        doc.setFillColor(...pal.acento);
         doc.rect(pageW/2 - anchoT/2 - 4, 8.4, 1.4, 5.2, 'F');
-        doc.setTextColor(...MANUAL_TINTA);
+        doc.setTextColor(...pal.tinta);
         doc.text(titulo, pageW/2, 12.6, { align:'center' });
       }
       const cel = celdaEn(celdaK);
@@ -5861,21 +5912,21 @@ async function generateInstructionsPDF(){
         if (capas.dentro) doc.addImage(capas.dentro, 'PNG', 0, 0, pageW, pageH, 'marcaDentro_' + enEstaHoja, 'FAST');
       }
       // Marco: separa la foto del fondo y ordena la hoja cuando hay varias
-      doc.setDrawColor(...MANUAL_ACENTO);
+      doc.setDrawColor(...pal.acento);
       doc.setLineWidth(0.4);
       doc.rect(cel.x, cel.y, cel.w, cel.h, 'S');
 
       if (compacto){
         /* Número del paso en un círculo, como en los manuales impresos: con
            varias fotos en la hoja hay que poder ubicarse de un vistazo. */
-        doc.setFillColor(38,74,140);
+        doc.setFillColor(...pal.pastilla);
         doc.circle(cel.x + 4.5, cel.y + 4.5, 3.4, 'F');
-        doc.setTextColor(255,255,255);
+        doc.setTextColor(...pal.pastillaTexto);
         doc.setFontSize(8);
         doc.text(String(layer+1), cel.x + 4.5, cel.y + 5.7, { align:'center' });
       } else {
         doc.setFontSize(8.5);
-        doc.setTextColor(...MANUAL_TINTA_TENUE);
+        doc.setTextColor(...pal.tintaTenue);
         doc.text('En color: los bloques NUEVOS de este paso. En gris: lo que ya tenías armado.', pageW/2, cel.y+cel.h+6, { align:'center' });
       }
 
@@ -5900,10 +5951,10 @@ async function generateInstructionsPDF(){
         for (let i=0;i<len;i++){
           doc.setFillColor(r,g,b);
           doc.rect(lx + i*bw, ly-3.2, bw, 3.6, 'F');
-          doc.setDrawColor(90,100,125);
+          doc.setDrawColor(...pal.marcoPieza);
           doc.rect(lx + i*bw, ly-3.2, bw, 3.6);
         }
-        doc.setTextColor(...MANUAL_TINTA);
+        doc.setTextColor(...pal.tinta);
         doc.text('×' + count, lx + len*bw + 2, ly);
         lx += compacto ? 19 : 26;
         // El salto de línea respeta el ancho de la celda, no el de la hoja
@@ -5912,7 +5963,7 @@ async function generateInstructionsPDF(){
       });
       if (!compacto){
         doc.setFontSize(8.5);
-        doc.setTextColor(...MANUAL_TINTA_TENUE);
+        doc.setTextColor(...pal.tintaTenue);
         const resumenPaso = ['1x3','1x2','1x1'].filter(s=>pcHere.bySize.get(s))
           .map(s=>pcHere.bySize.get(s)+' de '+s).join(' · ');
         doc.text('Piezas en esta capa: ' + pcHere.total + (resumenPaso ? ' (' + resumenPaso + ')' : '') +
@@ -5921,7 +5972,7 @@ async function generateInstructionsPDF(){
       } else if (celdaK === pasosPorHoja-1 || layer === rango.hasta){
         // En compacto, un solo pie por hoja en vez de uno por celda
         doc.setFontSize(7.5);
-        doc.setTextColor(...MANUAL_TINTA_TENUE);
+        doc.setTextColor(...pal.tintaTenue);
         doc.text('En color: los bloques NUEVOS de cada paso. En gris: lo ya armado.', pageW/2, pageH-6, { align:'center' });
       }
     }
