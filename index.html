@@ -609,7 +609,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v148</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v149</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -7236,8 +7236,55 @@ function parseDaeTriangles(xmlTextRaw){
    Antes solo se usaba el centro de cada pieza, lo que dejaba capas vacías (huecos)
    donde en realidad había piezas más grandes. Solo funciona si el .dae tiene piezas
    repetidas discretas (como un set de Studio 2.0); si no, se usa voxelizeTriangles. */
+/* Si una o dos piezas quedan MUY lejos del resto (una pieza suelta que quedó
+   fuera del diseño por accidente en Studio 2.0, un marcador, etc.) arruinan
+   toda la detección de grilla: el programa termina generando miles de capas
+   vacías solo para "llegar" hasta esa pieza perdida, y el diseño real se ve
+   minúsculo en el visor. Esta función corta el salto más grande de cada eje
+   cuando es muchísimo más grande que lo normal entre piezas, y descarta el
+   lado con menos piezas (casi siempre 1 o 2 piezas sueltas). */
+function descartarPiezasSueltas(instances){
+  let activos = instances.slice();
+  const descartados = [];
+  [['minX','maxX'], ['minY','maxY'], ['minZ','maxZ']].forEach(([minK,maxK])=>{
+    let cambio = true;
+    while (cambio && activos.length > 2){
+      cambio = false;
+      const centros = activos.map(p => (p[minK]+p[maxK])/2).sort((a,b)=>a-b);
+      const gaps = [];
+      for (let i=1;i<centros.length;i++) gaps.push(centros[i]-centros[i-1]);
+      if (!gaps.length) break;
+      const gapsOrdenados = gaps.slice().sort((a,b)=>a-b);
+      const mediana = gapsOrdenados[Math.floor(gapsOrdenados.length/2)] || 0;
+      const referencia = Math.max(mediana, 0.5); // evita comparar contra casi-cero
+      let peorIdx = -1, peorGap = 0;
+      gaps.forEach((g,i)=>{ if (g > peorGap){ peorGap = g; peorIdx = i; } });
+      // el salto tiene que ser ENORME (25x lo típico, y al menos 200 unidades)
+      // para descartar algo — un diseño legítimo grande no debería disparar esto.
+      if (peorIdx >= 0 && peorGap > referencia*25 && peorGap > 200){
+        const limite = centros[peorIdx] + peorGap/2;
+        const ladoIzq = activos.filter(p => (p[minK]+p[maxK])/2 <= limite);
+        const ladoDer = activos.filter(p => (p[minK]+p[maxK])/2 > limite);
+        const [seQuedan, seVan] = ladoIzq.length >= ladoDer.length ? [ladoIzq, ladoDer] : [ladoDer, ladoIzq];
+        if (seVan.length && seQuedan.length){
+          descartados.push(...seVan);
+          activos = seQuedan;
+          cambio = true;
+        }
+      }
+    }
+  });
+  return { activos, descartados };
+}
+
+let lastPiezasDescartadas = 0; // piezas sueltas ignoradas en la última carga de .dae (ver descartarPiezasSueltas)
+
 function buildVoxelsFromInstances(instances){
-  if (!instances || instances.length < 2) return null;
+  if (!instances || instances.length < 2){ lastPiezasDescartadas = 0; return null; }
+  const filtrado = descartarPiezasSueltas(instances);
+  lastPiezasDescartadas = filtrado.descartados.length;
+  instances = filtrado.activos;
+  if (instances.length < 2) return null;
   function axisUnit(axisMin, axisMax){
     const vals = Array.from(new Set(instances.map(p => Math.round(((p[axisMin]+p[axisMax])/2)*20)/20))).sort((a,b)=>a-b);
     const gaps = [];
@@ -7704,7 +7751,10 @@ async function handleFile(file, anexar, acompanantes){
         // Aunque el .dae traiga piezas exactas, la sección queda a la vista: el
         // control de resolución ahora sirve para remuestrear la rejilla.
         document.getElementById('voxelizeSection').style.display = 'block';
-        setStatus('Modelo .dae cargado con sus piezas reales: '+exactList.length+' bloques (uno por pieza).', 'ok');
+        const avisoSueltas = lastPiezasDescartadas > 0
+          ? ' (se ignoraron '+lastPiezasDescartadas+' pieza(s) que estaban muy lejos del resto — revisá tu archivo en Studio 2.0 si esperabas que estuvieran ahí)'
+          : '';
+        setStatus('Modelo .dae cargado con sus piezas reales: '+exactList.length+' bloques (uno por pieza).'+avisoSueltas, avisoSueltas?'err':'ok');
       } else {
         // Malla sin piezas discretas (p. ej. un solo objeto orgánico): voxelizar por resolución.
         const res = parseInt(document.getElementById('resSlider').value,10);
