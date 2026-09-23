@@ -609,7 +609,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v146</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v147</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -677,9 +677,9 @@
       </div>
       <div id="scalePanel" style="display:none; align-items:center; gap:6px; flex-wrap:wrap; font-size:11px; color:var(--text-dim); margin-top:6px;">
         <span>Escala:</span>
-        <button class="btn sm active" id="scaleUniformBtn" title="Las flechas mueven los tres ejes juntos, en la misma proporción">Uniforme</button>
-        <button class="btn sm" id="scaleAxesBtn" title="Cada flecha mueve solo su propio eje: podés adelgazar o engordar el diseño, o solo hacerlo más alto o más bajo">Por ejes</button>
-        <span style="color:var(--text-faint);">Clic en la flecha que apunta hacia afuera: agranda ese eje · hacia adentro: achica</span>
+        <button class="btn sm active" id="scaleUniformBtn" title="Escala el ancho (X y Z) por igual, manteniendo su proporción — la altura (Y) queda siempre intacta, así no perdés capas al adelgazar o engordar el diseño">Uniforme</button>
+        <button class="btn sm" id="scaleAxesBtn" title="Cada flecha mueve SOLO su propio eje — los otros dos quedan intactos. Usalo para cambiar nada más que la altura, o para ajustar un solo eje horizontal">Por ejes</button>
+        <span style="color:var(--text-faint);">Uniforme: adelgaza/engorda sin tocar la altura · Por ejes: mové X, Y o Z uno por uno</span>
       </div>
       <div id="rightPanelsStack" class="admin-only">
         <div id="usedColorsPanel" style="display:none;"></div>
@@ -1502,6 +1502,9 @@ function refreshScaleGizmo(){
   const escalaFlecha = Math.max(0.6, Math.min(3, mayor*0.07));
   scaleGizmo.children.forEach(flecha=>{
     const { axis, dir } = flecha.userData;
+    // En modo Uniforme la altura (Y) no se toca, así que esas dos flechas se
+    // esconden — dejarlas visibles pero sin efecto confundía más de lo que ayudaba.
+    flecha.visible = (scaleAxisMode === 'axes') || axis !== 'y';
     const pos = center.clone();
     if (axis==='x') pos.x = dir>0 ? box.max.x + margen : box.min.x - margen;
     if (axis==='y') pos.y = dir>0 ? box.max.y + margen : Math.max(margen*0.3, box.min.y - margen);
@@ -1516,8 +1519,14 @@ function refreshScaleGizmo(){
 function escalarPorFlecha(eje, dir){
   const factorEje = dir > 0 ? (1+SCALE_STEP) : 1/(1+SCALE_STEP);
   if (scaleAxisMode === 'uniform'){
-    escalarVoxelsPorEjes(factorEje, factorEje, factorEje);
+    // "Uniforme" = ancho parejo: X y Z se mueven juntos, en la misma
+    // proporción. La altura (Y) queda SIEMPRE intacta a propósito — es
+    // justo lo que evita perder capas al adelgazar o engordar el diseño.
+    escalarVoxelsPorEjes(factorEje, 1, factorEje);
   } else {
+    // "Por ejes" = un solo eje a la vez (puede ser X, Y o Z), los otros dos
+    // quedan intactos. Sirve para hacerlo más alto/bajo tocando solo Y, o
+    // para ajustar un único eje horizontal sin mover el otro.
     escalarVoxelsPorEjes(eje==='x'?factorEje:1, eje==='y'?factorEje:1, eje==='z'?factorEje:1);
   }
   refreshScaleGizmo();
@@ -1533,7 +1542,7 @@ renderer.domElement.addEventListener('pointerdown', e=>{
   const ndc = new THREE.Vector2(((e.clientX-rect.left)/rect.width)*2-1, -((e.clientY-rect.top)/rect.height)*2+1);
   const ray = new THREE.Raycaster();
   ray.setFromCamera(ndc, camera);
-  const hits = ray.intersectObjects(scaleGizmo.children, true);
+  const hits = ray.intersectObjects(scaleGizmo.children.filter(f=>f.visible), true);
   if (!hits.length) return;
   let obj = hits[0].object;
   while (obj && !obj.userData.axis) obj = obj.parent;
@@ -1557,11 +1566,13 @@ document.getElementById('scaleUniformBtn').addEventListener('click', ()=>{
   scaleAxisMode = 'uniform';
   document.getElementById('scaleUniformBtn').classList.add('active');
   document.getElementById('scaleAxesBtn').classList.remove('active');
+  if (scaleModeOn) refreshScaleGizmo();
 });
 document.getElementById('scaleAxesBtn').addEventListener('click', ()=>{
   scaleAxisMode = 'axes';
   document.getElementById('scaleAxesBtn').classList.add('active');
   document.getElementById('scaleUniformBtn').classList.remove('active');
+  if (scaleModeOn) refreshScaleGizmo();
 });
 document.getElementById('axesToggleBtn').addEventListener('click', ()=>{
   const on = !axesHelper.visible;
