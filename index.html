@@ -609,7 +609,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v147</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v148</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -677,9 +677,7 @@
       </div>
       <div id="scalePanel" style="display:none; align-items:center; gap:6px; flex-wrap:wrap; font-size:11px; color:var(--text-dim); margin-top:6px;">
         <span>Escala:</span>
-        <button class="btn sm active" id="scaleUniformBtn" title="Escala el ancho (X y Z) por igual, manteniendo su proporción — la altura (Y) queda siempre intacta, así no perdés capas al adelgazar o engordar el diseño">Uniforme</button>
-        <button class="btn sm" id="scaleAxesBtn" title="Cada flecha mueve SOLO su propio eje — los otros dos quedan intactos. Usalo para cambiar nada más que la altura, o para ajustar un solo eje horizontal">Por ejes</button>
-        <span style="color:var(--text-faint);">Uniforme: adelgaza/engorda sin tocar la altura · Por ejes: mové X, Y o Z uno por uno</span>
+        <span style="color:var(--text-faint);">Cada flecha mueve SOLO su propio eje (X, Y o Z) — los otros dos quedan intactos</span>
       </div>
       <div id="rightPanelsStack" class="admin-only">
         <div id="usedColorsPanel" style="display:none;"></div>
@@ -718,7 +716,7 @@
         <button class="btn icon" id="previewInstrAngleBtn" title="Pone la cámara en el MISMO ángulo exacto que usan las instrucciones, con el diseño completo — para comparar directo, sin generar el PDF">📐<span class="txt">Ángulo del manual</span></button>
         <button class="btn icon" id="useThisAngleBtn" title="Guarda el ángulo EXACTO en el que está la cámara ahora mismo (girá con el mouse hasta que se vea bien) para que el manual use ese, en vez de uno fijo">📌<span class="txt">Usar este ángulo</span></button>
         <button class="btn icon" id="quickPreviewBtn" title="Foto rápida del modelo completo, con el ángulo guardado — para ver el resultado en segundos, sin generar todo el manual">⚡<span class="txt">Vista previa</span></button>
-        <button class="btn icon" id="scaleModeBtn" title="Activa flechas de colores sobre el modelo para escalarlo con clics — de forma uniforme o por eje — sin tener que borrar capas a mano">📏<span class="txt">Escalar</span></button>
+        <button class="btn icon" id="scaleModeBtn" title="Activa flechas de colores sobre el modelo para escalar cada eje por separado con clics (X, Y o Z), sin afectar a los demás ni borrar capas a mano">📏<span class="txt">Escalar</span></button>
         <button class="btn icon active" id="axesToggleBtn" title="Muestra u oculta los ejes de orientación (X/Y/Z) del visor, para dejar un lugar más limpio para trabajar">🧭<span class="txt">Ejes</span></button>
       </div>
       <div id="zoomInfo" title="Cuántos píxeles de pantalla ocupa un bloque a este zoom, y qué contorno le corresponde. Sirve para poder decir 'a este número se ve mal' en vez de adivinar.">—</div>
@@ -1382,12 +1380,17 @@ function fitAxesToModel(){
   axesHelper.scale.setScalar(len);
 }
 
-/* ---------------------------- Escalar con flechas (uniforme o por eje) ----------------------------
-   Idea: reusar la misma técnica de remuestrearVoxels() (votar color al achicar,
-   mapear al origen al agrandar) pero UN EJE A LA VEZ, con su propio factor. Así
-   se puede combinar cualquier mezcla — agrandar Y mientras se achica X, por
-   ejemplo — sin tener que escribir un caso especial para cada combinación. */
-function escalarEjeUnico(list, eje, factor, nuevoLen){
+/* ---------------------------- Escalar con flechas, cada eje por separado ----------------------------
+   Reusa la misma técnica de remuestrearVoxels() (votar color al achicar,
+   mapear al origen al agrandar) pero UN EJE A LA VEZ, con su propio factor —
+   así se puede tocar X, Y o Z de forma completamente independiente.
+
+   MUESTREO CENTRADO (para que no se corra el diseño hacia un lado): en vez de
+   mapear cada coordenada vieja/nueva desde el borde (coord*factor), se suma
+   0.5 antes de redondear — el mismo truco que usan los programas de imágenes
+   al escalar. Así el achique o agrande sale parejo desde el centro del
+   diseño hacia afuera, en vez de ir siempre "comiendo" desde el mismo lado. */
+function escalarEjeUnico(list, eje, factor, nuevoLen, viejoLen){
   if (!list.length || Math.abs(factor-1) < 1e-6) return list;
   const coordDe = (v)=> eje==='x' ? v.x : eje==='y' ? Math.round(v.y) : v.z;
   const otrosDe = (v)=> eje==='x' ? [Math.round(v.y), v.z] : eje==='y' ? [v.x, v.z] : [v.x, Math.round(v.y)];
@@ -1398,7 +1401,7 @@ function escalarEjeUnico(list, eje, factor, nuevoLen){
     // otros dos ejes (que no cambian) + la nueva coordenada de este.
     const votos = new Map();
     list.forEach(v=>{
-      const nueva = Math.min(nuevoLen-1, Math.floor(coordDe(v)*factor));
+      const nueva = Math.min(nuevoLen-1, Math.max(0, Math.floor((coordDe(v)+0.5)*factor)));
       const k = otrosDe(v).join(',') + '|' + nueva;
       let m = votos.get(k);
       if (!m){ m = new Map(); votos.set(k, m); }
@@ -1415,6 +1418,7 @@ function escalarEjeUnico(list, eje, factor, nuevoLen){
   }
 
   // Agrandar ESTE eje: cada coordenada nueva mira de qué coordenada de origen viene.
+  const viejo = Math.max(1, viejoLen || Math.round(nuevoLen/factor));
   const origen = new Map();
   const gruposOtros = new Set();
   list.forEach(v=>{
@@ -1425,7 +1429,7 @@ function escalarEjeUnico(list, eje, factor, nuevoLen){
   const salida = [];
   gruposOtros.forEach(otrosKey=>{
     for (let nueva = 0; nueva < nuevoLen; nueva++){
-      const orig = Math.floor(nueva / factor);
+      const orig = Math.min(viejo-1, Math.max(0, Math.floor((nueva+0.5)/factor)));
       const col = origen.get(otrosKey + '|' + orig);
       if (col) salida.push({ ...armar(otrosKey.split(',').map(Number), nueva), color: col });
     }
@@ -1448,9 +1452,9 @@ function escalarVoxelsPorEjes(fx, fy, fz){
 
   pushUndoSnapshot();
   let lista = voxels;
-  lista = escalarEjeUnico(lista, 'x', fx, nx);
-  lista = escalarEjeUnico(lista, 'y', fy, ny);
-  lista = escalarEjeUnico(lista, 'z', fz, nz);
+  lista = escalarEjeUnico(lista, 'x', fx, nx, dims.x);
+  lista = escalarEjeUnico(lista, 'y', fy, ny, dims.y);
+  lista = escalarEjeUnico(lista, 'z', fz, nz, dims.z);
   setVoxels(normalize(lista));
   setStatus(`Escalado a ${nx}×${ny}×${nz} bloques.`, 'ok');
 }
@@ -1458,9 +1462,9 @@ function escalarVoxelsPorEjes(fx, fy, fz){
 /* ---------------------------- Flechas de escala (gizmo 3D) ----------------------------
    Seis flechas alrededor del modelo — dos por eje, una hacia afuera (agranda) y
    una hacia adentro (achica) — con el mismo código de color que `axesLegend`
-   (X rojo, Y verde, Z azul). Solo aparecen con el modo Escalar activado. */
+   (X rojo, Y verde, Z azul). Cada una mueve SOLO su propio eje, siempre — no
+   hay modo "todo junto". Solo aparecen con el modo Escalar activado. */
 let scaleModeOn = false;
-let scaleAxisMode = 'uniform'; // 'uniform' | 'axes'
 const SCALE_STEP = 0.15; // 15% por clic
 const EJES_COLOR_ESCALA = { x:0xff4d4d, y:0x4dff88, z:0x4d88ff };
 
@@ -1502,9 +1506,7 @@ function refreshScaleGizmo(){
   const escalaFlecha = Math.max(0.6, Math.min(3, mayor*0.07));
   scaleGizmo.children.forEach(flecha=>{
     const { axis, dir } = flecha.userData;
-    // En modo Uniforme la altura (Y) no se toca, así que esas dos flechas se
-    // esconden — dejarlas visibles pero sin efecto confundía más de lo que ayudaba.
-    flecha.visible = (scaleAxisMode === 'axes') || axis !== 'y';
+    flecha.visible = true; // ahora los tres ejes son siempre individuales
     const pos = center.clone();
     if (axis==='x') pos.x = dir>0 ? box.max.x + margen : box.min.x - margen;
     if (axis==='y') pos.y = dir>0 ? box.max.y + margen : Math.max(margen*0.3, box.min.y - margen);
@@ -1518,17 +1520,10 @@ function refreshScaleGizmo(){
 
 function escalarPorFlecha(eje, dir){
   const factorEje = dir > 0 ? (1+SCALE_STEP) : 1/(1+SCALE_STEP);
-  if (scaleAxisMode === 'uniform'){
-    // "Uniforme" = ancho parejo: X y Z se mueven juntos, en la misma
-    // proporción. La altura (Y) queda SIEMPRE intacta a propósito — es
-    // justo lo que evita perder capas al adelgazar o engordar el diseño.
-    escalarVoxelsPorEjes(factorEje, 1, factorEje);
-  } else {
-    // "Por ejes" = un solo eje a la vez (puede ser X, Y o Z), los otros dos
-    // quedan intactos. Sirve para hacerlo más alto/bajo tocando solo Y, o
-    // para ajustar un único eje horizontal sin mover el otro.
-    escalarVoxelsPorEjes(eje==='x'?factorEje:1, eje==='y'?factorEje:1, eje==='z'?factorEje:1);
-  }
+  // Cada flecha mueve SOLO su propio eje — los otros dos quedan exactamente
+  // como estaban, sin excepción. Así podés adelgazar/engordar (X, Z) o
+  // cambiar solo la altura (Y) sin que el resto del diseño se toque.
+  escalarVoxelsPorEjes(eje==='x'?factorEje:1, eje==='y'?factorEje:1, eje==='z'?factorEje:1);
   refreshScaleGizmo();
 }
 
@@ -1561,18 +1556,6 @@ document.getElementById('scaleModeBtn').addEventListener('click', ()=>{
     if (!voxels.length){ setStatus('Cargá un modelo primero.', 'err'); }
     else { refreshScaleGizmo(); setStatus('Escala activada: clic en una flecha para achicar o agrandar.', 'ok'); }
   }
-});
-document.getElementById('scaleUniformBtn').addEventListener('click', ()=>{
-  scaleAxisMode = 'uniform';
-  document.getElementById('scaleUniformBtn').classList.add('active');
-  document.getElementById('scaleAxesBtn').classList.remove('active');
-  if (scaleModeOn) refreshScaleGizmo();
-});
-document.getElementById('scaleAxesBtn').addEventListener('click', ()=>{
-  scaleAxisMode = 'axes';
-  document.getElementById('scaleAxesBtn').classList.add('active');
-  document.getElementById('scaleUniformBtn').classList.remove('active');
-  if (scaleModeOn) refreshScaleGizmo();
 });
 document.getElementById('axesToggleBtn').addEventListener('click', ()=>{
   const on = !axesHelper.visible;
