@@ -609,7 +609,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v145</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v146</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -675,6 +675,12 @@
       <div id="viewIndicator">🧱 <span id="viewIndicatorLabel">Libre</span>
         <button class="btn sm ghost" id="flatViewBtn" style="margin-left:6px; padding:2px 7px; font-size:10.5px;" title="Saca la deformación de perspectiva: los bloques del borde se ven de frente igual que los del centro, así el que ves es el que tocás. Tecla 7.">Perspectiva</button>
       </div>
+      <div id="scalePanel" style="display:none; align-items:center; gap:6px; flex-wrap:wrap; font-size:11px; color:var(--text-dim); margin-top:6px;">
+        <span>Escala:</span>
+        <button class="btn sm active" id="scaleUniformBtn" title="Las flechas mueven los tres ejes juntos, en la misma proporción">Uniforme</button>
+        <button class="btn sm" id="scaleAxesBtn" title="Cada flecha mueve solo su propio eje: podés adelgazar o engordar el diseño, o solo hacerlo más alto o más bajo">Por ejes</button>
+        <span style="color:var(--text-faint);">Clic en la flecha que apunta hacia afuera: agranda ese eje · hacia adentro: achica</span>
+      </div>
       <div id="rightPanelsStack" class="admin-only">
         <div id="usedColorsPanel" style="display:none;"></div>
         <div id="selectionPanel" style="display:none;">
@@ -712,6 +718,8 @@
         <button class="btn icon" id="previewInstrAngleBtn" title="Pone la cámara en el MISMO ángulo exacto que usan las instrucciones, con el diseño completo — para comparar directo, sin generar el PDF">📐<span class="txt">Ángulo del manual</span></button>
         <button class="btn icon" id="useThisAngleBtn" title="Guarda el ángulo EXACTO en el que está la cámara ahora mismo (girá con el mouse hasta que se vea bien) para que el manual use ese, en vez de uno fijo">📌<span class="txt">Usar este ángulo</span></button>
         <button class="btn icon" id="quickPreviewBtn" title="Foto rápida del modelo completo, con el ángulo guardado — para ver el resultado en segundos, sin generar todo el manual">⚡<span class="txt">Vista previa</span></button>
+        <button class="btn icon" id="scaleModeBtn" title="Activa flechas de colores sobre el modelo para escalarlo con clics — de forma uniforme o por eje — sin tener que borrar capas a mano">📏<span class="txt">Escalar</span></button>
+        <button class="btn icon active" id="axesToggleBtn" title="Muestra u oculta los ejes de orientación (X/Y/Z) del visor, para dejar un lugar más limpio para trabajar">🧭<span class="txt">Ejes</span></button>
       </div>
       <div id="zoomInfo" title="Cuántos píxeles de pantalla ocupa un bloque a este zoom, y qué contorno le corresponde. Sirve para poder decir 'a este número se ve mal' en vez de adivinar.">—</div>
       <div id="ctxHint">clic derecho: orbitar<br/>rueda: zoom</div>
@@ -1373,6 +1381,194 @@ function fitAxesToModel(){
   const len = Math.max(dims.x, dims.y, dims.z, 1) * voxelSize * 0.85;
   axesHelper.scale.setScalar(len);
 }
+
+/* ---------------------------- Escalar con flechas (uniforme o por eje) ----------------------------
+   Idea: reusar la misma técnica de remuestrearVoxels() (votar color al achicar,
+   mapear al origen al agrandar) pero UN EJE A LA VEZ, con su propio factor. Así
+   se puede combinar cualquier mezcla — agrandar Y mientras se achica X, por
+   ejemplo — sin tener que escribir un caso especial para cada combinación. */
+function escalarEjeUnico(list, eje, factor, nuevoLen){
+  if (!list.length || Math.abs(factor-1) < 1e-6) return list;
+  const coordDe = (v)=> eje==='x' ? v.x : eje==='y' ? Math.round(v.y) : v.z;
+  const otrosDe = (v)=> eje==='x' ? [Math.round(v.y), v.z] : eje==='y' ? [v.x, v.z] : [v.x, Math.round(v.y)];
+  const armar = (otros, coord)=> eje==='x' ? {x:coord, y:otros[0], z:otros[1]} : eje==='y' ? {x:otros[0], y:coord, z:otros[1]} : {x:otros[0], y:otros[1], z:coord};
+
+  if (factor < 1){
+    // Achicar ESTE eje: se vota el color por celda destino, agrupando por los
+    // otros dos ejes (que no cambian) + la nueva coordenada de este.
+    const votos = new Map();
+    list.forEach(v=>{
+      const nueva = Math.min(nuevoLen-1, Math.floor(coordDe(v)*factor));
+      const k = otrosDe(v).join(',') + '|' + nueva;
+      let m = votos.get(k);
+      if (!m){ m = new Map(); votos.set(k, m); }
+      m.set(v.color, (m.get(v.color) || 0) + 1);
+    });
+    const salida = [];
+    votos.forEach((m,k)=>{
+      let mejor = null, n = -1;
+      m.forEach((c,col)=>{ if (c > n){ n = c; mejor = col; } });
+      const partes = k.split('|');
+      salida.push({ ...armar(partes[0].split(',').map(Number), +partes[1]), color: mejor });
+    });
+    return salida;
+  }
+
+  // Agrandar ESTE eje: cada coordenada nueva mira de qué coordenada de origen viene.
+  const origen = new Map();
+  const gruposOtros = new Set();
+  list.forEach(v=>{
+    const otros = otrosDe(v).join(',');
+    gruposOtros.add(otros);
+    origen.set(otros + '|' + coordDe(v), v.color);
+  });
+  const salida = [];
+  gruposOtros.forEach(otrosKey=>{
+    for (let nueva = 0; nueva < nuevoLen; nueva++){
+      const orig = Math.floor(nueva / factor);
+      const col = origen.get(otrosKey + '|' + orig);
+      if (col) salida.push({ ...armar(otrosKey.split(',').map(Number), nueva), color: col });
+    }
+  });
+  return salida;
+}
+
+/* Escala el modelo por eje — o los tres a la vez para escala uniforme. Nunca
+   deja un eje en menos de 1 bloque de ancho. */
+function escalarVoxelsPorEjes(fx, fy, fz){
+  if (!voxels.length){ setStatus('No hay ningún modelo cargado.', 'err'); return; }
+  fx = Math.max(fx, 1/Math.max(dims.x,1));
+  fy = Math.max(fy, 1/Math.max(dims.y,1));
+  fz = Math.max(fz, 1/Math.max(dims.z,1));
+  if (Math.abs(fx-1) < 1e-6 && Math.abs(fy-1) < 1e-6 && Math.abs(fz-1) < 1e-6) return;
+
+  const nx = Math.max(1, Math.round(dims.x*fx));
+  const ny = Math.max(1, Math.round(dims.y*fy));
+  const nz = Math.max(1, Math.round(dims.z*fz));
+
+  pushUndoSnapshot();
+  let lista = voxels;
+  lista = escalarEjeUnico(lista, 'x', fx, nx);
+  lista = escalarEjeUnico(lista, 'y', fy, ny);
+  lista = escalarEjeUnico(lista, 'z', fz, nz);
+  setVoxels(normalize(lista));
+  setStatus(`Escalado a ${nx}×${ny}×${nz} bloques.`, 'ok');
+}
+
+/* ---------------------------- Flechas de escala (gizmo 3D) ----------------------------
+   Seis flechas alrededor del modelo — dos por eje, una hacia afuera (agranda) y
+   una hacia adentro (achica) — con el mismo código de color que `axesLegend`
+   (X rojo, Y verde, Z azul). Solo aparecen con el modo Escalar activado. */
+let scaleModeOn = false;
+let scaleAxisMode = 'uniform'; // 'uniform' | 'axes'
+const SCALE_STEP = 0.15; // 15% por clic
+const EJES_COLOR_ESCALA = { x:0xff4d4d, y:0x4dff88, z:0x4d88ff };
+
+const scaleGizmo = new THREE.Group();
+scaleGizmo.visible = false;
+scene.add(scaleGizmo);
+
+function crearFlechaEscala(eje, dir){
+  const mat = new THREE.MeshBasicMaterial({ color: EJES_COLOR_ESCALA[eje], depthTest:false, transparent:true, opacity:0.92 });
+  const cono = new THREE.Mesh(new THREE.ConeGeometry(0.34, 0.7, 10), mat);
+  cono.renderOrder = 999;
+  const vara = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.5, 8), mat);
+  vara.position.y = -0.55;
+  vara.renderOrder = 999;
+  const grupo = new THREE.Group();
+  grupo.add(cono, vara);
+  grupo.userData = { axis: eje, dir };
+  grupo.renderOrder = 999;
+  return grupo;
+}
+function buildScaleGizmo(){
+  scaleGizmo.clear();
+  ['x','y','z'].forEach(eje=>{
+    [1,-1].forEach(dir=> scaleGizmo.add(crearFlechaEscala(eje, dir)));
+  });
+}
+buildScaleGizmo();
+
+/* Reacomoda las seis flechas pegadas a las caras del modelo actual — hay que
+   llamarla cada vez que el modelo cambia de tamaño mientras el modo Escalar
+   sigue activo, si no las flechas quedan flotando en el lugar viejo. */
+function refreshScaleGizmo(){
+  if (!voxels.length) return;
+  const box = centeredBounds();
+  const center = new THREE.Vector3(); box.getCenter(center);
+  const size = new THREE.Vector3(); box.getSize(size);
+  const mayor = Math.max(size.x, size.y, size.z, voxelSize);
+  const margen = Math.max(voxelSize*1.1, mayor*0.1);
+  const escalaFlecha = Math.max(0.6, Math.min(3, mayor*0.07));
+  scaleGizmo.children.forEach(flecha=>{
+    const { axis, dir } = flecha.userData;
+    const pos = center.clone();
+    if (axis==='x') pos.x = dir>0 ? box.max.x + margen : box.min.x - margen;
+    if (axis==='y') pos.y = dir>0 ? box.max.y + margen : Math.max(margen*0.3, box.min.y - margen);
+    if (axis==='z') pos.z = dir>0 ? box.max.z + margen : box.min.z - margen;
+    flecha.position.copy(pos);
+    const dirVec = axis==='x' ? new THREE.Vector3(dir,0,0) : axis==='y' ? new THREE.Vector3(0,dir,0) : new THREE.Vector3(0,0,dir);
+    flecha.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dirVec);
+    flecha.scale.setScalar(escalaFlecha);
+  });
+}
+
+function escalarPorFlecha(eje, dir){
+  const factorEje = dir > 0 ? (1+SCALE_STEP) : 1/(1+SCALE_STEP);
+  if (scaleAxisMode === 'uniform'){
+    escalarVoxelsPorEjes(factorEje, factorEje, factorEje);
+  } else {
+    escalarVoxelsPorEjes(eje==='x'?factorEje:1, eje==='y'?factorEje:1, eje==='z'?factorEje:1);
+  }
+  refreshScaleGizmo();
+}
+
+/* Captura el clic ANTES que el resto de los handlers del visor (capture:true
+   se dispara siempre primero, sin importar el orden en que se registraron los
+   listeners) — así una flecha de escala nunca termina pintando o borrando un
+   bloque de abajo por accidente. */
+renderer.domElement.addEventListener('pointerdown', e=>{
+  if (!scaleModeOn || !scaleGizmo.visible || e.button !== 0) return;
+  const rect = renderer.domElement.getBoundingClientRect();
+  const ndc = new THREE.Vector2(((e.clientX-rect.left)/rect.width)*2-1, -((e.clientY-rect.top)/rect.height)*2+1);
+  const ray = new THREE.Raycaster();
+  ray.setFromCamera(ndc, camera);
+  const hits = ray.intersectObjects(scaleGizmo.children, true);
+  if (!hits.length) return;
+  let obj = hits[0].object;
+  while (obj && !obj.userData.axis) obj = obj.parent;
+  if (!obj) return;
+  e.stopImmediatePropagation();
+  e.preventDefault();
+  escalarPorFlecha(obj.userData.axis, obj.userData.dir);
+}, true);
+
+document.getElementById('scaleModeBtn').addEventListener('click', ()=>{
+  scaleModeOn = !scaleModeOn;
+  document.getElementById('scaleModeBtn').classList.toggle('active', scaleModeOn);
+  document.getElementById('scalePanel').style.display = scaleModeOn ? 'flex' : 'none';
+  scaleGizmo.visible = scaleModeOn;
+  if (scaleModeOn){
+    if (!voxels.length){ setStatus('Cargá un modelo primero.', 'err'); }
+    else { refreshScaleGizmo(); setStatus('Escala activada: clic en una flecha para achicar o agrandar.', 'ok'); }
+  }
+});
+document.getElementById('scaleUniformBtn').addEventListener('click', ()=>{
+  scaleAxisMode = 'uniform';
+  document.getElementById('scaleUniformBtn').classList.add('active');
+  document.getElementById('scaleAxesBtn').classList.remove('active');
+});
+document.getElementById('scaleAxesBtn').addEventListener('click', ()=>{
+  scaleAxisMode = 'axes';
+  document.getElementById('scaleAxesBtn').classList.add('active');
+  document.getElementById('scaleUniformBtn').classList.remove('active');
+});
+document.getElementById('axesToggleBtn').addEventListener('click', ()=>{
+  const on = !axesHelper.visible;
+  axesHelper.visible = on;
+  document.getElementById('axesLegend').style.display = on ? 'flex' : 'none';
+  document.getElementById('axesToggleBtn').classList.toggle('active', on);
+});
 
 // Recuadro cyan alrededor de TODA la selección múltiple (herramienta "Selección"),
 // como en Studio 2.0 — además del contorno cyan de cada bloque individual.
@@ -9727,6 +9923,10 @@ function loop(t){
   // Nivel de detalle del contorno según cuán lejos esté la cámara. Es barato:
   // solo hace una cuenta y, si el nivel no cambió, no toca nada.
   actualizarNivelDeContorno();
+  // Las flechas de escala se ocultan solas cada vez que el programa apaga
+  // axesHelper para sacar una foto limpia (manual, video, vista previa...) —
+  // así no hace falta tocar cada una de esas funciones por separado.
+  scaleGizmo.visible = scaleModeOn && axesHelper.visible;
   renderer.render(scene,camera);
   requestAnimationFrame(loop);
 }
