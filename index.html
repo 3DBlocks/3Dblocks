@@ -609,7 +609,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v150</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v151</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -677,7 +677,7 @@
       </div>
       <div id="scalePanel" style="display:none; align-items:center; gap:6px; flex-wrap:wrap; font-size:11px; color:var(--text-dim); margin-top:6px;">
         <span>Escala:</span>
-        <span style="color:var(--text-faint);">Cada flecha mueve SOLO su propio eje (X, Y o Z) — los otros dos quedan intactos</span>
+        <span style="color:var(--text-faint);">Cada flecha mueve SOLO su propio eje (X, Y o Z) — los otros dos quedan intactos. Con algo seleccionado, escala SOLO esa parte</span>
       </div>
       <div id="rightPanelsStack" class="admin-only">
         <div id="usedColorsPanel" style="display:none;"></div>
@@ -716,7 +716,7 @@
         <button class="btn icon" id="previewInstrAngleBtn" title="Pone la cámara en el MISMO ángulo exacto que usan las instrucciones, con el diseño completo — para comparar directo, sin generar el PDF">📐<span class="txt">Ángulo del manual</span></button>
         <button class="btn icon" id="useThisAngleBtn" title="Guarda el ángulo EXACTO en el que está la cámara ahora mismo (girá con el mouse hasta que se vea bien) para que el manual use ese, en vez de uno fijo">📌<span class="txt">Usar este ángulo</span></button>
         <button class="btn icon" id="quickPreviewBtn" title="Foto rápida del modelo completo, con el ángulo guardado — para ver el resultado en segundos, sin generar todo el manual">⚡<span class="txt">Vista previa</span></button>
-        <button class="btn icon" id="scaleModeBtn" title="Activa flechas de colores sobre el modelo para escalar cada eje por separado con clics (X, Y o Z), sin afectar a los demás ni borrar capas a mano">📏<span class="txt">Escalar</span></button>
+        <button class="btn icon" id="scaleModeBtn" title="Activa flechas de colores para escalar cada eje por separado (X, Y o Z). Si tenés bloques seleccionados, escala SOLO esa parte (una cola, un brazo...) sin tocar el resto del diseño">📏<span class="txt">Escalar</span></button>
         <button class="btn icon active" id="axesToggleBtn" title="Muestra u oculta los ejes de orientación (X/Y/Z) del visor, para dejar un lugar más limpio para trabajar">🧭<span class="txt">Ejes</span></button>
       </div>
       <div id="zoomInfo" title="Cuántos píxeles de pantalla ocupa un bloque a este zoom, y qué contorno le corresponde. Sirve para poder decir 'a este número se ve mal' en vez de adivinar.">—</div>
@@ -1531,10 +1531,14 @@ buildScaleGizmo();
 
 /* Reacomoda las seis flechas pegadas a las caras del modelo actual — hay que
    llamarla cada vez que el modelo cambia de tamaño mientras el modo Escalar
-   sigue activo, si no las flechas quedan flotando en el lugar viejo. */
+   sigue activo, si no las flechas quedan flotando en el lugar viejo.
+   Si hay una selección activa (el recuadro celeste de "N bloques
+   seleccionados"), las flechas se pegan a ESA selección en vez de a todo el
+   modelo, para poder escalar solo esa parte. */
 function refreshScaleGizmo(){
   if (!voxels.length) return;
-  const box = centeredBounds();
+  const haySeleccion = typeof boxSelection !== 'undefined' && boxSelection && boxSelection.size;
+  const box = haySeleccion ? worldBoxFromVoxelList(selectionVoxels()) : centeredBounds();
   const center = new THREE.Vector3(); box.getCenter(center);
   const size = new THREE.Vector3(); box.getSize(size);
   const mayor = Math.max(size.x, size.y, size.z, voxelSize);
@@ -1554,12 +1558,92 @@ function refreshScaleGizmo(){
   });
 }
 
+/* Escala SOLO los bloques seleccionados (el recuadro celeste de "N bloques
+   seleccionados"), en vez de todo el diseño — para afinar/alargar o engordar
+   una parte puntual (una cola, un brazo...) sin tocar el resto.
+
+   Se ancla en el lado OPUESTO a la flecha que tocaste: ese extremo queda FIJO
+   (para no despegar la pieza de donde se conecta con el resto del modelo) y
+   el extremo del lado de la flecha es el que se estira o se achica. */
+function escalarSeleccionPorEje(eje, dir){
+  const vs = selectionVoxels();
+  if (!vs.length){ setStatus('No hay ninguna selección para escalar.', 'err'); return; }
+  const factor = dir > 0 ? (1+SCALE_STEP) : 1/(1+SCALE_STEP);
+  const coordDe = (v)=> eje==='x' ? v.x : eje==='y' ? Math.round(v.y) : v.z;
+
+  let minC = Infinity, maxC = -Infinity;
+  vs.forEach(v=>{ const c = coordDe(v); if (c<minC) minC=c; if (c>maxC) maxC=c; });
+  const largoViejo = maxC - minC + 1;
+  if (largoViejo <= 1 && factor < 1){ setStatus('Esta selección ya está en su ancho mínimo en ese eje.', 'err'); return; }
+  const largoNuevo = Math.max(1, Math.round(largoViejo*factor));
+  const ancla = dir > 0 ? minC : maxC; // el lado que NO se mueve
+
+  pushUndoSnapshot();
+
+  const enSeleccion = new Set(vs);
+  const resto = voxels.filter(v => !enSeleccion.has(v));
+
+  // Coordenadas relativas al ancla: 0 = extremo fijo, creciendo hacia el
+  // extremo que se mueve — así sirve el mismo remuestreo de siempre, sin
+  // importar de qué lado esté el ancla.
+  const relativos = vs.map(v=>{
+    const rel = dir > 0 ? (coordDe(v) - ancla) : (ancla - coordDe(v));
+    const o = { x:v.x, y:Math.round(v.y), z:v.z, color:v.color };
+    if (eje==='x') o.x = rel; else if (eje==='y') o.y = rel; else o.z = rel;
+    return o;
+  });
+  const escalados = escalarEjeUnico(relativos, eje, factor, largoNuevo, largoViejo);
+
+  // Vuelve a sumar el ancla y arma los bloques finales, sin pisar nada que
+  // YA estuviera fuera de la selección (así al crecer no "come" el cuerpo).
+  const ocupadoPorResto = new Set(resto.map(v=>v.x+','+Math.round(v.y)+','+v.z));
+  const vistos = new Set();
+  const finales = [];
+  escalados.forEach(vRel=>{
+    const rel = eje==='x' ? vRel.x : eje==='y' ? vRel.y : vRel.z;
+    const abs = dir > 0 ? ancla + rel : ancla - rel;
+    const o = { x:vRel.x, y:vRel.y, z:vRel.z, color:vRel.color };
+    if (eje==='x') o.x = abs; else if (eje==='y') o.y = abs; else o.z = abs;
+    const k = o.x+','+o.y+','+o.z;
+    if (ocupadoPorResto.has(k) || vistos.has(k)) return;
+    vistos.add(k);
+    finales.push(o);
+  });
+
+  voxels.length = 0; voxels.push(...resto, ...finales);
+
+  // Si algo quedó en negativo, corre TODO el modelo para volver a positivo
+  // (mismo truco que usa moverSeleccion).
+  const minX = Math.min(0, ...voxels.map(v=>v.x));
+  const minY = Math.min(0, ...voxels.map(v=>Math.round(v.y)));
+  const minZ = Math.min(0, ...voxels.map(v=>v.z));
+  if (minX<0 || minY<0 || minZ<0){
+    voxels.forEach(v=>{ v.x-=minX; v.y=Math.round(v.y)-minY; v.z-=minZ; });
+  }
+  dims.x = Math.max(...voxels.map(v=>v.x))+1;
+  dims.y = Math.max(...voxels.map(v=>Math.round(v.y)))+1;
+  dims.z = Math.max(...voxels.map(v=>v.z))+1;
+  maxLayer = Math.max(0, dims.y-1);
+  currentLayer = Math.min(currentLayer, maxLayer);
+
+  setBoxSelection(new Set(finales.map(v => v.x+','+Math.round(v.y)+','+v.z)));
+  drawLayerDiagram(); rebuildMesh3D(); refreshLayerUI();
+  const st = document.getElementById('statCount'); if (st) st.textContent = String(voxels.length);
+  const sd = document.getElementById('statDims'); if (sd) sd.textContent = dims.x+'×'+dims.y+'×'+dims.z;
+  setStatus('Selección escalada: ' + finales.length + ' bloques.', 'ok');
+}
+
 function escalarPorFlecha(eje, dir){
-  const factorEje = dir > 0 ? (1+SCALE_STEP) : 1/(1+SCALE_STEP);
-  // Cada flecha mueve SOLO su propio eje — los otros dos quedan exactamente
-  // como estaban, sin excepción. Así podés adelgazar/engordar (X, Z) o
-  // cambiar solo la altura (Y) sin que el resto del diseño se toque.
-  escalarVoxelsPorEjes(eje==='x'?factorEje:1, eje==='y'?factorEje:1, eje==='z'?factorEje:1);
+  if (typeof boxSelection !== 'undefined' && boxSelection && boxSelection.size){
+    // Hay algo seleccionado: las flechas escalan SOLO esa parte.
+    escalarSeleccionPorEje(eje, dir);
+  } else {
+    const factorEje = dir > 0 ? (1+SCALE_STEP) : 1/(1+SCALE_STEP);
+    // Cada flecha mueve SOLO su propio eje — los otros dos quedan exactamente
+    // como estaban, sin excepción. Así podés adelgazar/engordar (X, Z) o
+    // cambiar solo la altura (Y) sin que el resto del diseño se toque.
+    escalarVoxelsPorEjes(eje==='x'?factorEje:1, eje==='y'?factorEje:1, eje==='z'?factorEje:1);
+  }
   refreshScaleGizmo();
 }
 
@@ -1590,7 +1674,12 @@ document.getElementById('scaleModeBtn').addEventListener('click', ()=>{
   scaleGizmo.visible = scaleModeOn;
   if (scaleModeOn){
     if (!voxels.length){ setStatus('Cargá un modelo primero.', 'err'); }
-    else { refreshScaleGizmo(); setStatus('Escala activada: clic en una flecha para achicar o agrandar.', 'ok'); }
+    else {
+      refreshScaleGizmo();
+      setStatus((typeof boxSelection !== 'undefined' && boxSelection && boxSelection.size)
+        ? 'Escala activada sobre la selección: clic en una flecha para achicar o agrandar SOLO esa parte.'
+        : 'Escala activada: clic en una flecha para achicar o agrandar.', 'ok');
+    }
   }
 });
 document.getElementById('axesToggleBtn').addEventListener('click', ()=>{
@@ -8745,6 +8834,7 @@ function clearBoxSelection(){
   updateSelectionStatusUI();
   updateSelectionBoxHelper();
   rebuildMesh3D();
+  if (typeof scaleModeOn !== 'undefined' && scaleModeOn) refreshScaleGizmo();
 }
 function setBoxSelection(set){
   boxSelection = (set && set.size) ? set : null;
@@ -8752,6 +8842,9 @@ function setBoxSelection(set){
   refreshUsedColorsPanel();   // la paleta del modelo aparece o se va según haya selección
   updateSelectionBoxHelper();
   rebuildMesh3D();
+  // Si el modo Escalar está prendido, las flechas se reacomodan a la nueva
+  // selección (o vuelven a rodear todo el modelo si la selección se vació).
+  if (typeof scaleModeOn !== 'undefined' && scaleModeOn) refreshScaleGizmo();
 }
 function updateSelectionStatusUI(){
   const panel = document.getElementById('selectionPanel');
