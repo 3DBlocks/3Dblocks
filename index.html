@@ -609,7 +609,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v152</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v153</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -718,6 +718,7 @@
         <button class="btn icon" id="quickPreviewBtn" title="Foto rápida del modelo completo, con el ángulo guardado — para ver el resultado en segundos, sin generar todo el manual">⚡<span class="txt">Vista previa</span></button>
         <button class="btn icon" id="scaleModeBtn" title="Activa flechas de colores para escalar cada eje por separado (X, Y o Z). Si tenés bloques seleccionados, escala SOLO esa parte (una cola, un brazo...) sin tocar el resto del diseño">📏<span class="txt">Escalar</span></button>
         <button class="btn icon active" id="axesToggleBtn" title="Muestra u oculta los ejes de orientación (X/Y/Z) del visor, para dejar un lugar más limpio para trabajar">🧭<span class="txt">Ejes</span></button>
+        <button class="btn icon" id="puenteModeBtn" title="Conectá dos bloques vecinos (misma capa) con una piecita puente a medio bloque de desfase, para que la escultura quede más firme — tocá un puente puesto para sacarlo">🌉<span class="txt">Puente</span></button>
       </div>
       <div id="zoomInfo" title="Cuántos píxeles de pantalla ocupa un bloque a este zoom, y qué contorno le corresponde. Sirve para poder decir 'a este número se ve mal' en vez de adivinar.">—</div>
       <div id="ctxHint">clic derecho: orbitar<br/>rueda: zoom</div>
@@ -1187,6 +1188,7 @@ function waitForAuth(){
 
 /* ---------------------------- Estado del modelo ---------------------------- */
 let voxels = [];        // {x,y,z,color:'#rrggbb'} — y = altura (capa)
+let puentes = [];       // piezas puente entre dos bloques vecinos: {a:{x,y,z}, b:{x,y,z}, color}
 let dims = {x:0,y:0,z:0};
 let maxLayer = 0;
 let currentLayer = 0;
@@ -1687,6 +1689,123 @@ document.getElementById('axesToggleBtn').addEventListener('click', ()=>{
   axesHelper.visible = on;
   document.getElementById('axesLegend').style.display = on ? 'flex' : 'none';
   document.getElementById('axesToggleBtn').classList.toggle('active', on);
+});
+
+/* ---------------------------- Puentes: piezas que conectan dos bloques vecinos ----------------------------
+   Para diseños que necesitan que dos columnas de bloques queden trabadas entre
+   sí — como en una pared de ladrillos de verdad, donde cada hilada se traba
+   con la de al lado en vez de quedar todo en columnas sueltas — una piecita
+   corta, a medio bloque de desfase, apoyada sobre el borde entre dos bloques
+   vecinos de la MISMA capa.
+
+   Van en una lista aparte de `voxels` a propósito: la grilla del programa (el
+   plano 2D, el manual, escalar, deshacer) da por hecho que cada bloque está
+   siempre alineado a la grilla — meter piezas a medio bloque ahí adentro
+   habría significado tocar cada una de esas partes. Como capa separada, se
+   dibujan y se guardan sin arriesgar nada de lo que ya funciona.
+
+   LIMITACIÓN A PROPÓSITO (por ahora): los puentes se ven en el visor 3D, se
+   guardan y se deshacen bien, pero todavía NO aparecen como paso aparte en el
+   manual de armado (PDF/PNG) — eso queda para más adelante, si hace falta. */
+let puenteModoOn = false;
+let puenteAncla = null; // {x,y,z,color} del primer bloque elegido, o null si no hay ninguno todavía
+const bridgeGroup = new THREE.Group();
+scene.add(bridgeGroup);
+
+function refreshBridgeMeshes(){
+  bridgeGroup.clear();
+  if (!puentes.length) return;
+  const offsetX = (dims.x*voxelSize)/2, offsetZ = (dims.z*voxelSize)/2;
+  puentes.forEach(p=>{
+    const y = Math.round(p.a.y);
+    const enCapaVisible = showFullDesign || (showBelowLayers ? y <= currentLayer : y === currentLayer);
+    if (!enCapaVisible) return;
+    const corre1x = p.a.z === p.b.z; // el puente corre a lo largo del eje X (si no, corre en Z)
+    const largo = (corre1x ? voxelSize*2 : voxelSize) * 0.62;
+    const ancho = (corre1x ? voxelSize : voxelSize*2) * 0.62;
+    const alto = voxelSize*0.34;
+    const geo = new THREE.BoxGeometry(largo, alto, ancho);
+    const mat = new THREE.MeshBasicMaterial({ color: p.color || '#9aa3ad', toneMapped:false });
+    const mesh = new THREE.Mesh(geo, mat);
+    const midX = (p.a.x + p.b.x)/2, midZ = (p.a.z + p.b.z)/2;
+    mesh.position.set(midX*voxelSize - offsetX, (y+1)*voxelSize + alto/2, midZ*voxelSize - offsetZ);
+    mesh.userData = { esPuente:true, puente:p };
+    bridgeGroup.add(mesh);
+  });
+}
+
+function vecinosValidos(a, b){
+  if (!a || !b) return false;
+  if (Math.round(a.y) !== Math.round(b.y)) return false;
+  const dx = Math.abs(a.x-b.x), dz = Math.abs(a.z-b.z);
+  return (dx===1 && dz===0) || (dx===0 && dz===1);
+}
+
+function crearOQuitarPuenteEntre(a, b){
+  const existente = puentes.findIndex(p =>
+    (p.a.x===a.x && p.a.y===a.y && p.a.z===a.z && p.b.x===b.x && p.b.y===b.y && p.b.z===b.z) ||
+    (p.a.x===b.x && p.a.y===b.y && p.a.z===b.z && p.b.x===a.x && p.b.y===a.y && p.b.z===a.z)
+  );
+  pushUndoSnapshot();
+  if (existente >= 0){
+    puentes.splice(existente, 1);
+    setStatus('Puente quitado.', 'ok');
+  } else {
+    puentes.push({ a:{x:a.x,y:a.y,z:a.z}, b:{x:b.x,y:b.y,z:b.z}, color:a.color });
+    setStatus('Puente creado entre los dos bloques.', 'ok');
+  }
+  refreshBridgeMeshes();
+}
+
+// Igual que con las flechas de escala: capture:true para que esto se resuelva
+// ANTES que la pintura/edición normal, así tocar un bloque en modo puente
+// nunca termina además pintándolo o borrándolo por accidente.
+renderer.domElement.addEventListener('pointerdown', e=>{
+  if (!puenteModoOn || e.button !== 0) return;
+  const rect = renderer.domElement.getBoundingClientRect();
+  const ndc = new THREE.Vector2(((e.clientX-rect.left)/rect.width)*2-1, -((e.clientY-rect.top)/rect.height)*2+1);
+  const ray = new THREE.Raycaster();
+  ray.setFromCamera(ndc, camera);
+  const hitsPuente = ray.intersectObjects(bridgeGroup.children, false);
+  if (hitsPuente.length){
+    e.stopImmediatePropagation(); e.preventDefault();
+    const p = hitsPuente[0].object.userData.puente;
+    const idx = puentes.indexOf(p);
+    if (idx >= 0){ pushUndoSnapshot(); puentes.splice(idx,1); refreshBridgeMeshes(); setStatus('Puente quitado.', 'ok'); }
+    return;
+  }
+  const v = bloqueBajoElCursor(e);
+  if (!v) return;
+  e.stopImmediatePropagation(); e.preventDefault();
+  const celda = { x:v.x, y:Math.round(v.y), z:v.z, color:v.color };
+  if (!puenteAncla){
+    puenteAncla = celda;
+    setStatus('Primer bloque elegido. Tocá un bloque VECINO (al lado, misma capa) para conectar.', 'ok');
+    return;
+  }
+  if (puenteAncla.x===celda.x && puenteAncla.y===celda.y && puenteAncla.z===celda.z){
+    puenteAncla = null;
+    setStatus('Selección cancelada.', 'ok');
+    return;
+  }
+  if (!vecinosValidos(puenteAncla, celda)){
+    puenteAncla = celda; // no son vecinos: se toma como el nuevo primer bloque, sin marcar error feo
+    setStatus('Ese bloque no es vecino del anterior — se tomó como nuevo primer bloque. Tocá su vecino.', 'err');
+    return;
+  }
+  crearOQuitarPuenteEntre(puenteAncla, celda);
+  puenteAncla = null;
+}, true);
+
+document.getElementById('puenteModeBtn').addEventListener('click', ()=>{
+  const btn = document.getElementById('puenteModeBtn');
+  if (!puenteModoOn && !voxels.length){ setStatus('Cargá un modelo primero.', 'err'); return; }
+  puenteModoOn = !puenteModoOn;
+  puenteAncla = null;
+  btn.classList.toggle('active', puenteModoOn);
+  setStatus(puenteModoOn
+    ? 'Modo puente activado: tocá dos bloques vecinos para conectarlos, o tocá un puente puesto para sacarlo.'
+    : 'Modo puente desactivado.', 'ok');
 });
 
 // Recuadro cyan alrededor de TODA la selección múltiple (herramienta "Selección"),
@@ -3047,6 +3166,7 @@ function rebuildMesh3D(opts){
   coloresReales = !!(opts && opts.coloresReales); // ver el comentario en la declaración global, arriba del todo
   const mapaOclusion = fuerzaOclusion > 0 ? calcularOclusion() : null;
   clearModelMeshes();
+  refreshBridgeMeshes(); // capa aparte de `voxels`: se redibuja siempre, sin importar qué rama de abajo se use
   const visible = showFullDesign
     ? voxels
     : (showBelowLayers
@@ -6582,12 +6702,14 @@ function snapshotDelModelo(){
   return {
     voxels: voxels.map(v=>({x:v.x, y:v.y, z:v.z, color:v.color, piece:v.piece, pieceSize:v.pieceSize, pieceIndex:v.pieceIndex})),
     dims: {x:dims.x, y:dims.y, z:dims.z},
+    puentes: puentes.map(p=>({a:{...p.a}, b:{...p.b}, color:p.color})),
   };
 }
 
 function restaurarSnapshot(snap){
   voxels.length = 0; voxels.push(...snap.voxels);
   dims.x = snap.dims.x; dims.y = snap.dims.y; dims.z = snap.dims.z;
+  puentes.length = 0; puentes.push(...(snap.puentes || []));
   magicSelection = null; replaceSourceColor = null;
   problemCells = null; // las marcas rojas dejan de valer: el diseño cambió
   maxLayer = Math.max(0, dims.y-1);
@@ -7838,16 +7960,53 @@ function parseJsonModel(obj){
   throw new Error('El .json debe tener la forma { voxels: [[x,y,z,"#hex"], ...] }');
 }
 
+/* Como parseJsonModel, pero además devuelve los PUENTES guardados (si los hay),
+   con el mismo corrimiento de coordenadas que normalize() les aplica a los
+   bloques — si no, quedarían pegados en el lugar viejo. Se usa solo al volver a
+   abrir un .json guardado por este mismo programa y al recuperar un
+   autoguardado, que son los únicos casos donde puede haber puentes de verdad. */
+function parseJsonModelConPuentes(obj){
+  if (!obj) throw new Error('El .json debe tener la forma { voxels: [[x,y,z,"#hex"], ...] }');
+  let rawList, puentesCrudos = [];
+  if (Array.isArray(obj.pal) && Array.isArray(obj.v)){
+    rawList = obj.v.map(v=>({x:v[0], y:v[1], z:v[2], color: cleanColor(obj.pal[v[3]])}));
+    if (Array.isArray(obj.pu)){
+      puentesCrudos = obj.pu.map(p=>({
+        a:{x:p[0], y:p[1], z:p[2]}, b:{x:p[3], y:p[4], z:p[5]}, color: cleanColor(obj.pal[p[6]])
+      }));
+    }
+  } else if (Array.isArray(obj.voxels)){
+    rawList = obj.voxels.map(v=>({x:v[0],y:v[1],z:v[2],color:cleanColor(v[3])}));
+  } else {
+    throw new Error('El .json debe tener la forma { voxels: [[x,y,z,"#hex"], ...] }');
+  }
+  const box = boundsOf(rawList);
+  const corre = (n, min)=> Math.round(n - min);
+  const list = rawList.map(v=>({ x:corre(v.x,box.min.x), y:corre(v.y,box.min.y), z:corre(v.z,box.min.z), color:v.color }));
+  const puentesNuevos = puentesCrudos.map(p=>({
+    a: { x:corre(p.a.x,box.min.x), y:corre(p.a.y,box.min.y), z:corre(p.a.z,box.min.z) },
+    b: { x:corre(p.b.x,box.min.x), y:corre(p.b.y,box.min.y), z:corre(p.b.z,box.min.z) },
+    color: p.color,
+  }));
+  return { list, puentes: puentesNuevos };
+}
+
 // Arma el formato liviano (paleta + índices) a partir de la lista de bloques actual.
 function buildCompactPayload(){
   const palette = [];
   const paletteIndex = new Map();
-  const v = voxels.map(vx=>{
-    let idx = paletteIndex.get(vx.color);
-    if (idx === undefined){ idx = palette.length; palette.push(vx.color); paletteIndex.set(vx.color, idx); }
-    return [vx.x, vx.y, vx.z, idx];
-  });
-  return { pal: palette, v };
+  const idxDeColor = (color)=>{
+    let idx = paletteIndex.get(color);
+    if (idx === undefined){ idx = palette.length; palette.push(color); paletteIndex.set(color, idx); }
+    return idx;
+  };
+  const v = voxels.map(vx=> [vx.x, vx.y, vx.z, idxDeColor(vx.color)]);
+  const payload = { pal: palette, v };
+  if (puentes.length){
+    // [ax,ay,az, bx,by,bz, índiceDeColor] — mismo formato liviano que los bloques.
+    payload.pu = puentes.map(p=> [p.a.x,p.a.y,p.a.z, p.b.x,p.b.y,p.b.z, idxDeColor(p.color)]);
+  }
+  return payload;
 }
 
 /* ---------------------------- Autoguardado (para no perder el trabajo) ----------------------------
@@ -7909,10 +8068,12 @@ function ofrecerRecuperarAutoguardado(){
       '¿Querés recuperarla? (Cancelar la descarta para siempre)'
     );
     if (!quiere){ localStorage.removeItem(AUTOGUARDADO_KEY); return false; }
-    setVoxels(parseJsonModel(data.payload));
+    const { list, puentes: puentesRecuperados } = parseJsonModelConPuentes(data.payload);
+    setVoxels(list);
+    puentes.length = 0; puentes.push(...puentesRecuperados); refreshBridgeMeshes();
     if (data.modelName) document.getElementById('modelNameText').textContent = data.modelName;
     document.getElementById('voxelizeSection').style.display = 'none';
-    setStatus('Se recuperó el autoguardado: ' + cantidad + ' bloques.', 'ok');
+    setStatus('Se recuperó el autoguardado: ' + cantidad + ' bloques' + (puentesRecuperados.length ? ' y '+puentesRecuperados.length+' puente(s)' : '') + '.', 'ok');
     return true;
   } catch(e){ return false; }
 }
@@ -7933,6 +8094,7 @@ async function handleFile(file, anexar, acompanantes){
     anexarProximoModelo = true;
   } else {
     savedFileHandle = null; // un modelo nuevo no debe pisar el archivo guardado del anterior
+    puentes.length = 0; refreshBridgeMeshes(); // un modelo nuevo no hereda los puentes del anterior (el .json los repone si trae)
     undoStack = []; redoStack = []; undoPendingGesture = false; // ni tiene sentido "deshacer" hacia un modelo distinto
     problemCells = null;
   }
@@ -7973,10 +8135,11 @@ async function handleFile(file, anexar, acompanantes){
       }
     } else if (ext==='json'){
       const text = await file.text();
-      const list = parseJsonModel(JSON.parse(text));
+      const { list, puentes: puentesCargados } = parseJsonModelConPuentes(JSON.parse(text));
       voxelSize = 1; setVoxels(list);
+      if (!anexar){ puentes.length = 0; puentes.push(...puentesCargados); refreshBridgeMeshes(); }
       document.getElementById('modelNameText').textContent = file.name;
-      setStatus('Modelo .json cargado: '+list.length+' bloques.', 'ok');
+      setStatus('Modelo .json cargado: '+list.length+' bloques'+(puentesCargados.length ? ' y '+puentesCargados.length+' puente(s)' : '')+'.', 'ok');
     } else if (ext==='obj' || ext==='stl' || ext==='glb' || ext==='gltf'){
       if (ext==='obj')      lastVoxelizerTris = parseObjTriangles(await file.text());
       else if (ext==='stl') lastVoxelizerTris = parseStlBuffer(await file.arrayBuffer());
