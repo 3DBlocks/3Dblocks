@@ -609,7 +609,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v151</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v152</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -7850,6 +7850,73 @@ function buildCompactPayload(){
   return { pal: palette, v };
 }
 
+/* ---------------------------- Autoguardado (para no perder el trabajo) ----------------------------
+   El modelo en pantalla vive solo en la memoria del navegador: si la pestaña
+   se recarga sola (Chrome hace eso con pestañas inactivas para ahorrar
+   memoria) o se cierra por error, todo lo que no se haya bajado con
+   "Guardar" o "Exportar" se pierde para siempre. Esto guarda una copia de
+   respaldo en el propio navegador cada tanto, y la ofrece de vuelta la
+   próxima vez que se abre el programa. */
+const AUTOGUARDADO_KEY = '3dblock.autoguardado';
+let ultimoGuardadoJSON = null; // el JSON de la última vez que SE GUARDÓ o EXPORTÓ de verdad, a un archivo real
+
+function hayCambiosSinGuardar(){
+  if (!voxels.length) return false;
+  try{ return JSON.stringify(buildCompactPayload()) !== ultimoGuardadoJSON; }
+  catch(e){ return false; }
+}
+
+function autoguardarAhora(){
+  if (!voxels.length) return;
+  try{
+    const modelName = (document.getElementById('modelNameText').textContent || '').trim();
+    localStorage.setItem(AUTOGUARDADO_KEY, JSON.stringify({ payload: buildCompactPayload(), modelName, ts: Date.now() }));
+  } catch(e){ /* localStorage lleno o no disponible: no hay mucho más para hacer acá */ }
+}
+
+// Cada 20 segundos, y también justo antes de que la pestaña se oculte o se
+// cierre — que es el momento en que Chrome puede "descartarla" por
+// inactividad, así que conviene guardar la copia justo ahí, no solo a
+// intervalos fijos.
+setInterval(autoguardarAhora, 20000);
+document.addEventListener('visibilitychange', ()=>{ if (document.hidden) autoguardarAhora(); });
+window.addEventListener('pagehide', autoguardarAhora);
+
+// Si se intenta cerrar o recargar habiendo cambios que ni el autoguardado ni
+// un Guardar/Exportar real llegaron a bajar como archivo, un cartel del
+// propio navegador (el texto no se puede personalizar, cada navegador pone
+// el suyo) pregunta si de verdad se quiere salir — el freno contra
+// "se me olvidó guardar".
+window.addEventListener('beforeunload', (e)=>{
+  if (hayCambiosSinGuardar()){ e.preventDefault(); e.returnValue = ''; }
+});
+
+// Al abrir el programa, si hay una copia de respaldo esperando (y no se
+// cargó nada por URL), se ofrece recuperarla ANTES de armar el árbol de
+// ejemplo — así no se pisa sola con el modelo de muestra.
+function ofrecerRecuperarAutoguardado(){
+  try{
+    const raw = localStorage.getItem(AUTOGUARDADO_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    const cantidad = data && data.payload && Array.isArray(data.payload.v) ? data.payload.v.length : 0;
+    if (!cantidad) return false;
+    const minutos = Math.max(1, Math.round((Date.now() - data.ts) / 60000));
+    const nombre = data.modelName ? ' ("' + data.modelName + '")' : '';
+    const quiere = confirm(
+      'Hay una copia de respaldo automática de hace ' + minutos + ' minuto' + (minutos===1?'':'s') + nombre +
+      ', con ' + cantidad + ' bloques, que nunca se llegó a guardar ni a exportar.\n\n' +
+      '¿Querés recuperarla? (Cancelar la descarta para siempre)'
+    );
+    if (!quiere){ localStorage.removeItem(AUTOGUARDADO_KEY); return false; }
+    setVoxels(parseJsonModel(data.payload));
+    if (data.modelName) document.getElementById('modelNameText').textContent = data.modelName;
+    document.getElementById('voxelizeSection').style.display = 'none';
+    setStatus('Se recuperó el autoguardado: ' + cantidad + ' bloques.', 'ok');
+    return true;
+  } catch(e){ return false; }
+}
+
 /* ---------------------------- Carga de archivos ---------------------------- */
 const statusEl = document.getElementById('statusMsg');
 function setStatus(msg,kind){ statusEl.className = kind||''; statusEl.textContent = msg; }
@@ -9670,6 +9737,7 @@ document.getElementById('exportBtn').addEventListener('click', ()=>{
   a.href = url; a.download = baseName + '.json';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
+  try{ ultimoGuardadoJSON = JSON.stringify(buildCompactPayload()); } catch(e){} // ya quedó en un archivo real
   setStatus('Copia nueva descargada como ' + baseName + '.json' + (payload.price_usd ? ' (precio: $'+payload.price_usd.toFixed(2)+' USD)' : '') + '.', 'ok');
 });
 
@@ -9695,6 +9763,7 @@ document.getElementById('saveBtn').addEventListener('click', async ()=>{
       const writable = await savedFileHandle.createWritable();
       await writable.write(text);
       await writable.close();
+      ultimoGuardadoJSON = text; // ya quedó en un archivo real
       setStatus('Guardado en ' + (savedFileHandle.name || baseName+'.json') + '.', 'ok');
       return;
     } catch(err){
@@ -9708,6 +9777,7 @@ document.getElementById('saveBtn').addEventListener('click', async ()=>{
   a.href = url; a.download = baseName + '.json';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
+  ultimoGuardadoJSON = text; // ya quedó en un archivo real
   setStatus('Guardado como ' + baseName + '.json.', 'ok');
 });
 
@@ -10614,7 +10684,18 @@ waitForAuth().then(async () => {
     const btnPlana = document.getElementById('flatViewBtn');
     if (btnPlana){ btnPlana.textContent = 'Plana'; btnPlana.classList.add('primary'); }
   }
-  if (!loaded) setVoxels(buildDemoTree());
+  let recuperado = false;
+  if (!loaded){
+    recuperado = ofrecerRecuperarAutoguardado();
+    if (!recuperado) setVoxels(buildDemoTree());
+  }
+  if (!recuperado){
+    // Este punto de partida (lo cargado por URL, o el árbol de ejemplo) ya
+    // coincide con lo que hay guardado — recién acá se marca como "sin
+    // cambios pendientes". Un autoguardado recuperado NO se marca así a
+    // propósito: sigue sin estar en ningún archivo real todavía.
+    try{ ultimoGuardadoJSON = JSON.stringify(buildCompactPayload()); } catch(e){}
+  }
   actualizarBotonesUndoRedo(); // arrancan atenuados: todavía no hay nada que deshacer
   setTimeout(onResize, 30);
 });
