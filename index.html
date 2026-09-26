@@ -609,7 +609,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v153</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v154</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -718,7 +718,7 @@
         <button class="btn icon" id="quickPreviewBtn" title="Foto rápida del modelo completo, con el ángulo guardado — para ver el resultado en segundos, sin generar todo el manual">⚡<span class="txt">Vista previa</span></button>
         <button class="btn icon" id="scaleModeBtn" title="Activa flechas de colores para escalar cada eje por separado (X, Y o Z). Si tenés bloques seleccionados, escala SOLO esa parte (una cola, un brazo...) sin tocar el resto del diseño">📏<span class="txt">Escalar</span></button>
         <button class="btn icon active" id="axesToggleBtn" title="Muestra u oculta los ejes de orientación (X/Y/Z) del visor, para dejar un lugar más limpio para trabajar">🧭<span class="txt">Ejes</span></button>
-        <button class="btn icon" id="puenteModeBtn" title="Conectá dos bloques vecinos (misma capa) con una piecita puente a medio bloque de desfase, para que la escultura quede más firme — tocá un puente puesto para sacarlo">🌉<span class="txt">Puente</span></button>
+        <button class="btn icon" id="puenteModeBtn" title="Conectá dos bloques vecinos (misma capa) con un bloque entero puesto a medio bloque de desfase entre los dos, para que la escultura quede más firme — tocá un puente puesto para sacarlo">🌉<span class="txt">Puente</span></button>
       </div>
       <div id="zoomInfo" title="Cuántos píxeles de pantalla ocupa un bloque a este zoom, y qué contorno le corresponde. Sirve para poder decir 'a este número se ve mal' en vez de adivinar.">—</div>
       <div id="ctxHint">clic derecho: orbitar<br/>rueda: zoom</div>
@@ -1691,12 +1691,13 @@ document.getElementById('axesToggleBtn').addEventListener('click', ()=>{
   document.getElementById('axesToggleBtn').classList.toggle('active', on);
 });
 
-/* ---------------------------- Puentes: piezas que conectan dos bloques vecinos ----------------------------
+/* ---------------------------- Puentes: un bloque entero a medio desfase entre dos vecinos ----------------------------
    Para diseños que necesitan que dos columnas de bloques queden trabadas entre
    sí — como en una pared de ladrillos de verdad, donde cada hilada se traba
-   con la de al lado en vez de quedar todo en columnas sueltas — una piecita
-   corta, a medio bloque de desfase, apoyada sobre el borde entre dos bloques
-   vecinos de la MISMA capa.
+   con la de al lado en vez de quedar todo en columnas sueltas — un bloque
+   ENTERO (mismo tamaño y mismo estilo que el resto), puesto en la capa de
+   arriba pero centrado justo en el borde entre dos bloques vecinos de la
+   MISMA capa — monta la mitad sobre cada uno, a propósito.
 
    Van en una lista aparte de `voxels` a propósito: la grilla del programa (el
    plano 2D, el manual, escalar, deshacer) da por hecho que cada bloque está
@@ -1716,19 +1717,21 @@ function refreshBridgeMeshes(){
   bridgeGroup.clear();
   if (!puentes.length) return;
   const offsetX = (dims.x*voxelSize)/2, offsetZ = (dims.z*voxelSize)/2;
+  const geo = buildBrickGeometry(voxelSize); // el MISMO bloque de siempre — mismo tamaño y mismo estilo elegido (muesca, Magic Block, etc.)
   puentes.forEach(p=>{
     const y = Math.round(p.a.y);
-    const enCapaVisible = showFullDesign || (showBelowLayers ? y <= currentLayer : y === currentLayer);
+    const capaPuente = y + 1; // el bloque puente ocupa la capa de arriba, a medio bloque de desfase
+    const enCapaVisible = showFullDesign || (showBelowLayers ? capaPuente <= currentLayer : capaPuente === currentLayer);
     if (!enCapaVisible) return;
-    const corre1x = p.a.z === p.b.z; // el puente corre a lo largo del eje X (si no, corre en Z)
-    const largo = (corre1x ? voxelSize*2 : voxelSize) * 0.62;
-    const ancho = (corre1x ? voxelSize : voxelSize*2) * 0.62;
-    const alto = voxelSize*0.34;
-    const geo = new THREE.BoxGeometry(largo, alto, ancho);
-    const mat = new THREE.MeshBasicMaterial({ color: p.color || '#9aa3ad', toneMapped:false });
+    const mat = new THREE.MeshBasicMaterial({ toneMapped:false, color: p.color || '#9aa3ad' });
+    if (esMagic()){ mat.side = THREE.DoubleSide; mat.vertexColors = true; }
+    if (showMeshTexture && !esMagic()) mat.map = getMeshTexture();
     const mesh = new THREE.Mesh(geo, mat);
     const midX = (p.a.x + p.b.x)/2, midZ = (p.a.z + p.b.z)/2;
-    mesh.position.set(midX*voxelSize - offsetX, (y+1)*voxelSize + alto/2, midZ*voxelSize - offsetZ);
+    // A propósito NO se alinea a la grilla: al quedar centrado exactamente entre
+    // los dos bloques de abajo, monta la mitad sobre cada uno — el mismo
+    // desfase de medio bloque que traba una hilada de ladrillos con la de al lado.
+    mesh.position.set(midX*voxelSize - offsetX, capaPuente*voxelSize + voxelSize/2, midZ*voxelSize - offsetZ);
     mesh.userData = { esPuente:true, puente:p };
     bridgeGroup.add(mesh);
   });
