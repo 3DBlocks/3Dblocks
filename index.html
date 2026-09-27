@@ -609,7 +609,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v158</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v159</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -1787,6 +1787,7 @@ document.getElementById('grillaModeBtn').addEventListener('click', ()=>{
   if (!grillaFinaOn && !voxels.length){ setStatus('Cargá un modelo primero.', 'err'); return; }
   grillaFinaOn = !grillaFinaOn;
   btn.classList.toggle('active', grillaFinaOn);
+  drawLayerDiagram(); // muestra u oculta al toque las líneas guía de medio paso
   setStatus(grillaFinaOn
     ? 'Grilla fina activada: pintá con el pincel donde quieras — cae en el paso más cercano al clic, alineado o a medio paso, sin necesitar bloques vecinos.'
     : 'Grilla fina desactivada: se vuelve a pintar alineado como siempre.', 'ok');
@@ -6386,6 +6387,21 @@ function drawLayerDiagram(){
     diagCtx.beginPath(); diagCtx.moveTo(ox, oy+z*cell); diagCtx.lineTo(ox+gridW, oy+z*cell); diagCtx.stroke();
   }
 
+  // Líneas de guía a MEDIO paso — solo mientras Grilla está activada, para
+  // que se vea de antemano dónde va a caer un bloque libre antes de soltarlo.
+  if (grillaFinaOn){
+    diagCtx.save();
+    diagCtx.strokeStyle = 'rgba(52,223,245,0.28)';
+    diagCtx.setLineDash([Math.max(2,cell*0.06), Math.max(2,cell*0.08)]);
+    for (let x=0; x<dims.x; x++){
+      diagCtx.beginPath(); diagCtx.moveTo(ox+(x+0.5)*cell, oy); diagCtx.lineTo(ox+(x+0.5)*cell, oy+gridH); diagCtx.stroke();
+    }
+    for (let z=0; z<dims.z; z++){
+      diagCtx.beginPath(); diagCtx.moveTo(ox, oy+(z+0.5)*cell); diagCtx.lineTo(ox+gridW, oy+(z+0.5)*cell); diagCtx.stroke();
+    }
+    diagCtx.restore();
+  }
+
   // footprint already built (any layer below current)
   const below = new Map();
   const here = new Map();
@@ -6433,19 +6449,19 @@ function drawLayerDiagram(){
   // entre dos celdas (por eso +0.5: acá la celda "x" ocupa el rango [x, x+1),
   // así que su borde derecho — el punto medio real entre dos bloques — cae
   // justo en x+1, que es lo mismo que decir "centro de la celda + 0.5").
-  // Se dibujan más chicos y con borde blanco, para que se note que no están
-  // alineados como los demás.
+  // Del MISMO tamaño que un bloque normal — antes salían más chicos y se
+  // veían feos, sin ninguna razón real para que fueran distintos.
   piezasLibres.filter(p => p.y === currentLayer).forEach(p=>{
     const pxCenter = ox + (p.x + 0.5) * cell;
     const pyCenter = oy + (p.z + 0.5) * cell;
-    const s2 = cell * 0.62;
+    const s2 = cell - inset*2;
     const grad = diagCtx.createLinearGradient(pxCenter-s2/2, pyCenter-s2/2, pxCenter+s2/2, pyCenter+s2/2);
     grad.addColorStop(0, shadeColor(p.color, 18)); grad.addColorStop(1, shadeColor(p.color, -14));
     diagCtx.fillStyle = grad;
     roundRect(diagCtx, pxCenter-s2/2, pyCenter-s2/2, s2, s2, Math.min(5, s2*0.22));
     diagCtx.fill();
-    diagCtx.strokeStyle = 'rgba(255,255,255,0.75)';
-    diagCtx.lineWidth = 1.4;
+    diagCtx.strokeStyle = 'rgba(0,0,0,0.35)';
+    diagCtx.lineWidth = 1;
     diagCtx.stroke();
     if (s2 > 10){
       diagCtx.beginPath();
