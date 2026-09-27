@@ -609,7 +609,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v161</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v163</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -1013,7 +1013,12 @@
       <p style="font-size:10.5px; color:var(--text-faint); margin:10px 0 9px; line-height:1.5;">Guardá tu diseño ya procesado como .json (mucho más liviano que el .dae original) — quien lo reciba solo necesita este visor y ese archivo, sin Studio 2.0.</p>
       <button class="btn wide primary" id="saveBtn" style="width:100%; margin-bottom:8px;">💾 Guardar</button>
       <button class="btn wide" id="exportBtn" style="width:100%; margin-bottom:8px;">⇩ Descargar copia nueva (.json)</button>
-      <button class="btn wide" id="exportLdrBtn" style="width:100%; margin-bottom:8px;" title="Genera un archivo .ldr (formato LDraw) para abrirlo en Bricklink Studio 2.0 — ahí podés usar su render y sus videos. Los colores se mapean al color oficial de LDraw más parecido; las piezas salen como ladrillos 1x1 (3005.dat), en la misma posición.">🧱 Exportar a Studio (.ldr)</button>
+      <button class="btn wide" id="exportLdrBtn" style="width:100%; margin-bottom:6px;" title="Genera un archivo .ldr (formato LDraw) para abrirlo en Bricklink Studio 2.0 — ahí podés usar su render y sus videos. Los colores se mapean al color oficial de LDraw más parecido. Por defecto usa el ladrillo 1x1 común (3005.dat), pero podés poner el nombre de tu propia pieza de Part Designer acá abajo.">🧱 Exportar a Studio (.ldr)</button>
+      <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+        <label for="ldrPartFileInput" style="font-size:11.5px; color:var(--text-dim); white-space:nowrap;" title="Si creaste tu propia pieza en Studio (Part Designer) y ya la tenés en tu librería, poné acá su nombre de archivo (.dat) para que la exportación la use a ELLA en vez del ladrillo 1x1 común.">Pieza (.dat):</label>
+        <input id="ldrPartFileInput" type="text" value="3005.dat" spellcheck="false" style="flex:1; min-width:0; background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:4px 8px; font-size:12px; font-family:monospace;">
+      </div>
+      <button class="btn wide" id="exportObjBtn" style="width:100%; margin-bottom:8px;" title="Genera el diseño COMPLETO como .obj + .mtl, con la forma real del bloque (Magic Block, muesca, etc.) y los colores de cada pieza — listo para importar en Spline u otro programa de render, sin necesitar Part Designer.">🎨 Exportar diseño completo (.obj)</button>
       <p style="font-size:10.5px; color:var(--text-faint); margin:2px 0 9px; line-height:1.5;">O genera un código QR que abre este visor con el diseño ya cargado, listo para armar — sin botón de importar. Los diseños chicos van comprimidos directo en el código; los grandes necesitan que subas tu .json a algún sitio y pegues ese link (te lo pide automáticamente si hace falta).</p>
       <button class="btn wide" id="qrBtn" style="width:100%;">▦ Generar código QR</button>
     </div>
@@ -8060,13 +8065,15 @@ function colorLdrawMasCercano(hex){
 
 function exportarALDraw(){
   if (!voxels.length && !piezasLibres.length){ setStatus('No hay ningún modelo para exportar.', 'err'); return; }
-  const ANCHO = 20, ALTO = 24; // LDU de un ladrillo 1x1 (20x20 de base, 24 de alto)
+  const ANCHO = 20, ALTO = 24; // LDU de un ladrillo 1x1 (20x20 de base, 24 de alto) — vale también como referencia de espaciado para una pieza propia del mismo porte
+  const archivoPieza = (document.getElementById('ldrPartFileInput').value || '3005.dat').trim() || '3005.dat';
+  localStorage.setItem(LDR_PART_KEY, archivoPieza);
   const modelName = (document.getElementById('modelNameText').textContent || ('Diseño ' + MARCA_NOMBRE)).trim();
   const lineas = [];
   lineas.push('0 ' + modelName);
   lineas.push('0 Name: ' + modelName.replace(/[^\w.-]+/g,'_') + '.ldr');
   lineas.push('0 Author: ' + MARCA_NOMBRE);
-  lineas.push('0 Exportado desde ' + MARCA_NOMBRE + ' — un bloque = un ladrillo 3005.dat (1x1)');
+  lineas.push('0 Exportado desde ' + MARCA_NOMBRE + ' — un bloque = una pieza "' + archivoPieza + '"');
   lineas.push('0 !LDRAW_ORG Unofficial_Model');
   lineas.push('0 BFC CERTIFY CCW');
   const agregarBloque = (x, y, z, color)=>{
@@ -8074,7 +8081,7 @@ function exportarALDraw(){
     // LDraw tiene el eje Y invertido (para abajo) respecto de este programa
     // (para arriba), por eso el signo menos en la Y.
     const lx = Math.round(x*ANCHO), ly = Math.round(-y*ALTO), lz = Math.round(z*ANCHO);
-    lineas.push('1 ' + codigo + ' ' + lx + ' ' + ly + ' ' + lz + ' 1 0 0 0 1 0 0 0 1 3005.dat');
+    lineas.push('1 ' + codigo + ' ' + lx + ' ' + ly + ' ' + lz + ' 1 0 0 0 1 0 0 0 1 ' + archivoPieza);
   };
   voxels.forEach(v => agregarBloque(v.x, v.y, v.z, v.color));
   piezasLibres.forEach(p => agregarBloque(p.x, p.y, p.z, p.color));
@@ -8087,9 +8094,74 @@ function exportarALDraw(){
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
   const totalPiezas = voxels.length + piezasLibres.length;
-  setStatus('Exportado ' + baseName + '.ldr (' + totalPiezas + ' ladrillos). En Studio: File > Import > LDraw File.', 'ok');
+  setStatus('Exportado ' + baseName + '.ldr (' + totalPiezas + ' piezas "' + archivoPieza + '"). En Studio: File > Import > LDraw File.', 'ok');
 }
+const LDR_PART_KEY = '3dblock.ldrPartFile';
+(function restaurarPiezaLdr(){
+  const guardada = localStorage.getItem(LDR_PART_KEY);
+  if (guardada) document.getElementById('ldrPartFileInput').value = guardada;
+})();
 document.getElementById('exportLdrBtn').addEventListener('click', exportarALDraw);
+
+/* ---------------------------- Exportar el diseño completo a .obj + .mtl ----------------------------
+   A diferencia del .ldr (pensado para Studio, con piezas LEGO reales), esto saca
+   la forma EXACTA que ya se ve en el visor — Magic Block, muesca, lo que esté
+   elegido — con el color real de cada bloque, todo en un solo archivo. Sirve
+   para llevar el diseño completo a Spline, o a cualquier programa que lea .obj,
+   sin pasar por Part Designer ni por una pieza personalizada de Studio. */
+function exportarObjColoreado(){
+  const piezas = voxels.concat(piezasLibres);
+  if (!piezas.length){ setStatus('No hay ningún modelo para exportar.', 'err'); return; }
+  // La misma malla de un solo bloque (ya con estilo, tamaño y reparaciones
+  // aplicadas) se reutiliza para cada pieza — solo cambia dónde se la coloca.
+  const geo = buildBrickGeometry(voxelSize);
+  const posAttr = geo.attributes.position;
+  const idxAttr = geo.index;
+  const localVerts = [];
+  for (let i=0; i<posAttr.count; i++) localVerts.push([posAttr.getX(i), posAttr.getY(i), posAttr.getZ(i)]);
+  const localTris = [];
+  if (idxAttr){ for (let i=0; i<idxAttr.count; i+=3) localTris.push([idxAttr.getX(i), idxAttr.getX(i+1), idxAttr.getX(i+2)]); }
+  else { for (let i=0; i<posAttr.count; i+=3) localTris.push([i, i+1, i+2]); }
+
+  const modelName = (document.getElementById('modelNameText').textContent || ('Diseño ' + MARCA_NOMBRE)).trim();
+  const baseName = (modelName || 'diseno').replace(/[^\w.-]+/g,'_') || 'diseno';
+  const offsetX = (dims.x*voxelSize)/2, offsetZ = (dims.z*voxelSize)/2;
+
+  const materiales = new Map(); // hex -> nombre de material saneado
+  const mtlLineas = [];
+  const objLineas = ['# ' + modelName + ' — exportado desde ' + MARCA_NOMBRE, 'mtllib ' + baseName + '.mtl'];
+  let vertOffsetGlobal = 0;
+
+  piezas.forEach((p, idx)=>{
+    const wx = p.x*voxelSize - offsetX, wy = p.y*voxelSize + voxelSize/2, wz = p.z*voxelSize - offsetZ;
+    const color = cleanColor(p.color, '#f2b134');
+    let nombreMat = materiales.get(color);
+    if (!nombreMat){
+      nombreMat = 'c' + color.replace('#','');
+      materiales.set(color, nombreMat);
+      const rgb = hexToRgbArr(color);
+      mtlLineas.push('newmtl ' + nombreMat, 'Kd ' + (rgb[0]/255).toFixed(3) + ' ' + (rgb[1]/255).toFixed(3) + ' ' + (rgb[2]/255).toFixed(3), 'Ka 0 0 0', 'Ks 0.08 0.08 0.08', '');
+    }
+    objLineas.push('o bloque_' + idx);
+    localVerts.forEach(v=> objLineas.push('v ' + (v[0]+wx).toFixed(4) + ' ' + (v[1]+wy).toFixed(4) + ' ' + (v[2]+wz).toFixed(4)));
+    objLineas.push('usemtl ' + nombreMat);
+    localTris.forEach(t=> objLineas.push('f ' + (t[0]+vertOffsetGlobal+1) + ' ' + (t[1]+vertOffsetGlobal+1) + ' ' + (t[2]+vertOffsetGlobal+1)));
+    vertOffsetGlobal += localVerts.length;
+  });
+
+  const descargar = (contenido, nombre)=>{
+    const blob = new Blob([contenido], { type:'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = nombre;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+  descargar(mtlLineas.join('\n')+'\n', baseName + '.mtl');
+  descargar(objLineas.join('\n')+'\n', baseName + '.obj');
+  setStatus('Exportado ' + baseName + '.obj + ' + baseName + '.mtl — ' + piezas.length + ' bloques, ' + materiales.size + ' color(es).', 'ok');
+}
+document.getElementById('exportObjBtn').addEventListener('click', exportarObjColoreado);
 
 function buildCompactPayload(){
   const palette = [];
