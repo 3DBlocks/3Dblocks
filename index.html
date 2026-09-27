@@ -609,7 +609,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v155</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v156</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -1744,7 +1744,7 @@ function colocarOPintarPiezaLibre(x, y, z){
     piezasLibres.push({ x, y, z, color: paintColor });
     setStatus('Bloque puesto a medio paso de grilla, entre sus dos vecinos.', 'ok');
   }
-  refreshPiezasLibres();
+  drawLayerDiagram(); refreshLayerUI(); // refreshLayerUI ya redibuja el 2D y el 3D (rebuildMesh3D → refreshPiezasLibres)
 }
 
 function borrarPiezaLibreEn(x, y, z){
@@ -1752,7 +1752,7 @@ function borrarPiezaLibreEn(x, y, z){
   if (idx < 0) return false;
   pushUndoSnapshot();
   piezasLibres.splice(idx, 1);
-  refreshPiezasLibres();
+  refreshLayerUI();
   setStatus('Bloque libre borrado.', 'ok');
   return true;
 }
@@ -6417,6 +6417,32 @@ function drawLayerDiagram(){
     }
   });
 
+  // Bloques libres (Grilla fina): a medio paso, centrados justo sobre el BORDE
+  // entre dos celdas (por eso +0.5: acá la celda "x" ocupa el rango [x, x+1),
+  // así que su borde derecho — el punto medio real entre dos bloques — cae
+  // justo en x+1, que es lo mismo que decir "centro de la celda + 0.5").
+  // Se dibujan más chicos y con borde blanco, para que se note que no están
+  // alineados como los demás.
+  piezasLibres.filter(p => p.y === currentLayer).forEach(p=>{
+    const pxCenter = ox + (p.x + 0.5) * cell;
+    const pyCenter = oy + (p.z + 0.5) * cell;
+    const s2 = cell * 0.62;
+    const grad = diagCtx.createLinearGradient(pxCenter-s2/2, pyCenter-s2/2, pxCenter+s2/2, pyCenter+s2/2);
+    grad.addColorStop(0, shadeColor(p.color, 18)); grad.addColorStop(1, shadeColor(p.color, -14));
+    diagCtx.fillStyle = grad;
+    roundRect(diagCtx, pxCenter-s2/2, pyCenter-s2/2, s2, s2, Math.min(5, s2*0.22));
+    diagCtx.fill();
+    diagCtx.strokeStyle = 'rgba(255,255,255,0.75)';
+    diagCtx.lineWidth = 1.4;
+    diagCtx.stroke();
+    if (s2 > 10){
+      diagCtx.beginPath();
+      diagCtx.arc(pxCenter, pyCenter, s2*0.22, 0, Math.PI*2);
+      diagCtx.fillStyle = shadeColor(p.color, -22);
+      diagCtx.fill();
+    }
+  });
+
   // Contorno de las piezas largas (1x2 / 1x3): marca con una línea más marcada
   // los bloques que forman UNA SOLA pieza, para que al armar se vea claro cuáles
   // van juntos y no como bloques sueltos.
@@ -6588,12 +6614,15 @@ function refreshLayerUI(){
   document.getElementById('prevBtn').disabled = currentLayer <= 0;
   document.getElementById('nextBtn').disabled = currentLayer >= maxLayer;
 
-  const here = voxels.filter(v => Math.round(v.y) === currentLayer).length;
-  const accum = voxels.filter(v => Math.round(v.y) <= currentLayer).length;
+  const libresHere = piezasLibres.filter(p => p.y === currentLayer).length;
+  const libresAccum = piezasLibres.filter(p => p.y <= currentLayer).length;
+  const here = voxels.filter(v => Math.round(v.y) === currentLayer).length + libresHere;
+  const accum = voxels.filter(v => Math.round(v.y) <= currentLayer).length + libresAccum;
+  const totalConLibres = voxels.length + piezasLibres.length;
   document.getElementById('metaLayerCount').textContent = here;
   document.getElementById('metaAccum').textContent = accum;
-  document.getElementById('metaTotal').textContent = voxels.length;
-  document.getElementById('metaRemaining').textContent = voxels.length - accum;
+  document.getElementById('metaTotal').textContent = totalConLibres;
+  document.getElementById('metaRemaining').textContent = totalConLibres - accum;
   document.getElementById('diagramCount').textContent = here;
 
   highlightTrack();
