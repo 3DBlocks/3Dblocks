@@ -609,7 +609,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v159</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v160</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -9248,6 +9248,10 @@ function deleteSelection(){
   const aBorrar = new Set(vs);
   const quedan = voxels.filter(v => !aBorrar.has(v));
   voxels.length = 0; voxels.push(...quedan);
+  // Los bloques libres (Grilla) viven en su propia lista aparte — si no se
+  // sacan de ACÁ también, quedan dibujados aunque ya no estén "seleccionados".
+  const quedanLibres = piezasLibres.filter(p => !aBorrar.has(p));
+  piezasLibres.length = 0; piezasLibres.push(...quedanLibres);
   clearBoxSelection();
   drawLayerDiagram(); rebuildMesh3D(); refreshLayerUI();
   const st = document.getElementById('statCount'); if (st) st.textContent = String(voxels.length);
@@ -9549,7 +9553,14 @@ window.addEventListener('pointerup', e=>{
       applyToolAtCell(gx, gz);
     } else if (activeTool === 'select'){
       const hit = voxels.find(v => v.x===gx && Math.round(v.y)===currentLayer && v.z===gz);
-      setBoxSelection(hit ? new Set([hit.x+','+Math.round(hit.y)+','+hit.z]) : null);
+      if (hit){
+        setBoxSelection(new Set([hit.x+','+Math.round(hit.y)+','+hit.z]));
+      } else {
+        // No hay un bloque NORMAL justo ahí — puede ser un bloque libre (Grilla),
+        // que vive a medio paso y no cae en ningún gx/gz entero exacto.
+        const libre = piezaLibreBajoElCursor(e);
+        setBoxSelection(libre ? new Set([libre.x+','+libre.y+','+libre.z]) : null);
+      }
     } else if (activeTool === 'replace'){
       const hit = voxels.find(v => v.x===gx && Math.round(v.y)===currentLayer && v.z===gz);
       if (hit){
@@ -9596,6 +9607,10 @@ window.addEventListener('pointerup', e=>{
       const sel = new Set();
       voxels.forEach(v=>{
         if (Math.round(v.y)===currentLayer && v.x>=x0 && v.x<=x1 && v.z>=z0 && v.z<=z1) sel.add(v.x+','+currentLayer+','+v.z);
+      });
+      // Los bloques libres (Grilla) también entran si caen dentro del rectángulo.
+      piezasLibres.forEach(p=>{
+        if (p.y===currentLayer && p.x>=x0 && p.x<=x1 && p.z>=z0 && p.z<=z1) sel.add(p.x+','+p.y+','+p.z);
       });
       setBoxSelection(sel);
     } else {
@@ -9857,7 +9872,7 @@ renderer.domElement.addEventListener('pointerup', e=>{
       // ya estaba seleccionado, y si ya estaba, lo saca — así se arma una
       // selección a mano bloque por bloque sin perder lo anterior.
       if (hayModeloEnElVisor()){
-        const v = bloqueBajoElCursor(e);
+        const v = bloqueBajoElCursor(e) || piezaLibreBajoElCursor(e);
         const k = v ? v.x+','+Math.round(v.y)+','+v.z : null;
         if (e.ctrlKey || e.metaKey){
           if (!k) return; // clic al vacío con Ctrl: no toca la selección
@@ -9886,6 +9901,18 @@ renderer.domElement.addEventListener('pointerup', e=>{
         const sx = hostRect.left + (p.x*0.5+0.5)*hostRect.width;
         const sy = hostRect.top + (-p.y*0.5+0.5)*hostRect.height;
         if (sx>=rx0 && sx<=rx1 && sy>=ry0 && sy<=ry1) sel.add(v.x+','+Math.round(v.y)+','+v.z);
+      });
+      // Los bloques libres (Grilla) también entran al recuadro si su posición
+      // en pantalla cae adentro — misma cuenta, mismo criterio.
+      piezasLibres.forEach(pl=>{
+        const enCapaVisible = showFullDesign || (showBelowLayers ? pl.y <= currentLayer : pl.y === currentLayer);
+        if (!enCapaVisible) return;
+        p.set(pl.x*voxelSize - offsetX, pl.y*voxelSize + voxelSize/2, pl.z*voxelSize - offsetZ);
+        p.project(camera);
+        if (p.z < -1 || p.z > 1) return;
+        const sx = hostRect.left + (p.x*0.5+0.5)*hostRect.width;
+        const sy = hostRect.top + (-p.y*0.5+0.5)*hostRect.height;
+        if (sx>=rx0 && sx<=rx1 && sy>=ry0 && sy<=ry1) sel.add(pl.x+','+pl.y+','+pl.z);
       });
       if ((e.ctrlKey || e.metaKey) && boxSelection){
         boxSelection.forEach(k=>sel.add(k));
