@@ -609,7 +609,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v160</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v161</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -1013,6 +1013,7 @@
       <p style="font-size:10.5px; color:var(--text-faint); margin:10px 0 9px; line-height:1.5;">Guardá tu diseño ya procesado como .json (mucho más liviano que el .dae original) — quien lo reciba solo necesita este visor y ese archivo, sin Studio 2.0.</p>
       <button class="btn wide primary" id="saveBtn" style="width:100%; margin-bottom:8px;">💾 Guardar</button>
       <button class="btn wide" id="exportBtn" style="width:100%; margin-bottom:8px;">⇩ Descargar copia nueva (.json)</button>
+      <button class="btn wide" id="exportLdrBtn" style="width:100%; margin-bottom:8px;" title="Genera un archivo .ldr (formato LDraw) para abrirlo en Bricklink Studio 2.0 — ahí podés usar su render y sus videos. Los colores se mapean al color oficial de LDraw más parecido; las piezas salen como ladrillos 1x1 (3005.dat), en la misma posición.">🧱 Exportar a Studio (.ldr)</button>
       <p style="font-size:10.5px; color:var(--text-faint); margin:2px 0 9px; line-height:1.5;">O genera un código QR que abre este visor con el diseño ya cargado, listo para armar — sin botón de importar. Los diseños chicos van comprimidos directo en el código; los grandes necesitan que subas tu .json a algún sitio y pegues ese link (te lo pide automáticamente si hace falta).</p>
       <button class="btn wide" id="qrBtn" style="width:100%;">▦ Generar código QR</button>
     </div>
@@ -1727,7 +1728,12 @@ function refreshPiezasLibres(){
   piezasLibres.forEach(p=>{
     const enCapaVisible = showFullDesign || (showBelowLayers ? p.y <= currentLayer : p.y === currentLayer);
     if (!enCapaVisible) return;
-    const mat = new THREE.MeshBasicMaterial({ toneMapped:false, color: p.color || '#9aa3ad' });
+    // Misma convención que los bloques normales: gris si es una capa YA
+    // armada (abajo de la actual), color real si es la capa de ahora, si se
+    // pidió "colores reales" (video) o si se está viendo el diseño completo.
+    const esCapaActual = showFullDesign || coloresReales || p.y === currentLayer;
+    const colorPieza = esCapaActual ? (p.color || '#9aa3ad') : '#'+belowLayerColor.getHexString();
+    const mat = new THREE.MeshBasicMaterial({ toneMapped:false, color: colorPieza });
     if (esMagic()){ mat.side = THREE.DoubleSide; mat.vertexColors = true; }
     if (showMeshTexture && !esMagic()) mat.map = getMeshTexture();
     const mesh = new THREE.Mesh(geo, mat);
@@ -8019,6 +8025,72 @@ function parseJsonModelConPiezasLibres(obj){
 }
 
 // Arma el formato liviano (paleta + índices) a partir de la lista de bloques actual.
+/* ---------------------------- Exportar a Bricklink Studio 2.0 (.ldr) ----------------------------
+   Studio no tiene un formato .io público (es propio y cerrado), pero SÍ puede
+   IMPORTAR archivos LDraw (.ldr / .mpd) directo — File > Import > LDraw File.
+   Una vez adentro, es un modelo de Studio como cualquier otro: se puede
+   renderizar, animar, y hasta guardarlo como .io desde ahí mismo.
+
+   Cada bloque sale como un ladrillo 1x1 real (3005.dat — el mismo que ya
+   vimos en tus archivos de Studio), en su misma posición. El color se
+   convierte al color OFICIAL de LDraw más parecido: LDraw no acepta
+   cualquier color de la forma en que sí lo hace este programa, así que un
+   tono muy particular puede salir un poquito distinto — pero siempre el más
+   cercano posible dentro de la paleta real de piezas LEGO. */
+const PALETA_LDRAW = [
+  [0,'#05131D'],[1,'#0055BF'],[2,'#237841'],[3,'#008F9B'],[4,'#C91A09'],[5,'#C870A0'],
+  [6,'#583927'],[7,'#9BA19D'],[8,'#6D6E5C'],[9,'#B4D2E3'],[10,'#4B9F4A'],[11,'#55A5AF'],
+  [12,'#F2705E'],[13,'#FC97AC'],[14,'#F2CD37'],[15,'#FFFFFF'],[17,'#C2DAB8'],[18,'#FBE696'],
+  [19,'#E4CD9E'],[20,'#C9CAE2'],[22,'#81007B'],[23,'#2032B0'],[25,'#FE8A18'],[26,'#923978'],
+  [27,'#BBE90B'],[28,'#958A73'],[29,'#E4ADC8'],[68,'#F3CF9B'],[70,'#582A12'],[71,'#A0A5A9'],
+  [72,'#6C6E68'],[73,'#5A93DB'],[74,'#73DCA1'],[77,'#FECCCF'],[84,'#AA7D55'],[85,'#3F3691'],
+  [92,'#BB805A'],[191,'#F8BB3D'],[288,'#184632'],[308,'#352100'],[320,'#720E0F'],
+  [321,'#469BC3'],[322,'#68C3E2'],[323,'#D3F2EA'],[326,'#E2F99A'],
+];
+function colorLdrawMasCercano(hex){
+  const c = hexToRgbArr(cleanColor(hex, '#f2b134'));
+  let mejorCodigo = 15, mejorDist = Infinity;
+  PALETA_LDRAW.forEach(([codigo, hexRef])=>{
+    const r = hexToRgbArr(hexRef);
+    const dist = (c[0]-r[0])**2 + (c[1]-r[1])**2 + (c[2]-r[2])**2;
+    if (dist < mejorDist){ mejorDist = dist; mejorCodigo = codigo; }
+  });
+  return mejorCodigo;
+}
+
+function exportarALDraw(){
+  if (!voxels.length && !piezasLibres.length){ setStatus('No hay ningún modelo para exportar.', 'err'); return; }
+  const ANCHO = 20, ALTO = 24; // LDU de un ladrillo 1x1 (20x20 de base, 24 de alto)
+  const modelName = (document.getElementById('modelNameText').textContent || ('Diseño ' + MARCA_NOMBRE)).trim();
+  const lineas = [];
+  lineas.push('0 ' + modelName);
+  lineas.push('0 Name: ' + modelName.replace(/[^\w.-]+/g,'_') + '.ldr');
+  lineas.push('0 Author: ' + MARCA_NOMBRE);
+  lineas.push('0 Exportado desde ' + MARCA_NOMBRE + ' — un bloque = un ladrillo 3005.dat (1x1)');
+  lineas.push('0 !LDRAW_ORG Unofficial_Model');
+  lineas.push('0 BFC CERTIFY CCW');
+  const agregarBloque = (x, y, z, color)=>{
+    const codigo = colorLdrawMasCercano(color);
+    // LDraw tiene el eje Y invertido (para abajo) respecto de este programa
+    // (para arriba), por eso el signo menos en la Y.
+    const lx = Math.round(x*ANCHO), ly = Math.round(-y*ALTO), lz = Math.round(z*ANCHO);
+    lineas.push('1 ' + codigo + ' ' + lx + ' ' + ly + ' ' + lz + ' 1 0 0 0 1 0 0 0 1 3005.dat');
+  };
+  voxels.forEach(v => agregarBloque(v.x, v.y, v.z, v.color));
+  piezasLibres.forEach(p => agregarBloque(p.x, p.y, p.z, p.color));
+
+  const blob = new Blob([lineas.join('\r\n') + '\r\n'], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const baseName = (modelName || 'diseno').replace(/[^\w.-]+/g,'_');
+  const a = document.createElement('a');
+  a.href = url; a.download = baseName + '.ldr';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  const totalPiezas = voxels.length + piezasLibres.length;
+  setStatus('Exportado ' + baseName + '.ldr (' + totalPiezas + ' ladrillos). En Studio: File > Import > LDraw File.', 'ok');
+}
+document.getElementById('exportLdrBtn').addEventListener('click', exportarALDraw);
+
 function buildCompactPayload(){
   const palette = [];
   const paletteIndex = new Map();
