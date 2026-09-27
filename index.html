@@ -609,7 +609,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v157</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v158</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -1718,6 +1718,12 @@ function refreshPiezasLibres(){
   if (!piezasLibres.length) return;
   const offsetX = (dims.x*voxelSize)/2, offsetZ = (dims.z*voxelSize)/2;
   const geo = buildBrickGeometry(voxelSize); // el MISMO bloque de siempre — mismo tamaño y mismo estilo elegido (muesca, Magic Block, etc.)
+  // Mismo contorno que usa el resto del modelo (dientes, muescas y el botón
+  // con el Magic Block; las 12 aristas con el bloque de caja) — antes estos
+  // bloques salían sin ninguna línea encima, y por eso se notaban distintos.
+  const contornoPos = contornoTemplate(geo, esMagic());
+  const contornoGeo = new THREE.BufferGeometry();
+  contornoGeo.setAttribute('position', new THREE.BufferAttribute(contornoPos, 3));
   piezasLibres.forEach(p=>{
     const enCapaVisible = showFullDesign || (showBelowLayers ? p.y <= currentLayer : p.y === currentLayer);
     if (!enCapaVisible) return;
@@ -1731,6 +1737,11 @@ function refreshPiezasLibres(){
     mesh.position.set(p.x*voxelSize - offsetX, p.y*voxelSize + voxelSize/2, p.z*voxelSize - offsetZ);
     mesh.userData = { esPiezaLibre:true, pieza:p };
     bridgeGroup.add(mesh);
+
+    const lineMat = new THREE.LineBasicMaterial({ color: 0x000000, transparent:true, opacity:0.85 });
+    const lineMesh = new THREE.LineSegments(contornoGeo, lineMat);
+    lineMesh.position.copy(mesh.position);
+    bridgeGroup.add(lineMesh);
   });
 }
 
@@ -1766,7 +1777,8 @@ function piezaLibreBajoElCursor(e){
   const ndc = new THREE.Vector2(((e.clientX-rect.left)/rect.width)*2-1, -((e.clientY-rect.top)/rect.height)*2+1);
   const ray = new THREE.Raycaster();
   ray.setFromCamera(ndc, camera);
-  const hits = ray.intersectObjects(bridgeGroup.children, false);
+  const hits = ray.intersectObjects(bridgeGroup.children, false)
+    .filter(h => h.object.userData && h.object.userData.pieza);
   return hits.length ? hits[0].object.userData.pieza : null;
 }
 
@@ -9087,7 +9099,9 @@ function selectionVoxels(){
   boxSelection.forEach(key=>{
     const [x,y,z] = key.split(',').map(Number);
     const v = voxels.find(v=>v.x===x && Math.round(v.y)===y && v.z===z);
-    if (v) out.push(v);
+    if (v){ out.push(v); return; }
+    const p = piezasLibres.find(p=>p.x===x && p.y===y && p.z===z);
+    if (p) out.push(p);
   });
   return out;
 }
@@ -9180,10 +9194,10 @@ document.getElementById('selPasteBtn').addEventListener('click', ()=>pasteClipbo
 document.getElementById('selMirrorBtn').addEventListener('click', copyAndMirror);
 document.getElementById('selClearBtn').addEventListener('click', clearBoxSelection);
 document.getElementById('selDeleteBtn').addEventListener('click', ()=>deleteSelection());
-document.getElementById('selMoveLeft').addEventListener('click', ()=>moveSelection(-1,0,0));
-document.getElementById('selMoveRight').addEventListener('click', ()=>moveSelection(1,0,0));
-document.getElementById('selMoveBack').addEventListener('click', ()=>moveSelection(0,0,-1));
-document.getElementById('selMoveFwd').addEventListener('click', ()=>moveSelection(0,0,1));
+document.getElementById('selMoveLeft').addEventListener('click', ()=>moveSelection(grillaFinaOn?-0.5:-1,0,0));
+document.getElementById('selMoveRight').addEventListener('click', ()=>moveSelection(grillaFinaOn?0.5:1,0,0));
+document.getElementById('selMoveBack').addEventListener('click', ()=>moveSelection(0,0,grillaFinaOn?-0.5:-1));
+document.getElementById('selMoveFwd').addEventListener('click', ()=>moveSelection(0,0,grillaFinaOn?0.5:1));
 document.getElementById('selMoveUpY').addEventListener('click', ()=>moveSelection(0,1,0));
 document.getElementById('selMoveDownY').addEventListener('click', ()=>moveSelection(0,-1,0));
 window.addEventListener('keydown', e=>{
@@ -9198,14 +9212,15 @@ window.addEventListener('keydown', e=>{
     e.preventDefault();
     deleteSelection();
   }
-  // FLECHAS: mueve la selección de a un bloque. Solas mueven en el plano
-  // horizontal; con Shift, hacia arriba y abajo.
+  // FLECHAS: mueve la selección de a un bloque (o medio, con Grilla activada).
+  // Solas mueven en el plano horizontal; con Shift, hacia arriba y abajo.
   else if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){
     e.preventDefault();
-    if (e.key === 'ArrowLeft')  moveSelection(-1,0,0);
-    if (e.key === 'ArrowRight') moveSelection(1,0,0);
-    if (e.key === 'ArrowUp')    e.shiftKey ? moveSelection(0,1,0) : moveSelection(0,0,-1);
-    if (e.key === 'ArrowDown')  e.shiftKey ? moveSelection(0,-1,0) : moveSelection(0,0,1);
+    const paso = grillaFinaOn ? 0.5 : 1;
+    if (e.key === 'ArrowLeft')  moveSelection(-paso,0,0);
+    if (e.key === 'ArrowRight') moveSelection(paso,0,0);
+    if (e.key === 'ArrowUp')    e.shiftKey ? moveSelection(0,1,0) : moveSelection(0,0,-paso);
+    if (e.key === 'ArrowDown')  e.shiftKey ? moveSelection(0,-1,0) : moveSelection(0,0,paso);
   }
 });
 
@@ -9233,21 +9248,42 @@ function moveSelection(dx, dy, dz, sinDeshacer){
   if (!sinDeshacer) pushUndoSnapshot();
   const enMovimiento = new Set(vs);
   const destinos = new Set(vs.map(v => (v.x+dx)+','+(Math.round(v.y)+dy)+','+(v.z+dz)));
-  const quedan = voxels.filter(v =>
-    enMovimiento.has(v) || !destinos.has(v.x+','+Math.round(v.y)+','+v.z));
-  voxels.length = 0; voxels.push(...quedan);
+
+  // Saca del camino lo que YA estaba exactamente en el destino (bloque normal
+  // o pieza libre) para no duplicar — sin tocar lo que se está moviendo.
+  const quedanVoxels = voxels.filter(v => enMovimiento.has(v) || !destinos.has(v.x+','+Math.round(v.y)+','+v.z));
+  voxels.length = 0; voxels.push(...quedanVoxels);
+  const quedanLibres = piezasLibres.filter(p => enMovimiento.has(p) || !destinos.has(p.x+','+p.y+','+p.z));
+  piezasLibres.length = 0; piezasLibres.push(...quedanLibres);
+
   vs.forEach(v=>{ v.x += dx; v.y = Math.round(v.y) + dy; v.z += dz; });
 
+  // Con Grilla, el paso puede ser de medio bloque: cada pieza movida puede
+  // haber cambiado de bando. Si quedó alineada en X y en Z, es un bloque
+  // normal (aunque haya llegado desde una pieza libre); si no, es una pieza
+  // libre (aunque haya salido de un bloque normal). Se reparten de nuevo.
+  const sinLosMovidos = voxels.filter(v => !enMovimiento.has(v));
+  voxels.length = 0; voxels.push(...sinLosMovidos);
+  const librenSinLosMovidos = piezasLibres.filter(p => !enMovimiento.has(p));
+  piezasLibres.length = 0; piezasLibres.push(...librenSinLosMovidos);
+  vs.forEach(v=>{
+    if (Number.isInteger(v.x) && Number.isInteger(v.z)) voxels.push(v);
+    else piezasLibres.push(v);
+  });
+
   // Si algo quedó en negativo, corre TODO el modelo para volver a positivo
-  const minX = Math.min(0, ...voxels.map(v=>v.x));
-  const minY = Math.min(0, ...voxels.map(v=>Math.round(v.y)));
-  const minZ = Math.min(0, ...voxels.map(v=>v.z));
+  // (bloques normales Y piezas libres juntos, para que no se desalineen).
+  const todos = voxels.concat(piezasLibres);
+  const minX = Math.min(0, ...todos.map(v=>v.x));
+  const minY = Math.min(0, ...todos.map(v=>Math.round(v.y)));
+  const minZ = Math.min(0, ...todos.map(v=>v.z));
   if (minX<0 || minY<0 || minZ<0){
     voxels.forEach(v=>{ v.x-=minX; v.y=Math.round(v.y)-minY; v.z-=minZ; });
+    piezasLibres.forEach(p=>{ p.x-=minX; p.y-=minY; p.z-=minZ; });
   }
-  dims.x = Math.max(...voxels.map(v=>v.x))+1;
-  dims.y = Math.max(...voxels.map(v=>Math.round(v.y)))+1;
-  dims.z = Math.max(...voxels.map(v=>v.z))+1;
+  dims.x = Math.max(0, ...voxels.map(v=>v.x), ...piezasLibres.map(p=>Math.ceil(p.x)))+1;
+  dims.y = Math.max(0, ...voxels.map(v=>Math.round(v.y)), ...piezasLibres.map(p=>p.y))+1;
+  dims.z = Math.max(0, ...voxels.map(v=>v.z), ...piezasLibres.map(p=>Math.ceil(p.z)))+1;
   maxLayer = Math.max(0, dims.y-1);
   currentLayer = Math.min(currentLayer, maxLayer);
 
@@ -9707,7 +9743,7 @@ function puntoEnPlanoArrastre(e){
 function iniciarArrastreSeleccion(e){
   const vs = selectionVoxels();
   if (!vs.length) return false;
-  const v = bloqueBajoElCursor(e);
+  const v = bloqueBajoElCursor(e) || piezaLibreBajoElCursor(e);
   if (!v) return false;
   const clave = v.x+','+Math.round(v.y)+','+v.z;
   if (!boxSelection || !boxSelection.has(clave)) return false; // solo si agarrás algo TUYO
@@ -9729,8 +9765,12 @@ function seguirArrastreSeleccion(e){
   } else {
     const p = puntoEnPlanoArrastre(e);
     if (!p) return;
-    dx = Math.round((p.x - arrastreSeleccion.inicio.x) / voxelSize);
-    dz = Math.round((p.z - arrastreSeleccion.inicio.z) / voxelSize);
+    // Con Grilla activada, el paso es de medio bloque en vez de uno entero —
+    // así se puede soltar la pieza justo en el medio de otras dos, como en
+    // Studio 2.0. Sin Grilla, sigue siendo un paso entero de siempre.
+    const paso = grillaFinaOn ? 0.5 : 1;
+    dx = Math.round(((p.x - arrastreSeleccion.inicio.x) / voxelSize) / paso) * paso;
+    dz = Math.round(((p.z - arrastreSeleccion.inicio.z) / voxelSize) / paso) * paso;
   }
   if (dx === arrastreSeleccion.dx && dy === arrastreSeleccion.dy && dz === arrastreSeleccion.dz) return;
 
