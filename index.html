@@ -609,7 +609,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v156</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v157</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -718,7 +718,7 @@
         <button class="btn icon" id="quickPreviewBtn" title="Foto rápida del modelo completo, con el ángulo guardado — para ver el resultado en segundos, sin generar todo el manual">⚡<span class="txt">Vista previa</span></button>
         <button class="btn icon" id="scaleModeBtn" title="Activa flechas de colores para escalar cada eje por separado (X, Y o Z). Si tenés bloques seleccionados, escala SOLO esa parte (una cola, un brazo...) sin tocar el resto del diseño">📏<span class="txt">Escalar</span></button>
         <button class="btn icon active" id="axesToggleBtn" title="Muestra u oculta los ejes de orientación (X/Y/Z) del visor, para dejar un lugar más limpio para trabajar">🧭<span class="txt">Ejes</span></button>
-        <button class="btn icon" id="grillaModeBtn" title="Activá esto y pintá como siempre: con Grilla activada, el bloque que pongas puede caer justo en el medio de dos vecinos (a media grilla), no solo alineado — tocá un bloque libre puesto para sacarlo o cambiarle el color">▦<span class="txt">Grilla</span></button>
+        <button class="btn icon" id="grillaModeBtn" title="Modo libre, como el Grid de Studio 2.0: activá esto y pintá con el pincel de siempre — el bloque cae en el paso de grilla más cercano al clic (alineado o a medio paso), en cualquier lado, sin necesitar bloques ya puestos ahí — tocá uno puesto para sacarlo o cambiarle el color">▦<span class="txt">Grilla</span></button>
       </div>
       <div id="zoomInfo" title="Cuántos píxeles de pantalla ocupa un bloque a este zoom, y qué contorno le corresponde. Sirve para poder decir 'a este número se ve mal' en vez de adivinar.">—</div>
       <div id="ctxHint">clic derecho: orbitar<br/>rueda: zoom</div>
@@ -1742,7 +1742,7 @@ function colocarOPintarPiezaLibre(x, y, z){
     setStatus('Se cambió el color del bloque libre.', 'ok');
   } else {
     piezasLibres.push({ x, y, z, color: paintColor });
-    setStatus('Bloque puesto a medio paso de grilla, entre sus dos vecinos.', 'ok');
+    setStatus('Bloque puesto a medio paso de grilla.', 'ok');
   }
   drawLayerDiagram(); refreshLayerUI(); // refreshLayerUI ya redibuja el 2D y el 3D (rebuildMesh3D → refreshPiezasLibres)
 }
@@ -1776,7 +1776,7 @@ document.getElementById('grillaModeBtn').addEventListener('click', ()=>{
   grillaFinaOn = !grillaFinaOn;
   btn.classList.toggle('active', grillaFinaOn);
   setStatus(grillaFinaOn
-    ? 'Grilla fina activada: pintá cerca del medio de dos bloques vecinos para que caiga ahí, a medio paso.'
+    ? 'Grilla fina activada: pintá con el pincel donde quieras — cae en el paso más cercano al clic, alineado o a medio paso, sin necesitar bloques vecinos.'
     : 'Grilla fina desactivada: se vuelve a pintar alineado como siempre.', 'ok');
 });
 
