@@ -609,7 +609,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v166</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v167</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -1018,10 +1018,13 @@
         <label for="ldrPartFileInput" style="font-size:11.5px; color:var(--text-dim); white-space:nowrap;" title="Si creaste tu propia pieza en Studio (Part Designer) y ya la tenés en tu librería, poné acá su nombre de archivo (.dat) para que la exportación la use a ELLA en vez del ladrillo 1x1 común.">Pieza (.dat):</label>
         <input id="ldrPartFileInput" type="text" value="3005.dat" spellcheck="false" style="flex:1; min-width:0; background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:4px 8px; font-size:12px; font-family:monospace;">
       </div>
-      <button class="btn wide" id="exportObjBtn" style="width:100%; margin-bottom:8px;" title="Genera el diseño COMPLETO como .obj + .mtl, con la forma real del bloque (Magic Block, muesca, etc.) y los colores de cada pieza — listo para importar en Spline u otro programa de render, sin necesitar Part Designer. Si el diseño es muy grande, lo divide solo en varias partes (parte1, parte2...) para no pasarse del límite de tamaño de archivo — arrastrá todas juntas a la misma escena.">🎨 Exportar diseño completo (.obj)</button>
-      <button class="btn wide" id="exportGlbBtn" style="width:100%; margin-bottom:4px;" title="Igual que el .obj (misma forma real, mismos colores), pero en formato binario .glb — pesa mucho menos, entra en un solo archivo en Spline (o cualquier programa que lea .glb/glTF) casi siempre sin necesitar partirlo.">📦 Exportar diseño completo (.glb)</button>
+      <button class="btn wide" id="exportObjBtn" style="width:100%; margin-bottom:8px;" title="Genera el diseño COMPLETO como .obj + .mtl, con la forma real del bloque (Magic Block, muesca, etc.) y los colores de cada pieza — listo para importar en Spline u otro programa de render, sin necesitar Part Designer. Por defecto sale todo en un solo archivo; tildá «Partir en varios archivos» si el programa de destino tiene límite de tamaño (Spline: 60 MB).">🎨 Exportar diseño completo (.obj)</button>
+      <button class="btn wide" id="exportGlbBtn" style="width:100%; margin-bottom:4px;" title="Igual que el .obj (misma forma real, mismos colores), pero en formato binario .glb — pesa mucho menos que el .obj. Sale en un solo archivo (o en partes, si tildás «Partir en varios archivos»).">📦 Exportar diseño completo (.glb)</button>
       <label style="display:flex; align-items:center; gap:6px; margin-bottom:8px; font-size:11.5px; color:var(--text-dim); cursor:pointer;" title="Cambia cada bloque por una caja simple (sin dientes ni botón) para la exportación — el diseño se ve igual de lejos, pero con muchísimos menos triángulos, así Spline (u otro visor) no se traba con diseños grandes. Aplica tanto al .glb como al .obj.">
         <input type="checkbox" id="glbLivianoCheckbox"> Versión liviana (bloques simples, sin dientes — mucho más rápida en Spline)
+      </label>
+      <label style="display:flex; align-items:center; gap:6px; margin-bottom:8px; font-size:11.5px; color:var(--text-dim); cursor:pointer;" title="Por defecto el .obj y el .glb salen en UN solo archivo (ideal para Blender, que no tiene tope de tamaño). Tildá esto solo si el programa donde lo vas a abrir rechaza archivos grandes, como Spline (límite de 60 MB): entonces se parte en archivos de ~45 MB cada uno.">
+        <input type="checkbox" id="exportPartirCheckbox"> Partir en varios archivos de ~45 MB (solo si Spline rechaza por tamaño — Blender no lo necesita)
       </label>
       <p style="font-size:10.5px; color:var(--text-faint); margin:2px 0 9px; line-height:1.5;">O genera un código QR que abre este visor con el diseño ya cargado, listo para armar — sin botón de importar. Los diseños chicos van comprimidos directo en el código; los grandes necesitan que subas tu .json a algún sitio y pegues ese link (te lo pide automáticamente si hace falta).</p>
       <button class="btn wide" id="qrBtn" style="width:100%;">▦ Generar código QR</button>
@@ -8134,14 +8137,16 @@ function exportarObjColoreado(){
   const offsetX = (dims.x*voxelSize)/2, offsetZ = (dims.z*voxelSize)/2;
 
   // Spline (y la mayoría de los importadores web) rechazan archivos de más de
-  // 60 MB. Con un diseño de muchos bloques y una malla detallada (Magic
-  // Block), un solo .obj se pasa fácil de eso — así que en vez de uno solo,
-  // se van cerrando archivos de a ~45 MB y arrancando uno nuevo, hasta
-  // terminar. Después se arrastran TODOS juntos a la misma escena de Spline
-  // (entran superpuestos en el lugar que les toca, no hace falta acomodarlos).
-  const LIMITE_BYTES = 45 * 1024 * 1024;
-  const descargar = (contenido, nombre)=>{
-    const blob = new Blob([contenido], { type:'text/plain' });
+  // 60 MB, y con un diseño grande y una malla detallada (Magic Block) un solo
+  // .obj se pasa fácil de eso. Blender y los programas de escritorio NO tienen
+  // ese límite — por eso, por defecto, sale TODO en un solo archivo; partir en
+  // archivos de ~45 MB es opcional (casilla "Partir en varios archivos").
+  const partir = document.getElementById('exportPartirCheckbox').checked;
+  const LIMITE_BYTES = partir ? 45 * 1024 * 1024 : Infinity;
+  const descargar = (partesDeTexto, nombre)=>{
+    // Blob acepta una LISTA de textos: no hace falta juntar todo en un solo
+    // string gigante (que en un diseño enorme podría pasarse del máximo de JS).
+    const blob = new Blob(partesDeTexto, { type:'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = nombre;
@@ -8150,50 +8155,62 @@ function exportarObjColoreado(){
   };
 
   let numeroParte = 1;
-  let materiales, mtlLineas, objLineas, vertOffsetGlobal, bytesAprox;
+  let materiales, mtlLineas, objCabecera, objBloques, vertOffsetGlobal, bytesAprox;
+  const nombreParte = ()=> partir ? (baseName + '_parte' + numeroParte) : baseName;
   const arrancarParte = ()=>{
     materiales = new Map(); // hex -> nombre de material saneado, PROPIO de esta parte
     mtlLineas = [];
-    objLineas = ['# ' + modelName + ' — exportado desde ' + MARCA_NOMBRE + ' (parte ' + numeroParte + ')', 'mtllib ' + baseName + '_parte' + numeroParte + '.mtl'];
+    objCabecera = '# ' + modelName + ' — exportado desde ' + MARCA_NOMBRE + (partir ? ' (parte ' + numeroParte + ')' : '') + '\nmtllib ' + nombreParte() + '.mtl\n';
+    objBloques = []; // UN texto por bloque (no una línea suelta por vez): evita armar millones de strings chicos
     vertOffsetGlobal = 0;
-    bytesAprox = objLineas.join('\n').length;
+    bytesAprox = objCabecera.length;
   };
   const cerrarParte = ()=>{
-    descargar(mtlLineas.join('\n')+'\n', baseName + '_parte' + numeroParte + '.mtl');
-    descargar(objLineas.join('\n')+'\n', baseName + '_parte' + numeroParte + '.obj');
+    descargar([mtlLineas.join('\n')+'\n'], nombreParte() + '.mtl');
+    descargar([objCabecera].concat(objBloques), nombreParte() + '.obj');
   };
   arrancarParte();
 
-  piezas.forEach((p, idx)=>{
-    // ¿Esta pieza ya no entra en la parte actual? Cerrarla y arrancar la que sigue.
-    // (Se calcula ANTES de agregar el bloque, nunca a la mitad de uno.)
-    const bytesDeUnBloque = (localVerts.length*22) + (localTris.length*18) + 20; // estimado, de sobra
-    if (bytesAprox + bytesDeUnBloque > LIMITE_BYTES && objLineas.length > 2){
-      cerrarParte();
-      numeroParte++;
-      arrancarParte();
-    }
-    const wx = p.x*voxelSize - offsetX, wy = p.y*voxelSize + voxelSize/2, wz = p.z*voxelSize - offsetZ;
-    const color = cleanColor(p.color, '#f2b134');
-    let nombreMat = materiales.get(color);
-    if (!nombreMat){
-      nombreMat = 'c' + color.replace('#','');
-      materiales.set(color, nombreMat);
-      const rgb = hexToRgbArr(color);
-      mtlLineas.push('newmtl ' + nombreMat, 'Kd ' + (rgb[0]/255).toFixed(3) + ' ' + (rgb[1]/255).toFixed(3) + ' ' + (rgb[2]/255).toFixed(3), 'Ka 0 0 0', 'Ks 0.08 0.08 0.08', '');
-    }
-    const antes = objLineas.length;
-    objLineas.push('o bloque_' + idx);
-    localVerts.forEach(v=> objLineas.push('v ' + (v[0]+wx).toFixed(4) + ' ' + (v[1]+wy).toFixed(4) + ' ' + (v[2]+wz).toFixed(4)));
-    objLineas.push('usemtl ' + nombreMat);
-    localTris.forEach(t=> objLineas.push('f ' + (t[0]+vertOffsetGlobal+1) + ' ' + (t[1]+vertOffsetGlobal+1) + ' ' + (t[2]+vertOffsetGlobal+1)));
-    vertOffsetGlobal += localVerts.length;
-    for (let i=antes; i<objLineas.length; i++) bytesAprox += objLineas[i].length + 1;
-  });
-  cerrarParte();
+  try{
+    piezas.forEach((p, idx)=>{
+      // ¿Esta pieza ya no entra en la parte actual? Cerrarla y arrancar la que sigue.
+      // (Se calcula ANTES de agregar el bloque, nunca a la mitad de uno. Sin
+      // límite — el modo por defecto — esto nunca se cumple y sale un solo archivo.)
+      const bytesDeUnBloque = (localVerts.length*22) + (localTris.length*18) + 20; // estimado, de sobra
+      if (bytesAprox + bytesDeUnBloque > LIMITE_BYTES && objBloques.length > 0){
+        cerrarParte();
+        numeroParte++;
+        arrancarParte();
+      }
+      const wx = p.x*voxelSize - offsetX, wy = p.y*voxelSize + voxelSize/2, wz = p.z*voxelSize - offsetZ;
+      const color = cleanColor(p.color, '#f2b134');
+      let nombreMat = materiales.get(color);
+      if (!nombreMat){
+        nombreMat = 'c' + color.replace('#','');
+        materiales.set(color, nombreMat);
+        const rgb = hexToRgbArr(color);
+        mtlLineas.push('newmtl ' + nombreMat, 'Kd ' + (rgb[0]/255).toFixed(3) + ' ' + (rgb[1]/255).toFixed(3) + ' ' + (rgb[2]/255).toFixed(3), 'Ka 0 0 0', 'Ks 0.08 0.08 0.08', '');
+      }
+      const lin = ['o bloque_' + idx];
+      localVerts.forEach(v=> lin.push('v ' + (v[0]+wx).toFixed(4) + ' ' + (v[1]+wy).toFixed(4) + ' ' + (v[2]+wz).toFixed(4)));
+      lin.push('usemtl ' + nombreMat);
+      localTris.forEach(t=> lin.push('f ' + (t[0]+vertOffsetGlobal+1) + ' ' + (t[1]+vertOffsetGlobal+1) + ' ' + (t[2]+vertOffsetGlobal+1)));
+      const texto = lin.join('\n') + '\n';
+      objBloques.push(texto);
+      vertOffsetGlobal += localVerts.length;
+      bytesAprox += texto.length;
+    });
+    cerrarParte();
+  } catch(e){
+    console.error(e);
+    setStatus('No alcanzó la memoria del navegador para armar todo en un solo archivo. Tildá "Partir en varios archivos" (o la versión liviana) y volvé a exportar.', 'err');
+    return;
+  }
 
   const totalColores = new Set(piezas.map(p=>cleanColor(p.color,'#f2b134'))).size;
-  setStatus('Exportado en ' + numeroParte + ' parte(s): ' + baseName + '_parte1.obj, _parte2, etc. — ' + piezas.length + ' bloques, ' + totalColores + ' color(es) en total.', 'ok');
+  setStatus(numeroParte > 1
+    ? 'Exportado en ' + numeroParte + ' partes: ' + baseName + '_parte1.obj, _parte2, etc. — ' + piezas.length + ' bloques, ' + totalColores + ' color(es) en total.'
+    : 'Exportado ' + baseName + '.obj + ' + baseName + '.mtl (un solo archivo) — ' + piezas.length + ' bloques, ' + totalColores + ' color(es).', 'ok');
 }
 document.getElementById('exportObjBtn').addEventListener('click', exportarObjColoreado);
 
@@ -8333,10 +8350,11 @@ function exportarGLBColoreado(){
   const baseName = (modelName || 'diseno').replace(/[^\w.-]+/g,'_') || 'diseno';
   const offsetX = (dims.x*voxelSize)/2, offsetZ = (dims.z*voxelSize)/2;
 
-  // Mismo criterio que el .obj: partir en archivos de ~45 MB si hace falta,
-  // para no pasarse del límite de 60 MB de Spline (acá va a hacer falta rara
-  // vez, porque el binario ya pesa mucho menos que el texto).
-  const LIMITE_BYTES = 45 * 1024 * 1024;
+  // Mismo criterio que el .obj: por defecto TODO en un solo archivo (Blender
+  // no tiene tope de tamaño); partir en archivos de ~45 MB es opcional, para
+  // cuando el destino sí lo tiene (Spline rechaza más de 60 MB).
+  const partir = document.getElementById('exportPartirCheckbox').checked;
+  const LIMITE_BYTES = partir ? 45 * 1024 * 1024 : Infinity;
   const bytesPorBloqueEstimado = localVerts.length*28 + localTris.length*3*4 + 64; // posición+color+índices (de sobra: asume uint32)
 
   const descargarArrayBuffer = (buf, nombre)=>{
@@ -8362,12 +8380,18 @@ function exportarGLBColoreado(){
   });
   if (parteActual.length) partes.push(parteActual);
 
-  partes.forEach((piezasDeEstaParte, i)=>{
-    const { gltf, bin } = construirGLTFyBin(piezasDeEstaParte, localVerts, localTris, offsetX, offsetZ);
-    const glb = empaquetarGLB(gltf, bin);
-    const nombre = partes.length > 1 ? (baseName + '_parte' + (i+1) + '.glb') : (baseName + '.glb');
-    descargarArrayBuffer(glb, nombre);
-  });
+  try{
+    partes.forEach((piezasDeEstaParte, i)=>{
+      const { gltf, bin } = construirGLTFyBin(piezasDeEstaParte, localVerts, localTris, offsetX, offsetZ);
+      const glb = empaquetarGLB(gltf, bin);
+      const nombre = partes.length > 1 ? (baseName + '_parte' + (i+1) + '.glb') : (baseName + '.glb');
+      descargarArrayBuffer(glb, nombre);
+    });
+  } catch(e){
+    console.error(e);
+    setStatus('No alcanzó la memoria del navegador para armar todo en un solo archivo. Tildá "Partir en varios archivos" (o la versión liviana) y volvé a exportar.', 'err');
+    return;
+  }
 
   const totalColores = new Set(todasLasPiezas.map(p=>cleanColor(p.color,'#f2b134'))).size;
   setStatus('Exportado ' + (partes.length>1 ? partes.length+' archivo(s) .glb' : baseName+'.glb') + ' — ' + todasLasPiezas.length + ' bloques, ' + totalColores + ' color(es).', 'ok');
