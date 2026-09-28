@@ -609,7 +609,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v171</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v172</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -1026,7 +1026,14 @@
       <label style="display:flex; align-items:center; gap:6px; margin-bottom:8px; font-size:11.5px; color:var(--text-dim); cursor:pointer;" title="Por defecto el .obj y el .glb salen en UN solo archivo (ideal para Blender, que no tiene tope de tamaño). Tildá esto solo si el programa donde lo vas a abrir rechaza archivos grandes, como Spline (límite de 60 MB): entonces se parte en archivos de ~45 MB cada uno.">
         <input type="checkbox" id="exportPartirCheckbox"> Partir en varios archivos de ~45 MB (solo si Spline rechaza por tamaño — Blender no lo necesita)
       </label>
-      <button class="btn wide" id="exportBlenderAnimBtn" style="width:100%; margin-bottom:8px;" title="Genera un archivo .py para Blender: al correrlo (pestaña Scripting > Open > ▶) arma solo la animación completa — los bloques caen capa por capa hasta formar tu diseño, con la cámara dando vueltas, luces, piso y el video .mp4 listo para renderizar (Ctrl+F12). Usa la forma real del bloque, o cajas simples si tildás la versión liviana.">🎬 Exportar animación para Blender (.py)</button>
+      <div style="display:flex; align-items:center; gap:6px; margin-bottom:6px;">
+        <label for="blenderCalidadSel" style="font-size:11.5px; color:var(--text-dim); white-space:nowrap;">Calidad en Blender:</label>
+        <select id="blenderCalidadSel" title="Realista: Cycles, luz y sombras calculadas de verdad, desenfoque de movimiento y profundidad de campo — tarda bastante más en renderizar. Rápida: EEVEE, el render de siempre." style="flex:1; min-width:0; background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:7px; padding:5px 8px; font-size:12px;">
+          <option value="realista">Realista (Cycles) — más lento</option>
+          <option value="rapida">Rápida (EEVEE)</option>
+        </select>
+      </div>
+      <button class="btn wide" id="exportBlenderAnimBtn" style="width:100%; margin-bottom:8px;" title="Genera un archivo .py para Blender: al correrlo (pestaña Scripting > Open > ▶) arma solo la animación completa — los bloques caen capa por capa hasta formar tu diseño, a 60 fps, con la cámara girando (sigue 7 segundos más al terminar), luces, piso y el video .mp4 listo para renderizar (Ctrl+F12). Usa la forma real del bloque, o cajas simples si tildás la versión liviana.">🎬 Exportar animación para Blender (.py)</button>
       <p style="font-size:10.5px; color:var(--text-faint); margin:2px 0 9px; line-height:1.5;">O genera un código QR que abre este visor con el diseño ya cargado, listo para armar — sin botón de importar. Los diseños chicos van comprimidos directo en el código; los grandes necesitan que subas tu .json a algún sitio y pegues ese link (te lo pide automáticamente si hace falta).</p>
       <button class="btn wide" id="qrBtn" style="width:100%;">▦ Generar código QR</button>
     </div>
@@ -8428,14 +8435,23 @@ from mathutils import Vector
 # ==================================================================================
 #  AJUSTES — podés cambiar estos números y volver a tocar ▶ (Run Script)
 # ==================================================================================
-FPS = 30
+# --- Calidad: dos opciones ---
+CALIDAD = "__CALIDAD__"        # "realista" = Cycles: luz, sombras y reflejos calculados de verdad (tarda más)
+                              # "rapida"   = EEVEE: el render de siempre, mucho más rápido
+MUESTRAS = 128                # solo "realista": más muestras = menos granulado, pero más lento (64 prueba · 128 bueno · 256 máximo)
+SALIDA = "video"              # "video" = un .mp4 directo · "imagenes" = un PNG por cuadro (más seguro en renders
+                              #  largos: si Blender se cierra, al volver a renderizar sigue desde donde quedó)
+
+FPS = 60                      # cuadros por segundo (60 = movimiento bien fluido)
 SEGUNDOS_CONSTRUCCION = 6.0   # cuánto tarda en armarse todo el diseño (de la 1ª a la última capa)
 SEGUNDOS_CAIDA = 1.1          # cuánto tarda en caer cada bloque
-SEGUNDOS_FINAL = 3.0          # cuánto queda el diseño terminado al final del video
+SEGUNDOS_GIRO_FINAL = 7.0     # después de que cae el último bloque, la cámara sigue girando estos segundos
 DESORDEN_SEGUNDOS = 0.6       # "azar" para que los bloques de una misma capa no caigan todos juntos
 ALTURA_CAIDA = 1.0            # de qué altura caen (1.0 = una vez la altura del diseño)
 GIRO_AL_CAER = 120            # grados que giran mientras caen (0 = caen derechos)
-VUELTAS = 1.0                 # vueltas que da la cámara alrededor durante todo el video
+GIRAR_DURANTE_ARMADO = True   # True = la cámara gira mientras se arma y sigue girando al terminar
+                              # False = quieta mientras se arma, y al terminar da una vuelta completa
+VELOCIDAD_GIRO = 30           # grados por segundo (30 = una vuelta cada 12 s). Solo si GIRAR_DURANTE_ARMADO = True
 ELEVACION_CAMARA = 25         # inclinación de la cámara en grados (0 = a la altura del piso)
 ZOOM = 1.0                    # 1.0 = normal · más de 1 = cámara más lejos · menos de 1 = más cerca
 RESOLUCION_X, RESOLUCION_Y = 1920, 1080
@@ -8457,6 +8473,12 @@ TRAZADO_DE_RAYOS = False      # True = reflejos y sombras más reales en EEVEE (
 SOMBRA_ENTRE_PIEZAS = 0.6      # oscurece las juntas y rincones entre bloques, como en Studio (0 = nada · 1 = mucho)
 BISEL = 0.012                 # redondea un poquito las aristas (se ve mucho más real). 0 = sin bisel
 TRIANGULOS_MAXIMOS = 8000000  # si con el bisel el diseño pasa de esta cantidad de triángulos, se omite (para que no se ponga pesado)
+
+# --- Realismo extra ---
+DESENFOQUE_DE_MOVIMIENTO = True  # lo que se mueve sale apenas corrido, como filmado con una cámara de verdad
+PROFUNDIDAD_DE_CAMPO = 0.7       # desenfoque suave de lo que queda lejos, como una foto de producto (0 = todo nítido · 1 = más marcado)
+VARIACION_PLASTICO = 1.0         # cada pieza con un brillo y un tono apenas distinto + micro-relieve del plástico (0 = todas idénticas)
+TONO_DE_COLOR = "auto"           # "auto" (AgX en realista, fiel en rápida) · "agx" (luces altas suaves, como una cámara) · "fiel" (colores exactos del programa)
 
 
 # ==================================================================================
@@ -8554,6 +8576,7 @@ if COLOR_FONDO:
         E["env_color"] = _c                      # en el estilo Studio el entorno tiene el color del fondo (por eso tiñe las piezas)
     E["piso"] = None if ESTILO == "studio" else E["piso"]
 ACABADO_REAL = E["acabado"] if ACABADO == "auto" else ACABADO
+REALISTA = CALIDAD.strip().lower() != "rapida"
 
 ACABADOS = {
     #              rugosidad  barniz  rugosidad del barniz  brillo
@@ -8618,6 +8641,37 @@ def material_simple(nombre, color=None, rugosidad=0.5, color_por_objeto=False, a
             nt.links.new(vivo.outputs["Color"], bsdf.inputs["Base Color"])
     elif color is not None:
         bsdf.inputs["Base Color"].default_value = color
+    if color_por_objeto and VARIACION_PLASTICO > 0:
+        # Ninguna pieza real es idéntica a otra: el brillo y el tono cambian apenas entre lotes,
+        # y el plástico inyectado tiene un micro-relieve que rompe los reflejos perfectos.
+        # Es poco, pero es lo que hace que el ojo deje de leerlo como "computadora".
+        try:
+            v = VARIACION_PLASTICO
+            base_rug = bsdf.inputs["Roughness"].default_value
+            rug = nt.nodes.new("ShaderNodeMath")
+            rug.operation = "MULTIPLY_ADD"                   # azar * 0.10 + (base - 0.05)
+            rug.inputs[1].default_value = 0.10 * v
+            rug.inputs[2].default_value = max(0.0, base_rug - 0.05 * v)
+            nt.links.new(info.outputs["Random"], rug.inputs[0])
+            nt.links.new(rug.outputs["Value"], bsdf.inputs["Roughness"])
+            tono = nt.nodes.new("ShaderNodeMath")
+            tono.operation = "MULTIPLY_ADD"                  # brillo del color: entre 0.98 y 1.02
+            tono.inputs[1].default_value = 0.04 * v
+            tono.inputs[2].default_value = 1.0 - 0.02 * v
+            nt.links.new(info.outputs["Random"], tono.inputs[0])
+            nt.links.new(tono.outputs["Value"], vivo.inputs["Value"])
+            coords = nt.nodes.new("ShaderNodeTexCoord")
+            ruido = nt.nodes.new("ShaderNodeTexNoise")
+            poner_entrada(ruido, ("Scale",), 60.0)
+            poner_entrada(ruido, ("Detail",), 3.0)
+            nt.links.new(coords.outputs["Object"], ruido.inputs["Vector"])
+            relieve = nt.nodes.new("ShaderNodeBump")
+            relieve.inputs["Strength"].default_value = 0.04 * v
+            relieve.inputs["Distance"].default_value = 0.002
+            nt.links.new(ruido.outputs["Fac"], relieve.inputs["Height"])
+            nt.links.new(relieve.outputs["Normal"], bsdf.inputs["Normal"])
+        except Exception as error:
+            print("No pude aplicar la variación del plástico:", error)
     nt.links.new(bsdf.outputs["BSDF"], salida.inputs["Surface"])
     return mat
 
@@ -8689,7 +8743,8 @@ if BISEL > 0:
                 pass
     except Exception as error:
         print("No pude aplicar el bisel:", error)
-mat_bloque = material_simple("ColorDeCadaBloque", color_por_objeto=True, acabado=ACABADO_REAL, ao=SOMBRA_ENTRE_PIEZAS)
+mat_bloque = material_simple("ColorDeCadaBloque", color_por_objeto=True, acabado=ACABADO_REAL,
+                             ao=SOMBRA_ENTRE_PIEZAS * (0.35 if REALISTA else 1.0))  # en Cycles los rincones ya se oscurecen solos
 malla.materials.append(mat_bloque)
 colores = [color_de_hex(h) for h in COLORES]
 
@@ -8746,7 +8801,7 @@ for n, (x, y, z, ci, capa) in enumerate(BLOQUES):
     if n % 1000 == 999:
         print("   ... %d bloques" % (n + 1))
 
-total_frames = ultimo_frame_caida + int(SEGUNDOS_FINAL * FPS)
+total_frames = ultimo_frame_caida + int(round(SEGUNDOS_GIRO_FINAL * FPS))
 scene.frame_start = 1
 scene.frame_end = total_frames
 scene.render.fps = FPS
@@ -8788,13 +8843,51 @@ mirar.track_axis = "TRACK_NEGATIVE_Z"
 mirar.up_axis = "UP_Y"
 scene.camera = cam
 
-giro.rotation_euler = (0.0, 0.0, 0.0)
-giro.keyframe_insert("rotation_euler", index=2, frame=1)
-giro.rotation_euler = (0.0, 0.0, math.radians(360.0 * VUELTAS))
-giro.keyframe_insert("rotation_euler", index=2, frame=total_frames)
+if PROFUNDIDAD_DE_CAMPO > 0:
+    # Enfoca el centro del diseño. La apertura se calcula para que la parte de atrás del modelo
+    # quede apenas suave y el piso lejano bien desenfocado — como una foto de un objeto chico.
+    try:
+        radio = 0.5 * math.sqrt(ancho ** 2 + fondo ** 2 + alto ** 2)
+        s_mm = distancia * 1000.0
+        d_mm = (distancia + radio) * 1000.0
+        circulo = 0.0022 * 36.0 * PROFUNDIDAD_DE_CAMPO        # tamaño del desenfoque, en mm del sensor
+        f_stop = (LENTE ** 2) * (d_mm - s_mm) / (circulo * d_mm * (s_mm - LENTE))
+        cam_data.dof.use_dof = True
+        cam_data.dof.focus_object = giro
+        cam_data.dof.aperture_fstop = max(0.01, f_stop)
+        cam_data.dof.aperture_blades = 7                      # forma del diafragma, como un lente real
+    except Exception as error:
+        print("No pude activar la profundidad de campo:", error)
+
+# Velocidad del giro cuadro por cuadro: arranca suave, va parejo y frena suave al final.
+# Con GIRAR_DURANTE_ARMADO gira todo el video y los últimos SEGUNDOS_GIRO_FINAL sigue girando
+# con el diseño ya terminado. Si no, queda quieta mientras se arma y al terminar da una vuelta
+# completa justo en esos segundos.
+def _suave(x):
+    x = max(0.0, min(1.0, x))
+    return x * x * (3.0 - 2.0 * x)
+
+inicio_giro = 1 if GIRAR_DURANTE_ARMADO else ultimo_frame_caida
+rampa_entrada = FPS * 1.0
+rampa_salida = FPS * 1.8
+pesos = []
+for f in range(1, total_frames + 1):
+    if f < inicio_giro:
+        pesos.append(0.0)
+    else:
+        pesos.append(_suave((f - inicio_giro) / rampa_entrada) * _suave((total_frames - f) / rampa_salida))
+if GIRAR_DURANTE_ARMADO:
+    escala = math.radians(VELOCIDAD_GIRO) / FPS
+else:
+    escala = (2.0 * math.pi) / max(1e-6, sum(pesos))        # justo una vuelta completa
+angulo = 0.0
+for f, peso in zip(range(1, total_frames + 1), pesos):
+    angulo += peso * escala
+    giro.rotation_euler = (0.0, 0.0, angulo)
+    giro.keyframe_insert("rotation_euler", index=2, frame=f)
 for fc in fcurves_de(giro):
     for kp in fc.keyframe_points:
-        kp.interpolation = "LINEAR"                 # gira a velocidad constante
+        kp.interpolation = "LINEAR"
 
 # ---------- 5) Piso, luces y fondo ----------
 if CON_PISO:
@@ -8886,21 +8979,112 @@ scene.world = mundo
 
 # ---------- 6) Ajustes de render y de salida (video .mp4) ----------
 motores = [e.identifier for e in bpy.types.RenderSettings.bl_rna.properties["engine"].enum_items]
-for candidato in ("BLENDER_EEVEE_NEXT", "BLENDER_EEVEE"):
-    if candidato in motores:
-        scene.render.engine = candidato
-        break
-try:
-    scene.eevee.taa_render_samples = 48
-except Exception:
-    pass
-if TRAZADO_DE_RAYOS:
+dispositivo = "—"
+
+def activar_gpu():
+    """Busca una placa de video compatible para Cycles (NVIDIA, AMD, Apple o Intel). Si no hay, usa el procesador."""
     try:
-        scene.eevee.use_raytracing = True
+        prefs = bpy.context.preferences.addons["cycles"].preferences
+    except Exception:
+        scene.cycles.device = "CPU"
+        return "procesador (CPU)"
+    for tipo in ("OPTIX", "CUDA", "HIP", "METAL", "ONEAPI"):
+        try:
+            prefs.compute_device_type = tipo
+        except Exception:
+            continue
+        try:
+            prefs.refresh_devices()
+        except Exception:
+            try:
+                prefs.get_devices()
+            except Exception:
+                pass
+        placas = [d for d in prefs.devices if d.type == tipo]
+        if placas:
+            for d in prefs.devices:
+                d.use = (d.type == tipo)
+            scene.cycles.device = "GPU"
+            return "placa de video (%s: %s)" % (tipo, placas[0].name)
+    scene.cycles.device = "CPU"
+    return "procesador (CPU) — no encontré placa de video compatible, va a tardar bastante más"
+
+if REALISTA and "CYCLES" in motores:
+    scene.render.engine = "CYCLES"
+    dispositivo = activar_gpu()
+    cy = scene.cycles
+    cy.samples = MUESTRAS
+    for nombre, valor in (("use_adaptive_sampling", True), ("adaptive_threshold", 0.015),
+                          ("use_denoising", True), ("denoiser", "OPENIMAGEDENOISE"),
+                          ("denoising_input_passes", "RGB_ALBEDO_NORMAL"),
+                          ("denoising_prefilter", "ACCURATE"), ("denoising_quality", "HIGH"),
+                          ("denoising_use_gpu", True),
+                          ("max_bounces", 8), ("diffuse_bounces", 4), ("glossy_bounces", 4),
+                          ("transmission_bounces", 4), ("transparent_max_bounces", 8),
+                          ("caustics_reflective", False), ("caustics_refractive", False),
+                          ("blur_glossy", 1.0), ("sample_clamp_indirect", 8.0)):
+        try:
+            setattr(cy, nombre, valor)                       # cada versión de Blender trae algunas y otras no
+        except Exception:
+            pass
+    try:
+        scene.render.use_persistent_data = True              # no rearma la escena en cada cuadro: bastante más rápido
+    except Exception:
+        pass
+    motor_usado = "Cycles (realista)"
+else:
+    for candidato in ("BLENDER_EEVEE_NEXT", "BLENDER_EEVEE"):
+        if candidato in motores:
+            scene.render.engine = candidato
+            break
+    try:
+        scene.eevee.taa_render_samples = 64
+    except Exception:
+        pass
+    if TRAZADO_DE_RAYOS:
+        try:
+            scene.eevee.use_raytracing = True
+        except Exception:
+            pass
+    motor_usado = "EEVEE (rápida)"
+    if REALISTA:
+        print("OJO: este Blender no tiene Cycles activado; se usa EEVEE.")
+
+if DESENFOQUE_DE_MOVIMIENTO:
+    for obj_cfg, nombre in ((scene.render, "use_motion_blur"), (getattr(scene, "eevee", None), "use_motion_blur")):
+        try:
+            if obj_cfg is not None:
+                setattr(obj_cfg, nombre, True)
+        except Exception:
+            pass
+    for obj_cfg, nombre in ((scene.render, "motion_blur_shutter"), (getattr(scene, "eevee", None), "motion_blur_shutter")):
+        try:
+            if obj_cfg is not None:
+                setattr(obj_cfg, nombre, 0.5)                # obturador a medio cuadro, como una cámara de cine
+        except Exception:
+            pass
+
+tono = TONO_DE_COLOR.strip().lower()
+if tono == "auto":
+    tono = "agx" if REALISTA else "fiel"
+try:
+    if tono == "agx":
+        # AgX suaviza las luces altas como una cámara real (sin blancos "quemados") y da contraste de foto.
+        scene.view_settings.view_transform = "AgX"
+        for look in ("AgX - Medium High Contrast", "Medium High Contrast", "AgX - Base Contrast", "None"):
+            try:
+                scene.view_settings.look = look
+                break
+            except Exception:
+                continue
+    else:
+        scene.view_settings.view_transform = "Standard"   # colores fieles a los de tu programa
+except Exception:
+    try:
+        scene.view_settings.view_transform = "Filmic"
     except Exception:
         pass
 try:
-    scene.view_settings.view_transform = "Standard"   # colores fieles a los de tu programa
     scene.view_settings.exposure = EXPOSICION
 except Exception:
     pass
@@ -8911,19 +9095,40 @@ scene.render.resolution_percentage = PORCENTAJE
 carpeta = CARPETA_SALIDA or os.path.join(os.path.expanduser("~"), "Desktop")
 if not os.path.isdir(carpeta):
     carpeta = os.path.expanduser("~")
-scene.render.filepath = os.path.join(carpeta, "animacion_bloques_")
 ims = scene.render.image_settings
-try:
-    if hasattr(ims, "media_type"):
-        ims.media_type = "VIDEO"
-    ims.file_format = "FFMPEG"
-    scene.render.ffmpeg.format = "MPEG4"
-    scene.render.ffmpeg.codec = "H264"
-    scene.render.ffmpeg.constant_rate_factor = "HIGH"
-    salida_ok = True
-except Exception as error:
-    salida_ok = False
-    print("No pude dejar la salida como video mp4 automáticamente:", error)
+if SALIDA.strip().lower() == "imagenes":
+    carpeta = os.path.join(carpeta, "animacion_bloques_cuadros")
+    os.makedirs(carpeta, exist_ok=True)
+    scene.render.filepath = os.path.join(carpeta, "cuadro_")
+    try:
+        if hasattr(ims, "media_type"):
+            ims.media_type = "IMAGE"
+        ims.file_format = "PNG"
+        ims.color_mode = "RGB"
+        scene.render.use_overwrite = False                   # si se corta, al volver a renderizar sigue desde donde quedó
+        scene.render.use_placeholder = True
+        salida_ok = True
+    except Exception as error:
+        salida_ok = False
+        print("No pude dejar la salida como imágenes PNG automáticamente:", error)
+else:
+    scene.render.filepath = os.path.join(carpeta, "animacion_bloques_")
+    try:
+        if hasattr(ims, "media_type"):
+            ims.media_type = "VIDEO"
+        ims.file_format = "FFMPEG"
+        scene.render.ffmpeg.format = "MPEG4"
+        scene.render.ffmpeg.codec = "H264"
+        scene.render.ffmpeg.constant_rate_factor = "PERC_LOSSLESS"   # casi sin pérdida: máxima nitidez
+        try:
+            scene.render.ffmpeg.ffmpeg_preset = "BEST"
+            scene.render.ffmpeg.gopsize = FPS
+        except Exception:
+            pass
+        salida_ok = True
+    except Exception as error:
+        salida_ok = False
+        print("No pude dejar la salida como video mp4 automáticamente:", error)
 
 # ---------- 7) Vista del visor: en colores y mirando por la cámara ----------
 scene.frame_set(total_frames)                # se ve el diseño ya terminado
@@ -8939,7 +9144,15 @@ except Exception:
 
 seg_total = total_frames / float(FPS)
 print("\n=== LISTO ===")
-print("Bloques: %d · Capas: %d · Duración: %.1f segundos (%d cuadros)" % (len(BLOQUES), len(capas), seg_total, total_frames))
+print("Bloques: %d · Capas: %d · Duración: %.1f segundos (%d cuadros a %d fps)" % (len(BLOQUES), len(capas), seg_total, total_frames, FPS))
+print("Motor: %s · Render con: %s" % (motor_usado, dispositivo))
+if REALISTA:
+    print("Consejo: antes del video completo, probá UN cuadro con F12 para ver cuánto tarda.")
+    print("         Ese tiempo x %d cuadros = lo que va a tardar el video entero." % total_frames)
+    print("         Para una prueba rápida: PORCENTAJE = 50 y MUESTRAS = 32.")
+if SALIDA.strip().lower() == "imagenes":
+    print("Los cuadros quedan como PNG. Para juntarlos en un video: Video Editing > Add > Image Sequence,")
+    print("elegí todos los PNG, y en Output poné FFmpeg Video / MPEG-4 / H.264 y Render Animation.")
 print("Para hacer el video: menú Render > Render Animation  (Ctrl+F12)")
 print("El video va a quedar en:", carpeta)
 if not salida_ok:
@@ -8976,7 +9189,9 @@ function exportarAnimacionBlender(){
   for (let i=0; i<filas.length; i+=8) bloquesTxt += filas.slice(i, i+8).join(',') + ',\n';
   const datos = 'MALLA_V = ' + JSON.stringify(mallaV) + '\nMALLA_F = ' + JSON.stringify(mallaF) +
                 '\nCOLORES = ' + JSON.stringify(colores) + '\nBLOQUES = [\n' + bloquesTxt + ']';
-  const py = PLANTILLA_BLENDER_PY.replace('#__DATOS__', () => datos);
+  const calidadSel = document.getElementById('blenderCalidadSel');
+  const calidad = (calidadSel && calidadSel.value === 'rapida') ? 'rapida' : 'realista';
+  const py = PLANTILLA_BLENDER_PY.replace('#__DATOS__', () => datos).replace('__CALIDAD__', calidad);
 
   const blob = new Blob([py], { type:'text/x-python' });
   const url = URL.createObjectURL(blob);
@@ -8984,7 +9199,7 @@ function exportarAnimacionBlender(){
   a.href = url; a.download = baseName + '_animacion_blender.py';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  setStatus('Exportado ' + baseName + '_animacion_blender.py — ' + piezas.length + ' bloques. En Blender: pestaña Scripting > Open > botón ▶.', 'ok');
+  setStatus('Exportado ' + baseName + '_animacion_blender.py (' + (calidad === 'rapida' ? 'rápida, EEVEE' : 'realista, Cycles') + ') — ' + piezas.length + ' bloques. En Blender: pestaña Scripting > Open > botón ▶.', 'ok');
 }
 document.getElementById('exportBlenderAnimBtn').addEventListener('click', exportarAnimacionBlender);
 
