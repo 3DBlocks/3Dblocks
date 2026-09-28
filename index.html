@@ -609,7 +609,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v165</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v166</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -1019,7 +1019,10 @@
         <input id="ldrPartFileInput" type="text" value="3005.dat" spellcheck="false" style="flex:1; min-width:0; background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:4px 8px; font-size:12px; font-family:monospace;">
       </div>
       <button class="btn wide" id="exportObjBtn" style="width:100%; margin-bottom:8px;" title="Genera el diseño COMPLETO como .obj + .mtl, con la forma real del bloque (Magic Block, muesca, etc.) y los colores de cada pieza — listo para importar en Spline u otro programa de render, sin necesitar Part Designer. Si el diseño es muy grande, lo divide solo en varias partes (parte1, parte2...) para no pasarse del límite de tamaño de archivo — arrastrá todas juntas a la misma escena.">🎨 Exportar diseño completo (.obj)</button>
-      <button class="btn wide" id="exportGlbBtn" style="width:100%; margin-bottom:8px;" title="Igual que el .obj (misma forma real, mismos colores), pero en formato binario .glb — pesa mucho menos, entra en un solo archivo en Spline (o cualquier programa que lea .glb/glTF) casi siempre sin necesitar partirlo.">📦 Exportar diseño completo (.glb)</button>
+      <button class="btn wide" id="exportGlbBtn" style="width:100%; margin-bottom:4px;" title="Igual que el .obj (misma forma real, mismos colores), pero en formato binario .glb — pesa mucho menos, entra en un solo archivo en Spline (o cualquier programa que lea .glb/glTF) casi siempre sin necesitar partirlo.">📦 Exportar diseño completo (.glb)</button>
+      <label style="display:flex; align-items:center; gap:6px; margin-bottom:8px; font-size:11.5px; color:var(--text-dim); cursor:pointer;" title="Cambia cada bloque por una caja simple (sin dientes ni botón) para la exportación — el diseño se ve igual de lejos, pero con muchísimos menos triángulos, así Spline (u otro visor) no se traba con diseños grandes. Aplica tanto al .glb como al .obj.">
+        <input type="checkbox" id="glbLivianoCheckbox"> Versión liviana (bloques simples, sin dientes — mucho más rápida en Spline)
+      </label>
       <p style="font-size:10.5px; color:var(--text-faint); margin:2px 0 9px; line-height:1.5;">O genera un código QR que abre este visor con el diseño ya cargado, listo para armar — sin botón de importar. Los diseños chicos van comprimidos directo en el código; los grandes necesitan que subas tu .json a algún sitio y pegues ese link (te lo pide automáticamente si hace falta).</p>
       <button class="btn wide" id="qrBtn" style="width:100%;">▦ Generar código QR</button>
     </div>
@@ -8113,9 +8116,11 @@ document.getElementById('exportLdrBtn').addEventListener('click', exportarALDraw
 function exportarObjColoreado(){
   const piezas = voxels.concat(piezasLibres);
   if (!piezas.length){ setStatus('No hay ningún modelo para exportar.', 'err'); return; }
+  const liviano = document.getElementById('glbLivianoCheckbox').checked;
   // La misma malla de un solo bloque (ya con estilo, tamaño y reparaciones
   // aplicadas) se reutiliza para cada pieza — solo cambia dónde se la coloca.
-  const geo = buildBrickGeometry(voxelSize);
+  // Modo liviano: caja simple sin dientes ni botón — mismo criterio que el .glb.
+  const geo = liviano ? new THREE.BoxGeometry(voxelSize*0.996, voxelSize*0.996, voxelSize*0.996) : buildBrickGeometry(voxelSize);
   const posAttr = geo.attributes.position;
   const idxAttr = geo.index;
   const localVerts = [];
@@ -8310,7 +8315,12 @@ function empaquetarGLB(gltf, bin){
 function exportarGLBColoreado(){
   const todasLasPiezas = voxels.concat(piezasLibres);
   if (!todasLasPiezas.length){ setStatus('No hay ningún modelo para exportar.', 'err'); return; }
-  const geo = buildBrickGeometry(voxelSize);
+  const liviano = document.getElementById('glbLivianoCheckbox').checked;
+  // Modo liviano: una caja simple, sin dientes ni botón — de lejos (como se ve
+  // un render del diseño completo) es indistinguible, pero son ~8 vértices por
+  // bloque en vez de 233 (o 704 con Magic Block B): muchísimos menos triángulos
+  // para que el navegador dibuje, así Spline deja de trabarse con diseños grandes.
+  const geo = liviano ? new THREE.BoxGeometry(voxelSize*0.996, voxelSize*0.996, voxelSize*0.996) : buildBrickGeometry(voxelSize);
   const posAttr = geo.attributes.position;
   const idxAttr = geo.index;
   const localVerts = [];
