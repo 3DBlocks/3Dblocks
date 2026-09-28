@@ -609,7 +609,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v167</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v168</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -1020,12 +1020,13 @@
       </div>
       <button class="btn wide" id="exportObjBtn" style="width:100%; margin-bottom:8px;" title="Genera el diseño COMPLETO como .obj + .mtl, con la forma real del bloque (Magic Block, muesca, etc.) y los colores de cada pieza — listo para importar en Spline u otro programa de render, sin necesitar Part Designer. Por defecto sale todo en un solo archivo; tildá «Partir en varios archivos» si el programa de destino tiene límite de tamaño (Spline: 60 MB).">🎨 Exportar diseño completo (.obj)</button>
       <button class="btn wide" id="exportGlbBtn" style="width:100%; margin-bottom:4px;" title="Igual que el .obj (misma forma real, mismos colores), pero en formato binario .glb — pesa mucho menos que el .obj. Sale en un solo archivo (o en partes, si tildás «Partir en varios archivos»).">📦 Exportar diseño completo (.glb)</button>
-      <label style="display:flex; align-items:center; gap:6px; margin-bottom:8px; font-size:11.5px; color:var(--text-dim); cursor:pointer;" title="Cambia cada bloque por una caja simple (sin dientes ni botón) para la exportación — el diseño se ve igual de lejos, pero con muchísimos menos triángulos, así Spline (u otro visor) no se traba con diseños grandes. Aplica tanto al .glb como al .obj.">
+      <label style="display:flex; align-items:center; gap:6px; margin-bottom:8px; font-size:11.5px; color:var(--text-dim); cursor:pointer;" title="Cambia cada bloque por una caja simple (sin dientes ni botón) para la exportación — el diseño se ve igual de lejos, pero con muchísimos menos triángulos, así Spline (u otro visor) no se traba con diseños grandes. Aplica al .glb, al .obj y a la animación de Blender.">
         <input type="checkbox" id="glbLivianoCheckbox"> Versión liviana (bloques simples, sin dientes — mucho más rápida en Spline)
       </label>
       <label style="display:flex; align-items:center; gap:6px; margin-bottom:8px; font-size:11.5px; color:var(--text-dim); cursor:pointer;" title="Por defecto el .obj y el .glb salen en UN solo archivo (ideal para Blender, que no tiene tope de tamaño). Tildá esto solo si el programa donde lo vas a abrir rechaza archivos grandes, como Spline (límite de 60 MB): entonces se parte en archivos de ~45 MB cada uno.">
         <input type="checkbox" id="exportPartirCheckbox"> Partir en varios archivos de ~45 MB (solo si Spline rechaza por tamaño — Blender no lo necesita)
       </label>
+      <button class="btn wide" id="exportBlenderAnimBtn" style="width:100%; margin-bottom:8px;" title="Genera un archivo .py para Blender: al correrlo (pestaña Scripting > Open > ▶) arma solo la animación completa — los bloques caen capa por capa hasta formar tu diseño, con la cámara dando vueltas, luces, piso y el video .mp4 listo para renderizar (Ctrl+F12). Usa la forma real del bloque, o cajas simples si tildás la versión liviana.">🎬 Exportar animación para Blender (.py)</button>
       <p style="font-size:10.5px; color:var(--text-faint); margin:2px 0 9px; line-height:1.5;">O genera un código QR que abre este visor con el diseño ya cargado, listo para armar — sin botón de importar. Los diseños chicos van comprimidos directo en el código; los grandes necesitan que subas tu .json a algún sitio y pegues ese link (te lo pide automáticamente si hace falta).</p>
       <button class="btn wide" id="qrBtn" style="width:100%;">▦ Generar código QR</button>
     </div>
@@ -8397,6 +8398,392 @@ function exportarGLBColoreado(){
   setStatus('Exportado ' + (partes.length>1 ? partes.length+' archivo(s) .glb' : baseName+'.glb') + ' — ' + todasLasPiezas.length + ' bloques, ' + totalColores + ' color(es).', 'ok');
 }
 document.getElementById('exportGlbBtn').addEventListener('click', exportarGLBColoreado);
+
+/* ---------------------------- Exportar animación para Blender (.py) ----------------------------
+   Armar a mano en Blender una animación donde caen miles de bloques es inviable
+   (cada bloque necesita sus propios cuadros clave), así que en vez de eso este
+   botón genera un SCRIPT de Blender con los datos de tu diseño adentro: forma del
+   bloque, colores y posición de cada uno. Al correrlo en Blender arma solo la
+   escena completa — los bloques caen capa por capa hasta formar el diseño, una
+   cámara da vueltas alrededor, con luces, piso y el video .mp4 ya configurado.
+   Todo lo que se puede querer cambiar (velocidad, vueltas, resolución...) queda
+   como números al principio del script, con un comentario al lado de cada uno. */
+const PLANTILLA_BLENDER_PY = String.raw`# ==================================================================================
+#  ANIMACIÓN PARA BLENDER — los bloques caen y arman el diseño, con la cámara dando vueltas
+#  Generado por RenzoD'Sing
+#
+#  CÓMO USARLO (son 3 pasos):
+#   1) Abrí Blender y arriba tocá la pestaña  "Scripting".
+#   2) En el cuadro de texto que aparece tocá  "Open" (o "Abrir"), elegí este archivo
+#      y después tocá el botón  ▶  (Run Script, arriba del cuadro de texto).
+#   3) Cuando termine, menú  Render > Render Animation  (o Ctrl+F12).
+#      El video (.mp4) queda en tu escritorio.
+#
+#  Si querés cambiar la velocidad, las vueltas, la resolución, etc., editá los
+#  números de la sección AJUSTES de acá abajo y volvé a tocar ▶.
+# ==================================================================================
+import bpy, math, random, os
+from mathutils import Vector
+
+# ==================================================================================
+#  AJUSTES — podés cambiar estos números y volver a tocar ▶ (Run Script)
+# ==================================================================================
+FPS = 30
+SEGUNDOS_CONSTRUCCION = 6.0   # cuánto tarda en armarse todo el diseño (de la 1ª a la última capa)
+SEGUNDOS_CAIDA = 1.1          # cuánto tarda en caer cada bloque
+SEGUNDOS_FINAL = 3.0          # cuánto queda el diseño terminado al final del video
+DESORDEN_SEGUNDOS = 0.6       # "azar" para que los bloques de una misma capa no caigan todos juntos
+ALTURA_CAIDA = 1.0            # de qué altura caen (1.0 = una vez la altura del diseño)
+GIRO_AL_CAER = 120            # grados que giran mientras caen (0 = caen derechos)
+VUELTAS = 1.0                 # vueltas que da la cámara alrededor durante todo el video
+ELEVACION_CAMARA = 25         # inclinación de la cámara en grados (0 = a la altura del piso)
+ZOOM = 1.0                    # 1.0 = normal · más de 1 = cámara más lejos · menos de 1 = más cerca
+RESOLUCION_X, RESOLUCION_Y = 1920, 1080
+PORCENTAJE = 100              # poné 50 para una prueba rápida (sale a mitad de tamaño)
+CON_PISO = True
+COLOR_FONDO = (0.055, 0.06, 0.08)
+SEMILLA = 7                   # cambialo para que la caída sea distinta
+CARPETA_SALIDA = ""           # vacío = tu escritorio
+
+
+# ==================================================================================
+#  DATOS DEL DISEÑO (los pone tu programa, no hace falta tocarlos)
+# ==================================================================================
+#__DATOS__
+
+
+
+# ==================================================================================
+#  A partir de acá no hace falta tocar nada
+# ==================================================================================
+def a_lineal(c):
+    """Blender trabaja en color 'lineal': convierte el color normal (sRGB) a ese."""
+    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+def color_de_hex(h):
+    h = h.lstrip("#")
+    return tuple(a_lineal(int(h[i:i + 2], 16) / 255.0) for i in (0, 2, 4)) + (1.0,)
+
+def fcurves_de(obj):
+    """Las curvas de animación de un objeto (cambia según la versión de Blender)."""
+    ad = obj.animation_data
+    if ad is None or ad.action is None:
+        return []
+    accion = ad.action
+    if hasattr(accion, "fcurves"):                      # Blender 4.3 o anterior
+        return list(accion.fcurves)
+    try:                                                # Blender 4.4 en adelante
+        from bpy_extras import anim_utils
+        cb = anim_utils.action_get_channelbag_for_slot(accion, ad.action_slot)
+        return list(cb.fcurves) if cb else []
+    except Exception:
+        return []
+
+def material_simple(nombre, color=None, rugosidad=0.5, color_por_objeto=False):
+    mat = bpy.data.materials.new(nombre)
+    try:
+        mat.use_nodes = True
+    except Exception:
+        pass
+    nt = mat.node_tree
+    for n in list(nt.nodes):
+        nt.nodes.remove(n)
+    salida = nt.nodes.new("ShaderNodeOutputMaterial")
+    bsdf = nt.nodes.new("ShaderNodeBsdfPrincipled")
+    bsdf.inputs["Roughness"].default_value = rugosidad
+    if color_por_objeto:
+        # cada bloque toma SU color (el "Color" del objeto) — un solo material para todos
+        info = nt.nodes.new("ShaderNodeObjectInfo")
+        nt.links.new(info.outputs["Color"], bsdf.inputs["Base Color"])
+    elif color is not None:
+        bsdf.inputs["Base Color"].default_value = color
+    nt.links.new(bsdf.outputs["BSDF"], salida.inputs["Surface"])
+    return mat
+
+
+scene = bpy.context.scene
+random.seed(SEMILLA)
+print("\n=== Armando la animación de %d bloques... ===" % len(BLOQUES))
+
+# ---------- 0) Limpiar lo que había (así podés correr el script varias veces) ----------
+for o in list(bpy.data.objects):
+    bpy.data.objects.remove(o, do_unlink=True)
+for c in list(bpy.data.collections):
+    if c.name.startswith("Animacion"):
+        bpy.data.collections.remove(c)
+for m in list(bpy.data.meshes):
+    if m.users == 0:
+        bpy.data.meshes.remove(m)
+
+col = bpy.data.collections.new("Animacion")
+scene.collection.children.link(col)
+
+# ---------- 1) Medidas del diseño ----------
+xs = [b[0] for b in BLOQUES]; ys = [b[1] for b in BLOQUES]; zs = [b[2] for b in BLOQUES]
+ancho = max(xs) - min(xs) + 1.0
+fondo = max(zs) - min(zs) + 1.0
+alto = max(ys) + 0.5                          # altura total del diseño
+cx = (max(xs) + min(xs)) / 2.0                # centro (en coordenadas del programa)
+cz = (max(zs) + min(zs)) / 2.0
+
+# ---------- 2) La forma de UN bloque (todos comparten esta misma malla) ----------
+# El programa usa Y hacia arriba; Blender usa Z hacia arriba: (x, y, z) -> (x, -z, y)
+verts = [(v[0], -v[2], v[1]) for v in MALLA_V]
+caras = [tuple(f) for f in MALLA_F]
+volumen = 0.0                                  # si la malla quedó "al revés", se da vuelta
+for a, b, c in caras:
+    va, vb, vc = Vector(verts[a]), Vector(verts[b]), Vector(verts[c])
+    volumen += va.dot(vb.cross(vc)) / 6.0
+if volumen < 0:
+    caras = [(a, c, b) for (a, b, c) in caras]
+malla = bpy.data.meshes.new("Bloque")
+malla.from_pydata(verts, [], caras)
+malla.update()
+mat_bloque = material_simple("ColorDeCadaBloque", rugosidad=0.45, color_por_objeto=True)
+malla.materials.append(mat_bloque)
+colores = [color_de_hex(h) for h in COLORES]
+
+# ---------- 3) Los bloques y su caída ----------
+capas = sorted(set(b[4] for b in BLOQUES))
+posicion_capa = {c: i for i, c in enumerate(capas)}
+paso_capa = SEGUNDOS_CONSTRUCCION * FPS / max(1, len(capas))
+caida = ALTURA_CAIDA * alto
+ultimo_frame_caida = 1
+
+for n, (x, y, z, ci, capa) in enumerate(BLOQUES):
+    bx, by, bz = x, -z, y                      # posición final en Blender
+    obj = bpy.data.objects.new("bloque_%d" % n, malla)
+    obj.color = colores[ci]
+    col.objects.link(obj)
+
+    inicio = 2 + int(round(posicion_capa[capa] * paso_capa + random.random() * DESORDEN_SEGUNDOS * FPS))
+    duracion = max(4, int(round(SEGUNDOS_CAIDA * FPS * (0.85 + 0.3 * random.random()))))
+    fin = inicio + duracion
+    ultimo_frame_caida = max(ultimo_frame_caida, fin)
+
+    # invisible hasta que le toca caer
+    obj.hide_render = True
+    obj.hide_viewport = True
+    obj.keyframe_insert("hide_render", frame=inicio - 1)
+    obj.keyframe_insert("hide_viewport", frame=inicio - 1)
+    obj.hide_render = False
+    obj.hide_viewport = False
+    obj.keyframe_insert("hide_render", frame=inicio)
+    obj.keyframe_insert("hide_viewport", frame=inicio)
+
+    # cae desde arriba hasta su lugar
+    obj.location = (bx, by, bz + caida)
+    obj.keyframe_insert("location", index=2, frame=inicio)
+    obj.location = (bx, by, bz)
+    obj.keyframe_insert("location", index=2, frame=fin)
+    obj.location = (bx, by, bz)
+
+    # y gira un poco mientras cae
+    if GIRO_AL_CAER:
+        obj.rotation_euler = (0.0, 0.0, math.radians(random.uniform(-GIRO_AL_CAER, GIRO_AL_CAER)))
+        obj.keyframe_insert("rotation_euler", index=2, frame=inicio)
+        obj.rotation_euler = (0.0, 0.0, 0.0)
+        obj.keyframe_insert("rotation_euler", index=2, frame=fin)
+
+    for fc in fcurves_de(obj):
+        if fc.data_path == "location":            # cae acelerando, como con gravedad
+            for kp in fc.keyframe_points:
+                kp.interpolation = "QUAD"; kp.easing = "EASE_IN"
+        elif fc.data_path == "rotation_euler":
+            for kp in fc.keyframe_points:
+                kp.interpolation = "SINE"; kp.easing = "EASE_OUT"
+
+    if n % 1000 == 999:
+        print("   ... %d bloques" % (n + 1))
+
+total_frames = ultimo_frame_caida + int(SEGUNDOS_FINAL * FPS)
+scene.frame_start = 1
+scene.frame_end = total_frames
+scene.render.fps = FPS
+
+# ---------- 4) Cámara que da vueltas ----------
+LENTE = 35.0
+aspecto = RESOLUCION_X / float(RESOLUCION_Y)
+if aspecto >= 1.0:
+    fov_h = 2 * math.atan(18.0 / LENTE)
+    fov_v = 2 * math.atan(18.0 / aspecto / LENTE)
+else:
+    fov_v = 2 * math.atan(18.0 / LENTE)
+    fov_h = 2 * math.atan(18.0 * aspecto / LENTE)
+diagonal = math.hypot(ancho, fondo)
+elev = math.radians(ELEVACION_CAMARA)
+# Cuánto ocupa el diseño en vertical visto desde esa inclinación: la altura, más
+# la profundidad de la base (que se "aplasta" hacia arriba cuando la cámara está inclinada)
+alto_visto = alto * math.cos(elev) + diagonal * math.sin(elev)
+dist_v = (alto_visto * 1.2 / 2.0) / math.tan(fov_v / 2.0)
+dist_h = (diagonal * 1.15 / 2.0) / math.tan(fov_h / 2.0)
+distancia = max(dist_h, dist_v) * ZOOM
+
+giro = bpy.data.objects.new("Giro", None)      # punto invisible en el centro del diseño
+giro.empty_display_type = "PLAIN_AXES"
+giro.location = (cx, -cz, alto * 0.5)
+col.objects.link(giro)
+
+cam_data = bpy.data.cameras.new("Camara")
+cam_data.lens = LENTE
+cam_data.clip_start = 0.1
+cam_data.clip_end = distancia * 12
+cam = bpy.data.objects.new("Camara", cam_data)
+col.objects.link(cam)
+cam.parent = giro
+cam.location = (0.0, -distancia * math.cos(elev), distancia * math.sin(elev))
+mirar = cam.constraints.new("TRACK_TO")         # la cámara siempre apunta al centro
+mirar.target = giro
+mirar.track_axis = "TRACK_NEGATIVE_Z"
+mirar.up_axis = "UP_Y"
+scene.camera = cam
+
+giro.rotation_euler = (0.0, 0.0, 0.0)
+giro.keyframe_insert("rotation_euler", index=2, frame=1)
+giro.rotation_euler = (0.0, 0.0, math.radians(360.0 * VUELTAS))
+giro.keyframe_insert("rotation_euler", index=2, frame=total_frames)
+for fc in fcurves_de(giro):
+    for kp in fc.keyframe_points:
+        kp.interpolation = "LINEAR"                 # gira a velocidad constante
+
+# ---------- 5) Piso, luces y fondo ----------
+if CON_PISO:
+    S = distancia * 6
+    piso_malla = bpy.data.meshes.new("Piso")
+    piso_malla.from_pydata([(-S, -S, -0.02), (S, -S, -0.02), (S, S, -0.02), (-S, S, -0.02)], [], [(0, 1, 2, 3)])
+    piso_malla.update()
+    piso_malla.materials.append(material_simple("Piso", color=(0.11, 0.12, 0.15, 1.0), rugosidad=0.85))
+    piso = bpy.data.objects.new("Piso", piso_malla)
+    col.objects.link(piso)
+
+sol_data = bpy.data.lights.new("Sol", "SUN")
+sol_data.energy = 3.0
+sol_data.angle = math.radians(4)
+sol = bpy.data.objects.new("Sol", sol_data)
+sol.rotation_euler = (math.radians(52), 0.0, math.radians(35))
+col.objects.link(sol)
+
+relleno_data = bpy.data.lights.new("Relleno", "SUN")      # luz suave del otro lado, sin sombras
+relleno_data.energy = 0.9
+relleno_data.color = (0.75, 0.85, 1.0)
+relleno_data.use_shadow = False
+relleno = bpy.data.objects.new("Relleno", relleno_data)
+relleno.rotation_euler = (math.radians(62), 0.0, math.radians(35 + 180))
+col.objects.link(relleno)
+
+mundo = bpy.data.worlds.new("Fondo")
+try:
+    mundo.use_nodes = True
+except Exception:
+    pass
+nt = mundo.node_tree
+for n in list(nt.nodes):
+    nt.nodes.remove(n)
+fondo_nodo = nt.nodes.new("ShaderNodeBackground")
+fondo_nodo.inputs["Color"].default_value = (COLOR_FONDO[0], COLOR_FONDO[1], COLOR_FONDO[2], 1.0)
+fondo_nodo.inputs["Strength"].default_value = 1.0
+salida_mundo = nt.nodes.new("ShaderNodeOutputWorld")
+nt.links.new(fondo_nodo.outputs["Background"], salida_mundo.inputs["Surface"])
+scene.world = mundo
+
+# ---------- 6) Ajustes de render y de salida (video .mp4) ----------
+motores = [e.identifier for e in bpy.types.RenderSettings.bl_rna.properties["engine"].enum_items]
+for candidato in ("BLENDER_EEVEE_NEXT", "BLENDER_EEVEE"):
+    if candidato in motores:
+        scene.render.engine = candidato
+        break
+try:
+    scene.eevee.taa_render_samples = 48
+except Exception:
+    pass
+try:
+    scene.view_settings.view_transform = "Standard"   # colores fieles a los de tu programa
+except Exception:
+    pass
+scene.render.resolution_x = RESOLUCION_X
+scene.render.resolution_y = RESOLUCION_Y
+scene.render.resolution_percentage = PORCENTAJE
+
+carpeta = CARPETA_SALIDA or os.path.join(os.path.expanduser("~"), "Desktop")
+if not os.path.isdir(carpeta):
+    carpeta = os.path.expanduser("~")
+scene.render.filepath = os.path.join(carpeta, "animacion_bloques_")
+ims = scene.render.image_settings
+try:
+    if hasattr(ims, "media_type"):
+        ims.media_type = "VIDEO"
+    ims.file_format = "FFMPEG"
+    scene.render.ffmpeg.format = "MPEG4"
+    scene.render.ffmpeg.codec = "H264"
+    scene.render.ffmpeg.constant_rate_factor = "HIGH"
+    salida_ok = True
+except Exception as error:
+    salida_ok = False
+    print("No pude dejar la salida como video mp4 automáticamente:", error)
+
+# ---------- 7) Vista del visor: en colores y mirando por la cámara ----------
+scene.frame_set(total_frames)                # se ve el diseño ya terminado
+try:
+    for area in bpy.context.screen.areas:
+        if area.type == "VIEW_3D":
+            esp = area.spaces[0]
+            esp.shading.type = "SOLID"
+            esp.shading.color_type = "OBJECT"
+            esp.region_3d.view_perspective = "CAMERA"
+except Exception:
+    pass
+
+seg_total = total_frames / float(FPS)
+print("\n=== LISTO ===")
+print("Bloques: %d · Capas: %d · Duración: %.1f segundos (%d cuadros)" % (len(BLOQUES), len(capas), seg_total, total_frames))
+print("Para hacer el video: menú Render > Render Animation  (Ctrl+F12)")
+print("El video va a quedar en:", carpeta)
+if not salida_ok:
+    print("OJO: en Output Properties elegí el formato 'FFmpeg Video' antes de renderizar.")
+`;
+
+function exportarAnimacionBlender(){
+  const piezas = voxels.concat(piezasLibres);
+  if (!piezas.length){ setStatus('No hay ningún modelo para exportar.', 'err'); return; }
+  const liviano = document.getElementById('glbLivianoCheckbox').checked;
+  const geo = liviano ? new THREE.BoxGeometry(voxelSize*0.996, voxelSize*0.996, voxelSize*0.996) : buildBrickGeometry(voxelSize);
+  const posAttr = geo.attributes.position, idxAttr = geo.index;
+  const r4 = n => +n.toFixed(4);
+  const mallaV = [];
+  for (let i=0; i<posAttr.count; i++) mallaV.push([r4(posAttr.getX(i)), r4(posAttr.getY(i)), r4(posAttr.getZ(i))]);
+  const mallaF = [];
+  if (idxAttr){ for (let i=0; i<idxAttr.count; i+=3) mallaF.push([idxAttr.getX(i), idxAttr.getX(i+1), idxAttr.getX(i+2)]); }
+  else { for (let i=0; i<posAttr.count; i+=3) mallaF.push([i, i+1, i+2]); }
+
+  const modelName = (document.getElementById('modelNameText').textContent || ('Diseño ' + MARCA_NOMBRE)).trim();
+  const baseName = (modelName || 'diseno').replace(/[^\w.-]+/g,'_') || 'diseno';
+  const offsetX = (dims.x*voxelSize)/2, offsetZ = (dims.z*voxelSize)/2;
+
+  const colores = [], idxColor = new Map();
+  const filas = piezas.map(p=>{
+    const color = cleanColor(p.color, '#f2b134');
+    let ci = idxColor.get(color);
+    if (ci === undefined){ ci = colores.length; colores.push(color); idxColor.set(color, ci); }
+    const wx = p.x*voxelSize - offsetX, wy = p.y*voxelSize + voxelSize/2, wz = p.z*voxelSize - offsetZ;
+    // [x, y, z, índice de color, capa] — con Y hacia arriba, como en este programa
+    return '[' + [+wx.toFixed(3), +wy.toFixed(3), +wz.toFixed(3), ci, Math.round(p.y)].join(',') + ']';
+  });
+  let bloquesTxt = '';
+  for (let i=0; i<filas.length; i+=8) bloquesTxt += filas.slice(i, i+8).join(',') + ',\n';
+  const datos = 'MALLA_V = ' + JSON.stringify(mallaV) + '\nMALLA_F = ' + JSON.stringify(mallaF) +
+                '\nCOLORES = ' + JSON.stringify(colores) + '\nBLOQUES = [\n' + bloquesTxt + ']';
+  const py = PLANTILLA_BLENDER_PY.replace('#__DATOS__', () => datos);
+
+  const blob = new Blob([py], { type:'text/x-python' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = baseName + '_animacion_blender.py';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  setStatus('Exportado ' + baseName + '_animacion_blender.py — ' + piezas.length + ' bloques. En Blender: pestaña Scripting > Open > botón ▶.', 'ok');
+}
+document.getElementById('exportBlenderAnimBtn').addEventListener('click', exportarAnimacionBlender);
+
 
 function buildCompactPayload(){
   const palette = [];
