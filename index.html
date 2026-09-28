@@ -609,7 +609,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v169</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v170</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -8441,9 +8441,13 @@ ZOOM = 1.0                    # 1.0 = normal · más de 1 = cámara más lejos �
 RESOLUCION_X, RESOLUCION_Y = 1920, 1080
 PORCENTAJE = 100              # poné 50 para una prueba rápida (sale a mitad de tamaño)
 CON_PISO = True
-COLOR_FONDO = (0.055, 0.06, 0.08)
 SEMILLA = 7                   # cambialo para que la caída sea distinta
 CARPETA_SALIDA = ""           # vacío = tu escritorio
+
+# --- Estilo de la imagen ---
+ESTILO = "claro"              # "claro" (fondo blanco de estudio, colores vivos) · "oscuro" (fondo oscuro, más dramático)
+SATURACION = 1.10             # 1.0 = colores tal cual · más de 1 = más vivos · menos de 1 = más apagados
+EXPOSICION = 0.0              # más luz (+) o menos luz (−) en toda la imagen. Probá entre -1 y +1
 
 # --- Cómo se ve el material ---
 ACABADO = "plastico"          # "mate" · "impreso3d" (como PLA satinado) · "plastico" (de juguete) · "lego" (muy brillante)
@@ -8486,6 +8490,60 @@ def fcurves_de(obj):
     except Exception:
         return []
 
+def crear_hdri_estudio(tinte):
+    """Fabrica una imagen 360° de un estudio fotográfico: fondo suave con "softboxes" (rectángulos
+    de luz). Es lo que el plástico brillante refleja — sin esto los reflejos no tienen nada que mostrar."""
+    import numpy as np
+    W, H = 1024, 512
+    img = bpy.data.images.new("EstudioHDRI", W, H, alpha=False, float_buffer=True)
+    try:
+        img.colorspace_settings.name = "Linear Rec.709"   # ANTES de cargar los píxeles: cambiarlo después los borra
+    except Exception:
+        pass
+    phi = ((np.arange(W) + 0.5) / W - 0.5) * 2 * np.pi
+    theta = ((np.arange(H) + 0.5) / H - 0.5) * np.pi
+    PHI, THETA = np.meshgrid(phi, theta)
+    # la dirección del mundo que "mira" cada píxel (misma cuenta que usa Blender para entornos 360°)
+    dx = -np.cos(THETA) * np.cos(PHI)
+    dy = np.cos(THETA) * np.sin(PHI)
+    dz = np.sin(THETA)
+    AZ = np.degrees(np.arctan2(dy, dx))                 # desde +X hacia +Y
+    EL = np.degrees(np.arcsin(np.clip(dz, -1, 1)))      # altura sobre el horizonte
+    lum = 0.30 + 0.35 * (EL + 90.0) / 180.0             # fondo: más oscuro abajo, más claro arriba
+    def softbox(az0, el0, ancho, alto, fuerza, suave=0.35):
+        d_az = (AZ - az0 + 180.0) % 360.0 - 180.0
+        x = np.abs(d_az * np.cos(np.radians(el0))) / (ancho / 2.0)
+        y = np.abs(EL - el0) / (alto / 2.0)
+        borde = np.clip((1.0 + suave - np.maximum(x, y)) / suave, 0.0, 1.0)
+        return fuerza * borde
+    lum = lum + softbox(305, 40, 60, 40, 9.0)            # luz principal (del lado del sol)
+    lum = lum + softbox(70, 32, 45, 45, 4.0)             # relleno del lado opuesto
+    lum = lum + softbox(190, 30, 16, 60, 5.0)            # tira de luz de contra
+    lum = lum + softbox(0, 78, 100, 30, 3.5)             # panel de arriba
+    peso = np.cos(THETA)
+    lum = lum / ((lum * peso).sum() / peso.sum())        # el promedio queda en 1: la "fuerza" del entorno manda
+    pix = np.empty((H, W, 4), dtype=np.float32)
+    pix[..., 0] = lum * tinte[0]
+    pix[..., 1] = lum * tinte[1]
+    pix[..., 2] = lum * tinte[2]
+    pix[..., 3] = 1.0
+    img.pixels.foreach_set(pix.ravel())
+    try:
+        img.pack()                                       # así queda guardada adentro si guardás el .blend
+    except Exception:
+        pass
+    return img
+
+
+ESTILOS = {
+    # fondo, piso, color del entorno, fuerza del entorno, sol, relleno, softbox
+    "claro":  dict(fondo=(0.94, 0.95, 0.97), piso=(0.78, 0.79, 0.82), env_color=(0.92, 0.93, 0.95),
+                   env=0.40, sol=3.2, relleno=1.0, softbox=2.0),
+    "oscuro": dict(fondo=(0.055, 0.06, 0.08), piso=(0.10, 0.11, 0.14), env_color=(0.70, 0.74, 0.82),
+                   env=0.30, sol=3.6, relleno=0.8, softbox=2.5),
+}
+E = ESTILOS.get(ESTILO, ESTILOS["claro"])
+
 ACABADOS = {
     #              rugosidad  barniz  rugosidad del barniz  brillo
     "mate":      (0.80,      0.00,   0.30,                 0.30),
@@ -8523,7 +8581,10 @@ def material_simple(nombre, color=None, rugosidad=0.5, color_por_objeto=False, a
     if color_por_objeto:
         # cada bloque toma SU color (el "Color" del objeto) — un solo material para todos
         info = nt.nodes.new("ShaderNodeObjectInfo")
-        nt.links.new(info.outputs["Color"], bsdf.inputs["Base Color"])
+        vivo = nt.nodes.new("ShaderNodeHueSaturation")      # sube o baja lo "vivo" de los colores
+        vivo.inputs["Saturation"].default_value = SATURACION
+        nt.links.new(info.outputs["Color"], vivo.inputs["Color"])
+        nt.links.new(vivo.outputs["Color"], bsdf.inputs["Base Color"])
     elif color is not None:
         bsdf.inputs["Base Color"].default_value = color
     nt.links.new(bsdf.outputs["BSDF"], salida.inputs["Surface"])
@@ -8710,19 +8771,19 @@ if CON_PISO:
     piso_malla = bpy.data.meshes.new("Piso")
     piso_malla.from_pydata([(-S, -S, -0.02), (S, -S, -0.02), (S, S, -0.02), (-S, S, -0.02)], [], [(0, 1, 2, 3)])
     piso_malla.update()
-    piso_malla.materials.append(material_simple("Piso", color=(0.11, 0.12, 0.15, 1.0), rugosidad=0.85))
+    piso_malla.materials.append(material_simple("Piso", color=E["piso"] + (1.0,), rugosidad=0.85))
     piso = bpy.data.objects.new("Piso", piso_malla)
     col.objects.link(piso)
 
 sol_data = bpy.data.lights.new("Sol", "SUN")
-sol_data.energy = 3.0
+sol_data.energy = E["sol"]
 sol_data.angle = math.radians(4)
 sol = bpy.data.objects.new("Sol", sol_data)
 sol.rotation_euler = (math.radians(52), 0.0, math.radians(35))
 col.objects.link(sol)
 
 relleno_data = bpy.data.lights.new("Relleno", "SUN")      # luz suave del otro lado, sin sombras
-relleno_data.energy = 0.5 if ENTORNO_DE_ESTUDIO else 0.9
+relleno_data.energy = E["relleno"]
 relleno_data.color = (0.75, 0.85, 1.0)
 relleno_data.use_shadow = False
 relleno = bpy.data.objects.new("Relleno", relleno_data)
@@ -8738,7 +8799,7 @@ if ENTORNO_DE_ESTUDIO:
         ld = bpy.data.lights.new(nombre, "AREA")
         ld.shape = "SQUARE"
         ld.size = max(ancho, fondo, alto) * tam
-        ld.energy = fuerza * 6.0 * pos.length ** 2
+        ld.energy = fuerza * E["softbox"] * pos.length ** 2
         lo = bpy.data.objects.new(nombre, ld)
         col.objects.link(lo)
         lo.parent = giro
@@ -8757,16 +8818,22 @@ nt = mundo.node_tree
 for n in list(nt.nodes):
     nt.nodes.remove(n)
 fondo_nodo = nt.nodes.new("ShaderNodeBackground")
-fondo_nodo.inputs["Color"].default_value = (COLOR_FONDO[0], COLOR_FONDO[1], COLOR_FONDO[2], 1.0)
-fondo_nodo.inputs["Strength"].default_value = 1.0
+fondo_nodo.inputs["Color"].default_value = (E["fondo"][0], E["fondo"][1], E["fondo"][2], 1.0)
+fondo_nodo.inputs["Strength"].default_value = 1.0 if ENTORNO_DE_ESTUDIO else E["env"]
 salida_mundo = nt.nodes.new("ShaderNodeOutputWorld")
 if ENTORNO_DE_ESTUDIO:
     # Truco de estudio: la cámara ve el fondo oscuro, pero para el resto (luz y reflejos)
     # el mundo es un entorno claro — así el plástico brilla sin cambiar el fondo.
     camino = nt.nodes.new("ShaderNodeLightPath")
     entorno = nt.nodes.new("ShaderNodeBackground")
-    entorno.inputs["Color"].default_value = (0.62, 0.66, 0.74, 1.0)
-    entorno.inputs["Strength"].default_value = 0.9
+    entorno.inputs["Color"].default_value = (E["env_color"][0], E["env_color"][1], E["env_color"][2], 1.0)
+    entorno.inputs["Strength"].default_value = E["env"]
+    try:
+        estudio = nt.nodes.new("ShaderNodeTexEnvironment")
+        estudio.image = crear_hdri_estudio(E["env_color"])
+        nt.links.new(estudio.outputs["Color"], entorno.inputs["Color"])
+    except Exception as error:
+        print("No pude armar el entorno con softboxes (uso uno liso):", error)
     mezcla = nt.nodes.new("ShaderNodeMixShader")
     nt.links.new(camino.outputs["Is Camera Ray"], mezcla.inputs["Fac"])
     nt.links.new(entorno.outputs["Background"], mezcla.inputs[1])
@@ -8793,6 +8860,7 @@ if TRAZADO_DE_RAYOS:
         pass
 try:
     scene.view_settings.view_transform = "Standard"   # colores fieles a los de tu programa
+    scene.view_settings.exposure = EXPOSICION
 except Exception:
     pass
 scene.render.resolution_x = RESOLUCION_X
