@@ -609,7 +609,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v170</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v171</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -8445,14 +8445,16 @@ SEMILLA = 7                   # cambialo para que la caída sea distinta
 CARPETA_SALIDA = ""           # vacío = tu escritorio
 
 # --- Estilo de la imagen ---
-ESTILO = "claro"              # "claro" (fondo blanco de estudio, colores vivos) · "oscuro" (fondo oscuro, más dramático)
+ESTILO = "studio"             # "studio" (copia el aspecto de Bricklink Studio: colores profundos, brillo sutil) · "claro" (fondo blanco, colores vivos) · "oscuro"
+COLOR_FONDO = ""              # color de fondo en hexadecimal, por ejemplo "#BABBFB" (lavanda de Studio) o "#FFFFFF". Vacío = el del estilo
 SATURACION = 1.10             # 1.0 = colores tal cual · más de 1 = más vivos · menos de 1 = más apagados
 EXPOSICION = 0.0              # más luz (+) o menos luz (−) en toda la imagen. Probá entre -1 y +1
 
 # --- Cómo se ve el material ---
-ACABADO = "plastico"          # "mate" · "impreso3d" (como PLA satinado) · "plastico" (de juguete) · "lego" (muy brillante)
+ACABADO = "auto"              # "auto" (el que corresponde al estilo) · "mate" · "impreso3d" · "studio" (brillo sutil) · "plastico" · "lego" (muy brillante)
 ENTORNO_DE_ESTUDIO = True     # luces de estudio que se reflejan en el plástico (el fondo sigue oscuro)
 TRAZADO_DE_RAYOS = False      # True = reflejos y sombras más reales en EEVEE (se ve mejor pero tarda más en renderizar)
+SOMBRA_ENTRE_PIEZAS = 0.6      # oscurece las juntas y rincones entre bloques, como en Studio (0 = nada · 1 = mucho)
 BISEL = 0.012                 # redondea un poquito las aristas (se ve mucho más real). 0 = sin bisel
 TRIANGULOS_MAXIMOS = 8000000  # si con el bisel el diseño pasa de esta cantidad de triángulos, se omite (para que no se ponga pesado)
 
@@ -8536,18 +8538,28 @@ def crear_hdri_estudio(tinte):
 
 
 ESTILOS = {
-    # fondo, piso, color del entorno, fuerza del entorno, sol, relleno, softbox
+    # fondo, piso, color del entorno, fuerza del entorno, sol, relleno, softbox, entorno con softboxes, apertura del sol, acabado
+    "studio": dict(fondo=(0.491, 0.497, 0.965), piso=None, env_color=(0.491, 0.497, 0.965),
+                   env=0.30, sol=2.1, relleno=0.35, softbox=0.0, hdri=False, angulo_sol=18, acabado="studio"),
     "claro":  dict(fondo=(0.94, 0.95, 0.97), piso=(0.78, 0.79, 0.82), env_color=(0.92, 0.93, 0.95),
-                   env=0.40, sol=3.2, relleno=1.0, softbox=2.0),
+                   env=0.40, sol=3.2, relleno=1.0, softbox=2.0, hdri=True, angulo_sol=4, acabado="plastico"),
     "oscuro": dict(fondo=(0.055, 0.06, 0.08), piso=(0.10, 0.11, 0.14), env_color=(0.70, 0.74, 0.82),
-                   env=0.30, sol=3.6, relleno=0.8, softbox=2.5),
+                   env=0.30, sol=3.6, relleno=0.8, softbox=2.5, hdri=True, angulo_sol=4, acabado="plastico"),
 }
-E = ESTILOS.get(ESTILO, ESTILOS["claro"])
+E = dict(ESTILOS.get(ESTILO, ESTILOS["studio"]))
+if COLOR_FONDO:
+    _c = color_de_hex(COLOR_FONDO)[:3]
+    E["fondo"] = _c
+    if ESTILO == "studio":
+        E["env_color"] = _c                      # en el estilo Studio el entorno tiene el color del fondo (por eso tiñe las piezas)
+    E["piso"] = None if ESTILO == "studio" else E["piso"]
+ACABADO_REAL = E["acabado"] if ACABADO == "auto" else ACABADO
 
 ACABADOS = {
     #              rugosidad  barniz  rugosidad del barniz  brillo
     "mate":      (0.80,      0.00,   0.30,                 0.30),
     "impreso3d": (0.45,      0.00,   0.30,                 0.50),
+    "studio":    (0.42,      0.00,   0.30,                 0.50),   # plástico común, sin barniz: reflejo suave y parejo
     "plastico":  (0.30,      0.35,   0.10,                 0.55),
     "lego":      (0.15,      0.70,   0.04,                 0.60),
 }
@@ -8560,7 +8572,7 @@ def poner_entrada(nodo, nombres, valor):
             return True
     return False
 
-def material_simple(nombre, color=None, rugosidad=0.5, color_por_objeto=False, acabado=None):
+def material_simple(nombre, color=None, rugosidad=0.5, color_por_objeto=False, acabado=None, ao=0.0, emision=None):
     mat = bpy.data.materials.new(nombre)
     try:
         mat.use_nodes = True
@@ -8578,13 +8590,32 @@ def material_simple(nombre, color=None, rugosidad=0.5, color_por_objeto=False, a
         poner_entrada(bsdf, ("Coat Weight", "Clearcoat"), barniz)
         poner_entrada(bsdf, ("Coat Roughness", "Clearcoat Roughness"), rug_barniz)
         poner_entrada(bsdf, ("Specular IOR Level", "Specular"), brillo)
+    if emision is not None:
+        # luz propia (color, fuerza): mantiene el color del piso incluso en la sombra, sombras más suaves
+        poner_entrada(bsdf, ("Emission Color", "Emission"), (emision[0][0], emision[0][1], emision[0][2], 1.0))
+        poner_entrada(bsdf, ("Emission Strength",), emision[1])
     if color_por_objeto:
         # cada bloque toma SU color (el "Color" del objeto) — un solo material para todos
         info = nt.nodes.new("ShaderNodeObjectInfo")
         vivo = nt.nodes.new("ShaderNodeHueSaturation")      # sube o baja lo "vivo" de los colores
         vivo.inputs["Saturation"].default_value = SATURACION
         nt.links.new(info.outputs["Color"], vivo.inputs["Color"])
-        nt.links.new(vivo.outputs["Color"], bsdf.inputs["Base Color"])
+        if ao > 0:
+            # Oscurece los rincones y juntas entre bloques (oclusión ambiental): da el volumen que se ve en Studio
+            oclusion = nt.nodes.new("ShaderNodeAmbientOcclusion")
+            oclusion.inputs["Distance"].default_value = 0.35
+            mapa = nt.nodes.new("ShaderNodeMath")
+            mapa.operation = "MULTIPLY_ADD"                  # AO * ao + (1 - ao)  →  va de (1-ao) a 1
+            mapa.inputs[1].default_value = ao
+            mapa.inputs[2].default_value = 1.0 - ao
+            nt.links.new(oclusion.outputs["AO"], mapa.inputs[0])
+            mult = nt.nodes.new("ShaderNodeVectorMath")
+            mult.operation = "MULTIPLY"
+            nt.links.new(vivo.outputs["Color"], mult.inputs[0])
+            nt.links.new(mapa.outputs["Value"], mult.inputs[1])
+            nt.links.new(mult.outputs["Vector"], bsdf.inputs["Base Color"])
+        else:
+            nt.links.new(vivo.outputs["Color"], bsdf.inputs["Base Color"])
     elif color is not None:
         bsdf.inputs["Base Color"].default_value = color
     nt.links.new(bsdf.outputs["BSDF"], salida.inputs["Surface"])
@@ -8658,7 +8689,7 @@ if BISEL > 0:
                 pass
     except Exception as error:
         print("No pude aplicar el bisel:", error)
-mat_bloque = material_simple("ColorDeCadaBloque", color_por_objeto=True, acabado=ACABADO)
+mat_bloque = material_simple("ColorDeCadaBloque", color_por_objeto=True, acabado=ACABADO_REAL, ao=SOMBRA_ENTRE_PIEZAS)
 malla.materials.append(mat_bloque)
 colores = [color_de_hex(h) for h in COLORES]
 
@@ -8771,13 +8802,22 @@ if CON_PISO:
     piso_malla = bpy.data.meshes.new("Piso")
     piso_malla.from_pydata([(-S, -S, -0.02), (S, -S, -0.02), (S, S, -0.02), (-S, S, -0.02)], [], [(0, 1, 2, 3)])
     piso_malla.update()
-    piso_malla.materials.append(material_simple("Piso", color=E["piso"] + (1.0,), rugosidad=0.85))
+    if E["piso"] is None:
+        # El piso se ve en TODA la imagen, así que se calcula su color para que, iluminado, quede igual al fondo
+        luz_directa = (E["sol"] * math.cos(math.radians(52)) + E["relleno"] * math.cos(math.radians(62))) / math.pi
+        propia = E.get("piso_luz_propia", 0.55)     # parte del color del piso sale de luz propia, no de la iluminación
+        piso_color = tuple(min(0.95, (1.0 - propia) * E["fondo"][i] / (E["env_color"][i] * E["env"] + luz_directa)) for i in range(3))
+        piso_emision = (tuple(E["fondo"]), propia)
+    else:
+        piso_color = E["piso"]
+        piso_emision = None
+    piso_malla.materials.append(material_simple("Piso", color=tuple(piso_color) + (1.0,), rugosidad=0.85, emision=piso_emision))
     piso = bpy.data.objects.new("Piso", piso_malla)
     col.objects.link(piso)
 
 sol_data = bpy.data.lights.new("Sol", "SUN")
 sol_data.energy = E["sol"]
-sol_data.angle = math.radians(4)
+sol_data.angle = math.radians(E["angulo_sol"])
 sol = bpy.data.objects.new("Sol", sol_data)
 sol.rotation_euler = (math.radians(52), 0.0, math.radians(35))
 col.objects.link(sol)
@@ -8790,7 +8830,7 @@ relleno = bpy.data.objects.new("Relleno", relleno_data)
 relleno.rotation_euler = (math.radians(62), 0.0, math.radians(35 + 180))
 col.objects.link(relleno)
 
-if ENTORNO_DE_ESTUDIO:
+if ENTORNO_DE_ESTUDIO and E["softbox"] > 0:
     # Dos "softbox" (luces de área grandes) atadas al giro de la cámara: se reflejan en el
     # plástico como rectángulos de luz, igual que en una foto de producto.
     for nombre, px, py, pz, fuerza, tam in (("Softbox_1", -0.75, -0.55, 0.85, 1.0, 0.9),
@@ -8828,12 +8868,13 @@ if ENTORNO_DE_ESTUDIO:
     entorno = nt.nodes.new("ShaderNodeBackground")
     entorno.inputs["Color"].default_value = (E["env_color"][0], E["env_color"][1], E["env_color"][2], 1.0)
     entorno.inputs["Strength"].default_value = E["env"]
-    try:
-        estudio = nt.nodes.new("ShaderNodeTexEnvironment")
-        estudio.image = crear_hdri_estudio(E["env_color"])
-        nt.links.new(estudio.outputs["Color"], entorno.inputs["Color"])
-    except Exception as error:
-        print("No pude armar el entorno con softboxes (uso uno liso):", error)
+    if E["hdri"]:
+        try:
+            estudio = nt.nodes.new("ShaderNodeTexEnvironment")
+            estudio.image = crear_hdri_estudio(E["env_color"])
+            nt.links.new(estudio.outputs["Color"], entorno.inputs["Color"])
+        except Exception as error:
+            print("No pude armar el entorno con softboxes (uso uno liso):", error)
     mezcla = nt.nodes.new("ShaderNodeMixShader")
     nt.links.new(camino.outputs["Is Camera Ray"], mezcla.inputs["Fac"])
     nt.links.new(entorno.outputs["Background"], mezcla.inputs[1])
