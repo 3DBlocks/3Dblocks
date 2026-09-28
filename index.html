@@ -609,7 +609,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v168</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v169</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -8445,6 +8445,13 @@ COLOR_FONDO = (0.055, 0.06, 0.08)
 SEMILLA = 7                   # cambialo para que la caída sea distinta
 CARPETA_SALIDA = ""           # vacío = tu escritorio
 
+# --- Cómo se ve el material ---
+ACABADO = "plastico"          # "mate" · "impreso3d" (como PLA satinado) · "plastico" (de juguete) · "lego" (muy brillante)
+ENTORNO_DE_ESTUDIO = True     # luces de estudio que se reflejan en el plástico (el fondo sigue oscuro)
+TRAZADO_DE_RAYOS = False      # True = reflejos y sombras más reales en EEVEE (se ve mejor pero tarda más en renderizar)
+BISEL = 0.012                 # redondea un poquito las aristas (se ve mucho más real). 0 = sin bisel
+TRIANGULOS_MAXIMOS = 8000000  # si con el bisel el diseño pasa de esta cantidad de triángulos, se omite (para que no se ponga pesado)
+
 
 # ==================================================================================
 #  DATOS DEL DISEÑO (los pone tu programa, no hace falta tocarlos)
@@ -8479,7 +8486,23 @@ def fcurves_de(obj):
     except Exception:
         return []
 
-def material_simple(nombre, color=None, rugosidad=0.5, color_por_objeto=False):
+ACABADOS = {
+    #              rugosidad  barniz  rugosidad del barniz  brillo
+    "mate":      (0.80,      0.00,   0.30,                 0.30),
+    "impreso3d": (0.45,      0.00,   0.30,                 0.50),
+    "plastico":  (0.30,      0.35,   0.10,                 0.55),
+    "lego":      (0.15,      0.70,   0.04,                 0.60),
+}
+
+def poner_entrada(nodo, nombres, valor):
+    """Cambia una entrada del material probando varios nombres (cambian según la versión de Blender)."""
+    for nombre in nombres:
+        if nombre in nodo.inputs:
+            nodo.inputs[nombre].default_value = valor
+            return True
+    return False
+
+def material_simple(nombre, color=None, rugosidad=0.5, color_por_objeto=False, acabado=None):
     mat = bpy.data.materials.new(nombre)
     try:
         mat.use_nodes = True
@@ -8491,6 +8514,12 @@ def material_simple(nombre, color=None, rugosidad=0.5, color_por_objeto=False):
     salida = nt.nodes.new("ShaderNodeOutputMaterial")
     bsdf = nt.nodes.new("ShaderNodeBsdfPrincipled")
     bsdf.inputs["Roughness"].default_value = rugosidad
+    if acabado is not None:
+        rug, barniz, rug_barniz, brillo = ACABADOS.get(acabado, ACABADOS["plastico"])
+        bsdf.inputs["Roughness"].default_value = rug
+        poner_entrada(bsdf, ("Coat Weight", "Clearcoat"), barniz)
+        poner_entrada(bsdf, ("Coat Roughness", "Clearcoat Roughness"), rug_barniz)
+        poner_entrada(bsdf, ("Specular IOR Level", "Specular"), brillo)
     if color_por_objeto:
         # cada bloque toma SU color (el "Color" del objeto) — un solo material para todos
         info = nt.nodes.new("ShaderNodeObjectInfo")
@@ -8506,8 +8535,11 @@ random.seed(SEMILLA)
 print("\n=== Armando la animación de %d bloques... ===" % len(BLOQUES))
 
 # ---------- 0) Limpiar lo que había (así podés correr el script varias veces) ----------
-for o in list(bpy.data.objects):
-    bpy.data.objects.remove(o, do_unlink=True)
+try:
+    bpy.data.batch_remove(list(bpy.data.objects))      # borrado en bloque: mucho más rápido con miles de bloques
+except Exception:
+    for o in list(bpy.data.objects):
+        bpy.data.objects.remove(o, do_unlink=True)
 for c in list(bpy.data.collections):
     if c.name.startswith("Animacion"):
         bpy.data.collections.remove(c)
@@ -8539,7 +8571,33 @@ if volumen < 0:
 malla = bpy.data.meshes.new("Bloque")
 malla.from_pydata(verts, [], caras)
 malla.update()
-mat_bloque = material_simple("ColorDeCadaBloque", rugosidad=0.45, color_por_objeto=True)
+if BISEL > 0:
+    # Redondea las aristas filosas de la malla del bloque. Se hace una sola vez y vale para todos,
+    # pero multiplica los triángulos por ~6: si el diseño es muy grande se omite solo.
+    try:
+        import bmesh
+        bm = bmesh.new()
+        bm.from_mesh(malla)
+        aristas = [e for e in bm.edges if len(e.link_faces) == 2 and e.calc_face_angle(0.0) > math.radians(28)]
+        bmesh.ops.bevel(bm, geom=aristas, offset=BISEL, segments=3, affect="EDGES")
+        triangulos_totales = len(BLOQUES) * sum(len(f.verts) - 2 for f in bm.faces)
+        if triangulos_totales > TRIANGULOS_MAXIMOS:
+            print("Bisel omitido: con %d bloques serían %.1f millones de triángulos (tope: %.1f). "
+                  "Poné TRIANGULOS_MAXIMOS más alto si querés forzarlo, o tildá la versión liviana al exportar."
+                  % (len(BLOQUES), triangulos_totales / 1e6, TRIANGULOS_MAXIMOS / 1e6))
+            bm.free()
+        else:
+            bm.to_mesh(malla)
+            bm.free()
+            malla.update()
+            try:
+                malla.shade_smooth()
+                malla.set_sharp_from_angle(angle=math.radians(40))
+            except Exception:
+                pass
+    except Exception as error:
+        print("No pude aplicar el bisel:", error)
+mat_bloque = material_simple("ColorDeCadaBloque", color_por_objeto=True, acabado=ACABADO)
 malla.materials.append(mat_bloque)
 colores = [color_de_hex(h) for h in COLORES]
 
@@ -8664,12 +8722,31 @@ sol.rotation_euler = (math.radians(52), 0.0, math.radians(35))
 col.objects.link(sol)
 
 relleno_data = bpy.data.lights.new("Relleno", "SUN")      # luz suave del otro lado, sin sombras
-relleno_data.energy = 0.9
+relleno_data.energy = 0.5 if ENTORNO_DE_ESTUDIO else 0.9
 relleno_data.color = (0.75, 0.85, 1.0)
 relleno_data.use_shadow = False
 relleno = bpy.data.objects.new("Relleno", relleno_data)
 relleno.rotation_euler = (math.radians(62), 0.0, math.radians(35 + 180))
 col.objects.link(relleno)
+
+if ENTORNO_DE_ESTUDIO:
+    # Dos "softbox" (luces de área grandes) atadas al giro de la cámara: se reflejan en el
+    # plástico como rectángulos de luz, igual que en una foto de producto.
+    for nombre, px, py, pz, fuerza, tam in (("Softbox_1", -0.75, -0.55, 0.85, 1.0, 0.9),
+                                            ("Softbox_2", 0.85, -0.35, 0.45, 0.6, 0.6)):
+        pos = Vector((px, py, pz)) * distancia
+        ld = bpy.data.lights.new(nombre, "AREA")
+        ld.shape = "SQUARE"
+        ld.size = max(ancho, fondo, alto) * tam
+        ld.energy = fuerza * 6.0 * pos.length ** 2
+        lo = bpy.data.objects.new(nombre, ld)
+        col.objects.link(lo)
+        lo.parent = giro
+        lo.location = pos
+        mira = lo.constraints.new("TRACK_TO")
+        mira.target = giro
+        mira.track_axis = "TRACK_NEGATIVE_Z"
+        mira.up_axis = "UP_Y"
 
 mundo = bpy.data.worlds.new("Fondo")
 try:
@@ -8683,7 +8760,20 @@ fondo_nodo = nt.nodes.new("ShaderNodeBackground")
 fondo_nodo.inputs["Color"].default_value = (COLOR_FONDO[0], COLOR_FONDO[1], COLOR_FONDO[2], 1.0)
 fondo_nodo.inputs["Strength"].default_value = 1.0
 salida_mundo = nt.nodes.new("ShaderNodeOutputWorld")
-nt.links.new(fondo_nodo.outputs["Background"], salida_mundo.inputs["Surface"])
+if ENTORNO_DE_ESTUDIO:
+    # Truco de estudio: la cámara ve el fondo oscuro, pero para el resto (luz y reflejos)
+    # el mundo es un entorno claro — así el plástico brilla sin cambiar el fondo.
+    camino = nt.nodes.new("ShaderNodeLightPath")
+    entorno = nt.nodes.new("ShaderNodeBackground")
+    entorno.inputs["Color"].default_value = (0.62, 0.66, 0.74, 1.0)
+    entorno.inputs["Strength"].default_value = 0.9
+    mezcla = nt.nodes.new("ShaderNodeMixShader")
+    nt.links.new(camino.outputs["Is Camera Ray"], mezcla.inputs["Fac"])
+    nt.links.new(entorno.outputs["Background"], mezcla.inputs[1])
+    nt.links.new(fondo_nodo.outputs["Background"], mezcla.inputs[2])
+    nt.links.new(mezcla.outputs["Shader"], salida_mundo.inputs["Surface"])
+else:
+    nt.links.new(fondo_nodo.outputs["Background"], salida_mundo.inputs["Surface"])
 scene.world = mundo
 
 # ---------- 6) Ajustes de render y de salida (video .mp4) ----------
@@ -8696,6 +8786,11 @@ try:
     scene.eevee.taa_render_samples = 48
 except Exception:
     pass
+if TRAZADO_DE_RAYOS:
+    try:
+        scene.eevee.use_raytracing = True
+    except Exception:
+        pass
 try:
     scene.view_settings.view_transform = "Standard"   # colores fieles a los de tu programa
 except Exception:
