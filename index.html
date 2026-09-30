@@ -621,7 +621,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v175</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v176</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -2273,7 +2273,23 @@ const LINEA_OSCURA = '#000000';     // negra, en los colores claros
    lavado/blanquecino en el visor 3D. Por eso en el visor el umbral es mucho
    más estricto (solo negro de verdad) y el gris es más oscuro que en el
    manual, que sigue exactamente como estaba. */
-const UMBRAL_NEGRO_VISOR = 0.05;    // antes 0.18 — solo para `colorDeContorno`, rama de pantalla
+/* v175: el umbral de 0.05 comparaba el CANAL MÁS CLARO (r,g,b) directo, no la
+   claridad de verdad — por eso un negro elegido a mano (el selector de color,
+   no el de la paleta) casi nunca da EXACTO #000000: algo como #1a1a1a ya tiene
+   max(r,g,b) ≈ 0.10, por encima del 0.05, y se iba con línea NEGRA — invisible
+   sobre un bloque casi negro.
+
+   Subir el umbral de claridad no alcanza solo: un marrón bien oscuro
+   (#2d1b0e) tiene casi la MISMA claridad que un gris oscuro (#1a1a1a) — la
+   claridad sola no los distingue. Lo que sí los distingue es la SATURACIÓN:
+   un negro "a mano" es GRIS (sin tinte, saturación casi 0); un marrón oscuro
+   sigue teniendo bastante tinte aunque sea oscuro. Por eso ahora son DOS
+   umbrales: uno generoso de claridad para lo que es gris de verdad (sin
+   tinte), y uno bien estricto para lo que tiene color — que es el problema
+   que el ajuste de v144 quería arreglar (marrón y azul lavados). */
+const UMBRAL_SATURACION_GRIS = 0.12;    // por debajo de esto, "sin tinte" — es gris/negro de verdad
+const UMBRAL_CLARIDAD_GRIS   = 0.16;    // umbral generoso, SOLO para lo acromático (mismo valor que ya usa el manual)
+const UMBRAL_CLARIDAD_COLOR  = 0.06;    // umbral estricto para cualquier cosa CON tinte — antes 0.05, con max(r,g,b)
 const LINEA_CLARA_VISOR = '#4d4d4d'; // antes iba a LINEA_CLARA (#8a8a8a) — solo para la pantalla
 
 function colorDeContorno(c){        // recibe un THREE.Color
@@ -2290,10 +2306,13 @@ function colorDeContorno(c){        // recibe un THREE.Color
      marrón, el azul oscuro y los grises salían todos con marco blanco y el
      modelo se veía lavado. Convertir a sRGB antes de comparar lo arregla.
 
-     El umbral bajó de 0.18 a `UMBRAL_NEGRO_VISOR` (0.05) y el gris de
-     `LINEA_CLARA` a `LINEA_CLARA_VISOR`: solo en esta rama, solo en pantalla. */
+     El gris pasó de `LINEA_CLARA` a `LINEA_CLARA_VISOR`: solo en esta rama,
+     solo en pantalla. El umbral (ver UMBRAL_CLARIDAD_GRIS/COLOR más arriba)
+     tiene su propia explicación al lado, con el caso del negro "a mano". */
   const [r,g,b] = sRGBDeColor(c);
-  return Math.max(r, g, b) < UMBRAL_NEGRO_VISOR ? LINEA_CLARA_VISOR : LINEA_OSCURA;
+  const { s, l } = rgbAHsl(r, g, b);
+  const umbral = s < UMBRAL_SATURACION_GRIS ? UMBRAL_CLARIDAD_GRIS : UMBRAL_CLARIDAD_COLOR;
+  return l < umbral ? LINEA_CLARA_VISOR : LINEA_OSCURA;
 }
 
 /* Peso de cada línea (la transparencia por vértice: el atributo `color` de las
