@@ -621,7 +621,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v176</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v177</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -2287,7 +2287,7 @@ const LINEA_OSCURA = '#000000';     // negra, en los colores claros
    umbrales: uno generoso de claridad para lo que es gris de verdad (sin
    tinte), y uno bien estricto para lo que tiene color — que es el problema
    que el ajuste de v144 quería arreglar (marrón y azul lavados). */
-const UMBRAL_SATURACION_GRIS = 0.12;    // por debajo de esto, "sin tinte" — es gris/negro de verdad
+const UMBRAL_SATURACION_GRIS = 0.12;    // por debajo de esto, "sin tinte" — es gris/negro (o blanco) de verdad
 const UMBRAL_CLARIDAD_GRIS   = 0.16;    // umbral generoso, SOLO para lo acromático (mismo valor que ya usa el manual)
 const UMBRAL_CLARIDAD_COLOR  = 0.06;    // umbral estricto para cualquier cosa CON tinte — antes 0.05, con max(r,g,b)
 const LINEA_CLARA_VISOR = '#4d4d4d'; // antes iba a LINEA_CLARA (#8a8a8a) — solo para la pantalla
@@ -2298,7 +2298,10 @@ function colorDeContorno(c){        // recibe un THREE.Color
     const [r,g,b] = sRGBDeColor(c);
     return esNegroCafeOAzul(r,g,b) ? LINEA_CLARA : LINEA_OSCURA;
   }
-  /* Pantalla de edición: línea clara SOLO en el negro y lo casi negro.
+  /* Pantalla de edición: línea gris oscuro en los DOS extremos (el negro y el
+     blanco, o lo casi acromático cerca de cualquiera de los dos) — negro sobre
+     negro no se ve, y una línea negra sobre blanco puro queda muy dura. Todo
+     lo demás (la enorme mayoría de los colores) sigue con línea negra normal.
 
      Acá vivía un error de espacio de color. three.js guarda el color en LINEAL,
      no en sRGB, y el umbral estaba pensado para sRGB. En lineal un marrón como
@@ -2311,8 +2314,11 @@ function colorDeContorno(c){        // recibe un THREE.Color
      tiene su propia explicación al lado, con el caso del negro "a mano". */
   const [r,g,b] = sRGBDeColor(c);
   const { s, l } = rgbAHsl(r, g, b);
-  const umbral = s < UMBRAL_SATURACION_GRIS ? UMBRAL_CLARIDAD_GRIS : UMBRAL_CLARIDAD_COLOR;
-  return l < umbral ? LINEA_CLARA_VISOR : LINEA_OSCURA;
+  const acromatico = s < UMBRAL_SATURACION_GRIS;
+  const umbral = acromatico ? UMBRAL_CLARIDAD_GRIS : UMBRAL_CLARIDAD_COLOR;
+  const cercaDeNegro = l < umbral;
+  const cercaDeBlanco = acromatico && l > (1 - UMBRAL_CLARIDAD_GRIS); // el mismo umbral, del otro lado
+  return (cercaDeNegro || cercaDeBlanco) ? LINEA_CLARA_VISOR : LINEA_OSCURA;
 }
 
 /* Peso de cada línea (la transparencia por vértice: el atributo `color` de las
