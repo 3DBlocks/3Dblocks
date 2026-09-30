@@ -621,7 +621,7 @@
         <!-- destello: la parte "magic" -->
         <path d="M27 2 L28.2 5.3 L31.5 6.5 L28.2 7.7 L27 11 L25.8 7.7 L22.5 6.5 L25.8 5.3 Z" fill="var(--accent)"/>
       </svg>
-      <div class="brand-title">RENZOD'SING<small>Guía de armado — v174</small></div>
+      <div class="brand-title">RENZOD'SING<small>Guía de armado — v175</small></div>
     </div>
     <div id="modelNameText" contenteditable="true" spellcheck="false" title="Hacé clic para cambiarle el nombre. Enter para confirmar, Escape para cancelar. Es el nombre que va en el manual y en los archivos que descargues.">Árbol de ejemplo</div>
     <a class="btn icon" id="catalogLink" href="catalogo.html" title="Volver al catálogo">🏠</a>
@@ -1132,6 +1132,8 @@
     </div>
 
     <div style="height:1px; background:var(--border); margin:2px 0;"></div>
+    <button class="btn primary" id="anglePreviewCloseBtn" style="width:100%;">Cerrar</button>
+    <div style="height:1px; background:var(--border); margin:2px 0;"></div>
 
     <!-- Marca de agua: se calibra acá y se ve al instante, porque el render 3D
          queda guardado y solo se vuelve a componer la imagen encima. Lo que se ve
@@ -1184,6 +1186,11 @@
     <span class="wm-val" id="fmEscVal">1.00</span>
     </div>
     <p style="font-size:10.5px; color:var(--text-faint); margin:4px 0 0; text-align:left;">La marca se repite en mosaico por toda la hoja, en diagonal. Los ajustes quedan guardados en este navegador y se aplican al PDF y a los PNG.</p>
+  </div>
+
+  <!-- Columna derecha: la hoja, con todo el resto del ancho y el alto disponibles. -->
+  <div style="flex:1; min-width:0; height:100%; display:flex; align-items:center; justify-content:center; padding:16px; overflow:auto;">
+    <img id="anglePreviewImg" style="max-width:100%; max-height:100%; border-radius:12px; border:2px solid var(--accent); box-shadow:0 10px 40px rgba(0,0,0,.5);" />
   </div>
 </div>
 <script type="module">
